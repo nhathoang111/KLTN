@@ -1,0 +1,12 @@
+bước 1 thêm database vào mysql tren xampp
+Gnhom-mainschool_management.sql (cơ sở dữ liệu ở đây có thể tìm kiếm ổ đĩa thì lưu thư mục giải nén ở đâu thì ổ ở đó tự kiếm  )
+bước 2 chạy lên sau 
+1 chạy Backend (Spring Boot)
+cd nhom-main
+mvn spring-boot:run
+Backend sẽ chạy trên: http://localhost:8080
+
+2 chạy Frontend (React)
+cd nhom-main\frontend
+npm run dev
+Frontend sẽ chạy trên: http://localhost:5173 (hoặc 5174 nếu 5173 đã được sử dụng)
