@@ -156,11 +156,34 @@ public class UserService {
         return userRepository.save(user);
     }
 
+    @Transactional
     public void deleteUser(Integer id) {
         // Xóa tất cả các bản ghi liên quan đến user trước khi xóa user
         // Điều này tránh lỗi foreign key constraint
         
         log.info("Starting deletion process for user ID: {}", id);
+
+        User targetUser = userRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy người dùng với ID: " + id));
+        String roleName = targetUser.getRole() != null && targetUser.getRole().getName() != null
+                ? targetUser.getRole().getName().toUpperCase() : "";
+
+        try {
+            doDeleteUser(id);
+        } catch (Exception e) {
+            log.warn("Delete user failed for ID {}: {}", id, e.getMessage());
+            String reason = "Không thể xóa người dùng.";
+            if (roleName.startsWith("TEACHER")) {
+                reason += " Giáo viên đang được phân công dạy lớp (phân môn). Vui lòng gỡ phân công trong Quản lý phân công / Lớp học trước khi xóa.";
+            } else {
+                reason += " Còn dữ liệu liên quan (lớp, điểm, phân công...).";
+            }
+            reason += " Chi tiết: " + (e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName());
+            throw new BadRequestException(reason);
+        }
+    }
+
+    private void doDeleteUser(Integer id) {
 
         // 1. Xóa enrollments (student_id)
         try {
@@ -340,7 +363,7 @@ public class UserService {
         log.info("User deletion completed for ID: {}", id);
         userRepository.deleteById(id);
     }
-    
+
     public List<User> getUsersBySchoolAndRole(Integer schoolId, String roleName) {
         return userRepository.findBySchoolIdAndRoleName(schoolId, roleName + "%");
     }
@@ -485,6 +508,24 @@ public class UserService {
                 }
             }
             if (!classesList.isEmpty()) userMap.put("classes", classesList);
+        }
+        boolean isParent = (roleNameUpper != null) && (
+                roleNameUpper.contains("PARENT") || roleNameUpper.contains("HUYNH")
+                || roleNameUpper.contains("PHU HUYNH") || roleNameUpper.contains("PHỤ HUYNH"));
+        if (isParent) {
+            List<ParentStudent> psList = parentStudentRepository.findByParentIdFetchStudent(u.getId());
+            List<Map<String, Object>> childrenList = new ArrayList<>();
+            for (ParentStudent ps : psList) {
+                if (ps.getStudent() != null) {
+                    Map<String, Object> child = new HashMap<>();
+                    child.put("id", ps.getStudent().getId());
+                    child.put("fullName", ps.getStudent().getFullName());
+                    child.put("email", ps.getStudent().getEmail());
+                    childrenList.add(child);
+                }
+            }
+            userMap.put("children", childrenList);
+            userMap.put("childrenCount", childrenList.size());
         }
         return userMap;
     }

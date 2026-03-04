@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import api from '../services/api';
@@ -21,6 +21,14 @@ const UserListPage = () => {
   const [importError, setImportError] = useState(null);
   const [currentPage, setCurrentPage] = useState(0);
   const [pageSize, setPageSize] = useState(10);
+ const [selectedIds, setSelectedIds] = useState(new Set());
+  const [bulkActionLoading, setBulkActionLoading] = useState(false);
+  const [showBulkStatusModal, setShowBulkStatusModal] = useState(false);
+  const [showBulkClassModal, setShowBulkClassModal] = useState(false);
+  const [bulkClasses, setBulkClasses] = useState([]);
+  const [bulkClassLoading, setBulkClassLoading] = useState(false);
+  const selectAllCheckboxRef = useRef(null);
+  const [linkModal, setLinkModal] = useState(null);
 
   useEffect(() => {
     // Chờ user context sẵn sàng trước khi fetch
@@ -146,7 +154,7 @@ const UserListPage = () => {
   };
 
   const handleDelete = async (id, userName) => {
-    const confirmMessage = `Are you sure you want to delete user "${userName}"?\n\nThis action cannot be undone.`;
+    const confirmMessage = `Bạn có chắc muốn xóa người dùng "${userName || 'này'}"?\n\nHành động không thể hoàn tác.`;
     
     if (window.confirm(confirmMessage)) {
       try {
@@ -155,15 +163,15 @@ const UserListPage = () => {
         
         await api.delete(`/users/${id}`);
         setUsers(users.filter(user => user.id !== id));
-        setSuccess(`User "${userName}" deleted successfully!`);
+        setSuccess(`Đã xóa người dùng "${userName || 'này'}" thành công.`);
         
-        // Clear success message after 3 seconds
         setTimeout(() => setSuccess(''), 3000);
         
       } catch (err) {
-        const errorMessage = err.response?.data?.error || 'Failed to delete user';
+        const data = err.response?.data || {};
+        const errorMessage = data.message || data.error || 'Không thể xóa người dùng. Vui lòng thử lại.';
         setError(errorMessage);
-        console.error('Error deleting user:', err);
+        console.error('Error deleting user:', err.response?.data || err);
       } finally {
         setDeleteLoading(null);
       }
@@ -179,6 +187,17 @@ const UserListPage = () => {
     if (r.startsWith('STUDENT')) return 'Học sinh';
     if (r.startsWith('PARENT') || r.includes('PARENT') || r.includes('PHU HUYNH') || r.includes('PHỤ HUYNH')) return 'Phụ huynh';
     return roleName;
+  };
+
+  const getRoleBadgeConfig = (roleName) => {
+    if (!roleName) return { label: '', badgeClass: 'default' };
+    const r = roleName.toUpperCase();
+    if (r === 'SUPER_ADMIN') return { label: 'Super Admin', badgeClass: 'admin' };
+    if (r.startsWith('ADMIN')) return { label: 'Admin', badgeClass: 'admin' };
+    if (r.startsWith('TEACHER')) return { label: 'Giáo viên', badgeClass: 'teacher' };
+    if (r.startsWith('STUDENT')) return { label: 'Học sinh', badgeClass: 'student' };
+    if (r.startsWith('PARENT') || r.includes('PARENT') || r.includes('PHU HUYNH') || r.includes('PHỤ HUYNH')) return { label: 'Phụ huynh', badgeClass: 'parent' };
+    return { label: roleName, badgeClass: 'default' };
   };
 
   const getStatusColor = (status) => {
@@ -233,10 +252,123 @@ const UserListPage = () => {
   const pageIndex = Math.min(currentPage, totalPages - 1);
   const paginatedUsers = displayedUsers.slice(pageIndex * pageSize, (pageIndex + 1) * pageSize);
 
+  const toggleSelectAll = () => {
+    const onPage = paginatedUsers.map((u) => u.id);
+    const allSelected = onPage.length > 0 && onPage.every((id) => selectedIds.has(id));
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (allSelected) onPage.forEach((id) => next.delete(id));
+      else onPage.forEach((id) => next.add(id));
+      return next;
+    });
+  };
+
+  const toggleSelectOne = (id) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const clearSelection = () => setSelectedIds(new Set());
+
+  const selectedUsers = users.filter((u) => selectedIds.has(u.id));
+  const selectedStudents = selectedUsers.filter((u) => {
+    const r = (u.role?.name || '').toUpperCase();
+    return r.includes('STUDENT');
+  });
+
+  const handleBulkDelete = async () => {
+    if (selectedIds.size === 0) return;
+    const count = selectedIds.size;
+    if (!window.confirm(`Bạn có chắc muốn xóa ${count} người dùng đã chọn? Hành động không thể hoàn tác.`)) return;
+    setBulkActionLoading(true);
+    setError('');
+    try {
+      for (const id of selectedIds) {
+        await api.delete(`/users/${id}`);
+      }
+      setUsers((prev) => prev.filter((u) => !selectedIds.has(u.id)));
+      setSuccess(`Đã xóa ${count} người dùng.`);
+      setSelectedIds(new Set());
+      setTimeout(() => setSuccess(''), 3000);
+    } catch (err) {
+      const data = err.response?.data || {};
+      setError(data.message || data.error || 'Không thể xóa người dùng đã chọn. Vui lòng thử lại.');
+    } finally {
+      setBulkActionLoading(false);
+    }
+  };
+
+  const handleBulkStatus = async (newStatus) => {
+    if (selectedIds.size === 0) return;
+    setBulkActionLoading(true);
+    setError('');
+    try {
+      for (const id of selectedIds) {
+        await api.put(`/users/${id}`, { status: newStatus });
+      }
+      setUsers((prev) =>
+        prev.map((u) => (selectedIds.has(u.id) ? { ...u, status: newStatus } : u))
+      );
+      setSuccess(`Đã cập nhật trạng thái ${selectedIds.size} người dùng.`);
+      setSelectedIds(new Set());
+      setShowBulkStatusModal(false);
+      setTimeout(() => setSuccess(''), 3000);
+    } catch (err) {
+      setError(err.response?.data?.error || 'Cập nhật trạng thái thất bại.');
+    } finally {
+      setBulkActionLoading(false);
+    }
+  };
+
+  const fetchBulkClasses = async () => {
+    const schoolId = user?.school?.id;
+    if (!schoolId) return;
+    setBulkClassLoading(true);
+    try {
+      const res = await api.get(`/classes/school/${schoolId}`);
+      setBulkClasses(res.data?.classes || res.data || []);
+    } catch (_) {
+      setBulkClasses([]);
+    } finally {
+      setBulkClassLoading(false);
+    }
+  };
+
+  const handleBulkAssignClass = async (classId) => {
+    if (selectedStudents.length === 0 || !classId) return;
+    setBulkActionLoading(true);
+    setError('');
+    try {
+      for (const id of selectedStudents.map((u) => u.id)) {
+        await api.put(`/users/${id}`, { classId: Number(classId) });
+      }
+      setSuccess(`Đã gán lớp cho ${selectedStudents.length} học sinh.`);
+      fetchUsers();
+      setSelectedIds(new Set());
+      setShowBulkClassModal(false);
+      setTimeout(() => setSuccess(''), 3000);
+    } catch (err) {
+      setError(err.response?.data?.error || 'Gán lớp thất bại.');
+    } finally {
+      setBulkActionLoading(false);
+    }
+  };
+
   // Reset về trang hợp lệ khi đổi bộ lọc hoặc số dòng/trang
   useEffect(() => {
     setCurrentPage((p) => (totalPages === 0 ? 0 : Math.min(p, totalPages - 1)));
   }, [totalPages, searchTerm, filterRole, filterStatus, pageSize]);
+
+  const someSelected = paginatedUsers.some((u) => selectedIds.has(u.id));
+  const allSelected = paginatedUsers.length > 0 && paginatedUsers.every((u) => selectedIds.has(u.id));
+  useEffect(() => {
+    const el = selectAllCheckboxRef.current;
+    if (el) el.indeterminate = someSelected && !allSelected;
+  }, [someSelected, allSelected]);
 
   if (loading) {
     return (
@@ -479,6 +611,28 @@ const UserListPage = () => {
         </div>
       )}
 
+      {selectedIds.size > 0 && (
+        <div className="bulk-action-bar">
+          <span className="bulk-action-count">Đã chọn {selectedIds.size} người dùng</span>
+          <div className="bulk-action-buttons">
+            <button type="button" className="btn btn-sm btn-secondary" onClick={clearSelection} disabled={bulkActionLoading}>
+              Bỏ chọn
+            </button>
+            <button type="button" className="btn btn-sm btn-danger" onClick={handleBulkDelete} disabled={bulkActionLoading}>
+              {bulkActionLoading ? 'Đang xử lý...' : '🗑️ Xóa hàng loạt'}
+            </button>
+            <button type="button" className="btn btn-sm btn-secondary" onClick={() => setShowBulkStatusModal(true)} disabled={bulkActionLoading}>
+              Đổi trạng thái
+            </button>
+            {user?.role?.name?.toUpperCase() === 'ADMIN' && selectedStudents.length > 0 && (
+              <button type="button" className="btn btn-sm btn-secondary" onClick={() => { setShowBulkClassModal(true); fetchBulkClasses(); }} disabled={bulkActionLoading}>
+                Gán lớp ({selectedStudents.length} học sinh)
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
       <div className="common-table-container">
         {totalFiltered === 0 ? (
           <div className="empty-state">
@@ -505,19 +659,27 @@ const UserListPage = () => {
             </Link>
           </div>
         ) : (
-          <table className="common-table">
+          <table className="common-table user-list-table">
             <thead>
               <tr>
-                <th>STT</th>
-                <th>Họ tên</th>
-                <th>Email</th>
+                <th style={{ width: '44px' }}>
+                  <label className="bulk-checkbox-label">
+                    <input
+                      ref={selectAllCheckboxRef}
+                      type="checkbox"
+                      checked={allSelected}
+                      onChange={toggleSelectAll}
+                      aria-label="Chọn tất cả trên trang"
+                    />
+                  </label>
+                </th>
+                <th>Người dùng</th>
                 <th>Vai trò</th>
                 <th>Trường</th>
                 {(() => {
                   const currentUserRole = user?.role?.name?.toUpperCase();
-                  // Hiển thị cột "Lớp học" khi admin xem danh sách (có thể có học sinh và giáo viên)
                   if (currentUserRole === 'ADMIN') {
-                    return <th>Lớp học</th>;
+                    return <th>Liên kết</th>;
                   }
                   return null;
                 })()}
@@ -526,25 +688,43 @@ const UserListPage = () => {
               </tr>
             </thead>
             <tbody>
-              {paginatedUsers.map((userItem, index) => (
+              {paginatedUsers.map((userItem) => (
                 <tr key={userItem.id} className="user-item">
-                  <td>{pageIndex * pageSize + index + 1}</td>
                   <td>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                      <div className="user-avatar">
-                        {userItem.fullName?.charAt(0)?.toUpperCase() || '👤'}
+                    <label className="bulk-checkbox-label">
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(userItem.id)}
+                        onChange={() => toggleSelectOne(userItem.id)}
+                        aria-label={`Chọn ${userItem.fullName || userItem.email}`}
+                      />
+                    </label>
+                  </td>
+                  <td>
+                    <div className="user-cell">
+                      <div className="user-cell-top">
+                        <div className="user-avatar">
+                          {userItem.fullName?.charAt(0)?.toUpperCase() || '👤'}
+                        </div>
+                        <span className="user-name">{userItem.fullName}</span>
                       </div>
-                      <span className="user-name">{userItem.fullName}</span>
+                      <div className="user-cell-email">{userItem.email}</div>
                     </div>
                   </td>
                   <td>
-                    <span className="user-email">{userItem.email}</span>
+                    {(() => {
+                      const { label, badgeClass } = getRoleBadgeConfig(userItem.role?.name);
+                      if (!label) return null;
+                      return (
+                        <span className={`role-badge role-badge--${badgeClass}`}>
+                          {label}
+                        </span>
+                      );
+                    })()}
                   </td>
-                  <td>{getRoleDisplayName(userItem.role?.name)}</td>
                   <td>{userItem.school?.name || 'N/A'}</td>
                   {(() => {
                     const currentUserRole = user?.role?.name?.toUpperCase();
-                    // Hiển thị cột "Lớp học" khi admin xem danh sách
                     if (currentUserRole === 'ADMIN') {
                       return (
                         <td>
@@ -552,58 +732,52 @@ const UserListPage = () => {
                             const userRoleName = userItem.role?.name?.toUpperCase() || '';
                             const isStudent = userRoleName.includes('STUDENT') || userRoleName === 'STUDENT';
                             const isTeacher = userRoleName.includes('TEACHER') || userRoleName === 'TEACHER';
+                            const isParent = userRoleName.includes('PARENT') || userRoleName.includes('PHU HUYNH') || userRoleName.includes('PHỤ HUYNH');
                             
-                            // Hiển thị lớp cho học sinh
                             if (isStudent) {
                               if (userItem.class && userItem.class.name) {
+                                const text = `${userItem.class.name}${userItem.class.schoolYear ? ` (${userItem.class.schoolYear})` : ''}`;
                                 return (
-                                  <span style={{ 
-                                    display: 'inline-block',
-                                    padding: '4px 8px',
-                                    backgroundColor: '#e0f2fe',
-                                    color: '#0369a1',
-                                    borderRadius: '4px',
-                                    fontSize: '0.875rem',
-                                    fontWeight: '500'
-                                  }}>
-                                    {userItem.class.name}
-                                    {userItem.class.schoolYear && ` (${userItem.class.schoolYear})`}
+                                  <span className="link-cell-badge link-cell-badge--student">
+                                    {text}
                                   </span>
                                 );
                               }
-                              return <span style={{ color: '#999', fontStyle: 'italic' }}>Chưa có lớp</span>;
+                              return <span className="link-cell-empty">Chưa có lớp</span>;
                             }
-                            
-                            // Hiển thị danh sách lớp cho giáo viên
                             if (isTeacher) {
-                              if (userItem.classes && Array.isArray(userItem.classes) && userItem.classes.length > 0) {
+                              const classes = userItem.classes && Array.isArray(userItem.classes) ? userItem.classes : [];
+                              const count = classes.length;
+                              if (count > 0) {
                                 return (
-                                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
-                                    {userItem.classes.map((classItem, idx) => (
-                                      <span 
-                                        key={classItem.id || idx}
-                                        style={{ 
-                                          display: 'inline-block',
-                                          padding: '4px 8px',
-                                          backgroundColor: '#fef3c7',
-                                          color: '#92400e',
-                                          borderRadius: '4px',
-                                          fontSize: '0.875rem',
-                                          fontWeight: '500',
-                                          marginBottom: '2px'
-                                        }}
-                                      >
-                                        {classItem.name}
-                                        {classItem.schoolYear && ` (${classItem.schoolYear})`}
-                                      </span>
-                                    ))}
-                                  </div>
+                                  <button
+                                    type="button"
+                                    className="link-cell-btn"
+                                    onClick={() => setLinkModal({ type: 'classes', title: `Lớp của ${userItem.fullName || 'giáo viên'}`, items: classes, userName: userItem.fullName })}
+                                  >
+                                    {count} lớp
+                                  </button>
                                 );
                               }
-                              return <span style={{ color: '#999', fontStyle: 'italic' }}>Chưa có lớp</span>;
+                              return <span className="link-cell-empty">Chưa có lớp</span>;
                             }
-                            
-                            return <span style={{ color: '#999' }}>-</span>;
+                            if (isParent) {
+                              const children = userItem.children && Array.isArray(userItem.children) ? userItem.children : [];
+                              const count = userItem.childrenCount != null ? userItem.childrenCount : children.length;
+                              if (count > 0) {
+                                return (
+                                  <button
+                                    type="button"
+                                    className="link-cell-btn"
+                                    onClick={() => setLinkModal({ type: 'children', title: `Con của ${userItem.fullName || 'phụ huynh'}`, items: children, userName: userItem.fullName })}
+                                  >
+                                    {count} con
+                                  </button>
+                                );
+                              }
+                              return <span className="link-cell-empty">Chưa liên kết con</span>;
+                            }
+                            return <span className="link-cell-empty">-</span>;
                           })()}
                         </td>
                       );
@@ -697,6 +871,138 @@ const UserListPage = () => {
             >
               ›
             </button>
+          </div>
+        </div>
+      )}
+
+      {showBulkStatusModal && (
+        <div className="common-modal-overlay" onClick={() => !bulkActionLoading && setShowBulkStatusModal(false)}>
+          <div className="common-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '400px' }}>
+            <div className="common-modal-header">
+              <h2>Đổi trạng thái ({selectedIds.size} người dùng)</h2>
+              <button type="button" className="common-close-btn" onClick={() => !bulkActionLoading && setShowBulkStatusModal(false)}>×</button>
+            </div>
+            <div style={{ padding: '1rem' }}>
+              <div className="common-form-group">
+                <label>Trạng thái mới</label>
+                <select
+                  id="bulk-status-select"
+                  className="filter-select"
+                  style={{ width: '100%', padding: '0.5rem' }}
+                >
+                  <option value="ACTIVE">Đang hoạt động</option>
+                  <option value="INACTIVE">Ngưng hoạt động</option>
+                  <option value="SUSPENDED">Bị khóa</option>
+                </select>
+              </div>
+              <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem' }}>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  disabled={bulkActionLoading}
+                  onClick={() => {
+                    const select = document.getElementById('bulk-status-select');
+                    if (select) handleBulkStatus(select.value);
+                  }}
+                >
+                  {bulkActionLoading ? 'Đang xử lý...' : 'Cập nhật'}
+                </button>
+                <button type="button" className="btn btn-secondary" onClick={() => !bulkActionLoading && setShowBulkStatusModal(false)}>
+                  Hủy
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showBulkClassModal && (
+        <div className="common-modal-overlay" onClick={() => !bulkActionLoading && setShowBulkClassModal(false)}>
+          <div className="common-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '420px' }}>
+            <div className="common-modal-header">
+              <h2>Gán lớp cho {selectedStudents.length} học sinh</h2>
+              <button type="button" className="common-close-btn" onClick={() => !bulkActionLoading && setShowBulkClassModal(false)}>×</button>
+            </div>
+            <div style={{ padding: '1rem' }}>
+              {bulkClassLoading ? (
+                <p>Đang tải danh sách lớp...</p>
+              ) : (
+                <>
+                  <div className="common-form-group">
+                    <label>Chọn lớp</label>
+                    <select
+                      id="bulk-class-select"
+                      className="filter-select"
+                      style={{ width: '100%', padding: '0.5rem' }}
+                    >
+                      <option value="">-- Chọn lớp --</option>
+                      {bulkClasses.map((cls) => (
+                        <option key={cls.id} value={cls.id}>
+                          {cls.name}
+                          {cls.schoolYear ? ` (${cls.schoolYear})` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem' }}>
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      disabled={bulkActionLoading || bulkClasses.length === 0}
+                      onClick={() => {
+                        const select = document.getElementById('bulk-class-select');
+                        if (select?.value) handleBulkAssignClass(select.value);
+                      }}
+                    >
+                      {bulkActionLoading ? 'Đang xử lý...' : 'Gán lớp'}
+                    </button>
+                    <button type="button" className="btn btn-secondary" onClick={() => !bulkActionLoading && setShowBulkClassModal(false)}>
+                      Hủy
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {linkModal && (
+        <div className="common-modal-overlay" onClick={() => setLinkModal(null)}>
+          <div className="common-modal link-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '400px' }}>
+            <div className="common-modal-header">
+              <h2>{linkModal.title}</h2>
+              <button type="button" className="common-close-btn" onClick={() => setLinkModal(null)}>×</button>
+            </div>
+            <div className="link-modal-body">
+              {linkModal.type === 'classes' && linkModal.items?.length > 0 && (
+                <ul className="link-modal-list">
+                  {linkModal.items.map((cls, idx) => (
+                    <li key={cls.id || idx}>
+                      <span className="link-modal-item">
+                        {cls.name}
+                        {cls.schoolYear ? ` (${cls.schoolYear})` : ''}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {linkModal.type === 'children' && linkModal.items?.length > 0 && (
+                <ul className="link-modal-list">
+                  {linkModal.items.map((child, idx) => (
+                    <li key={child.id || idx}>
+                      <Link to={`/users/${child.id}/edit`} className="link-modal-item link-modal-item--clickable" onClick={() => setLinkModal(null)}>
+                        {child.fullName || child.email || `#${child.id}`}
+                        {child.email && <span className="link-modal-email"> — {child.email}</span>}
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {(!linkModal.items || linkModal.items.length === 0) && (
+                <p className="link-modal-empty">Không có dữ liệu.</p>
+              )}
+            </div>
           </div>
         </div>
       )}
