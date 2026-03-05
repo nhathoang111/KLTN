@@ -1,30 +1,30 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
-import LoginPage from './pages/LoginPage';
-import Dashboard from './pages/Dashboard';
-import SchoolListPage from './pages/SchoolListPage';
-import SchoolCreatePage from './pages/SchoolCreatePage';
-import SchoolEditPage from './pages/SchoolEditPage';
-import ClassListPage from './pages/ClassListPage';
-import ClassCreatePage from './pages/ClassCreatePage';
-import ClassEditPage from './pages/ClassEditPage';
-import SubjectListPage from './pages/SubjectListPage';
-import SubjectCreatePage from './pages/SubjectCreatePage';
-import SubjectEditPage from './pages/SubjectEditPage';
-import UserListPage from './pages/UserListPage';
-import UserCreatePage from './pages/UserCreatePage';
-import UserEditPage from './pages/UserEditPage';
-import AssignmentListPage from './pages/AssignmentListPage';
-import ReportListPage from './pages/ReportListPage';
-import DocumentListPage from './pages/DocumentListPage';
-import AnnouncementListPage from './pages/AnnouncementListPage';
-import RoleManagement from './pages/RoleManagement';
-import ExamScoreManagement from './pages/ExamScoreManagement';
-import AttendanceManagement from './pages/AttendanceManagement';
-import RecordListPage from './pages/RecordListPage';
-import ScheduleListPage from './pages/ScheduleListPage';
-import ProtectedRoute from './components/ProtectedRoute';
+import LoginPage from './pages/LoginPage/LoginPage';
+import Dashboard from './pages/Dashboard/Dashboard';
+import SchoolListPage from './pages/SchoolListPage/SchoolListPage';
+import SchoolCreatePage from './pages/SchoolCreatePage/SchoolCreatePage';
+import SchoolEditPage from './pages/SchoolEditPage/SchoolEditPage';
+import ClassListPage from './pages/ClassListPage/ClassListPage';
+import ClassCreatePage from './pages/ClassCreatePage/ClassCreatePage';
+import ClassEditPage from './pages/ClassEditPage/ClassEditPage';
+import SubjectListPage from './pages/SubjectListPage/SubjectListPage';
+import SubjectCreatePage from './pages/SubjectCreatePage/SubjectCreatePage';
+import SubjectEditPage from './pages/SubjectEditPage/SubjectEditPage';
+import UserListPage from './pages/UserListPage/UserListPage';
+import UserCreatePage from './pages/UserCreatePage/UserCreatePage';
+import UserEditPage from './pages/UserEditPage/UserEditPage';
+import AssignmentListPage from './pages/AssignmentListPage/AssignmentListPage';
+import ReportListPage from './pages/ReportListPage/ReportListPage';
+import DocumentListPage from './pages/DocumentListPage/DocumentListPage';
+import AnnouncementListPage from './pages/AnnouncementListPage/AnnouncementListPage';
+import RoleManagement from './pages/RoleManagement/RoleManagement';
+import ExamScoreManagement from './pages/ExamScoreManagement/ExamScoreManagement';
+import AttendanceManagement from './pages/AttendanceManagement/AttendanceManagement';
+import RecordListPage from './pages/RecordListPage/RecordListPage';
+import ScheduleListPage from './pages/ScheduleListPage/ScheduleListPage';
+import ProtectedRoute from './components/ProtectedRoute/';
 import Layout from './components/Layout';
 import './App.css';
 
@@ -36,7 +36,7 @@ function App() {
           <Routes>
             {/* Public routes */}
             <Route path="/login" element={<LoginPage />} />
-            
+
             {/* Protected routes */}
             <Route path="/" element={
               <ProtectedRoute>

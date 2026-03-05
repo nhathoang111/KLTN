@@ -15,20 +15,20 @@ const Layout = () => {
   // Xác định vai trò người dùng
   const getUserRole = () => {
     if (!user) return 'GUEST';
-    
+
     // Normalize role name to uppercase for case-insensitive matching
     const roleName = user.role?.name?.toUpperCase();
-    
+
     // Debug: Log role information
     console.log('User:', user);
     console.log('Role name (original):', user.role?.name);
     console.log('Role name (uppercase):', roleName);
-    
+
     if (roleName === 'SUPER_ADMIN') return 'SUPER_ADMIN';
     if (roleName === 'ADMIN') return 'ADMIN';
     if (roleName === 'TEACHER') return 'TEACHER';
     if (roleName === 'STUDENT') return 'STUDENT';
-    
+
     console.log('Unknown role, defaulting to GUEST');
     return 'GUEST';
   };
@@ -39,11 +39,11 @@ const Layout = () => {
   const getMenuItems = () => {
     const allMenuItems = [
       { path: '/dashboard', label: 'Dashboard', icon: '📊', roles: ['SUPER_ADMIN', 'ADMIN', 'TEACHER', 'STUDENT', 'GUEST'] },
-      
+
       // SuperAdmin chỉ có 2 chức năng chính
       { path: '/schools', label: 'Quản lý trường học', icon: '🏫', roles: ['SUPER_ADMIN'] },
       { path: '/users', label: 'Quản lý Admin trường', icon: '👨‍💼', roles: ['SUPER_ADMIN'] },
-      
+
       // Admin có đầy đủ 8 chức năng
       { path: '/users', label: 'Quản lý người dùng', icon: '👥', roles: ['ADMIN'] },
       { path: '/roles', label: 'Quản lý phân quyền', icon: '🔐', roles: ['ADMIN'] },
@@ -53,7 +53,7 @@ const Layout = () => {
       { path: '/exam-scores', label: 'Quản lý điểm số', icon: '📊', roles: ['ADMIN'] },
       // { path: '/attendance', label: 'Chuyên cần & Kỷ luật', icon: '✅', roles: ['ADMIN'] },
       { path: '/announcements', label: 'Thông báo & Tài liệu', icon: '📢', roles: ['ADMIN'] },
-      
+
       // Teacher có 6 chức năng
       { path: '/classes', label: 'Xem lớp phụ trách', icon: '📚', roles: ['TEACHER'] },
       { path: '/exam-scores', label: 'Nhập điểm & Nhận xét', icon: '📝', roles: ['TEACHER'] },
@@ -61,7 +61,7 @@ const Layout = () => {
       { path: '/schedules', label: 'Xem thời khóa biểu', icon: '📅', roles: ['TEACHER'] },
       //{ path: '/attendance', label: 'Theo dõi chuyên cần', icon: '✅', roles: ['TEACHER'] },
       { path: '/announcements', label: 'Thông báo', icon: '📢', roles: ['TEACHER'] },
-      
+
       // Student có 4 chức năng
       { path: '/schedules', label: 'Xem thời khóa biểu', icon: '📅', roles: ['STUDENT'] },
       { path: '/exam-scores', label: 'Xem điểm & Nhận xét', icon: '📊', roles: ['STUDENT'] },
