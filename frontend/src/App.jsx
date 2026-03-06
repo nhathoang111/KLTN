@@ -25,7 +25,7 @@ import AttendanceManagement from './pages/AttendanceManagement/AttendanceManagem
 import RecordListPage from './pages/RecordListPage/RecordListPage';
 import ScheduleListPage from './pages/ScheduleListPage/ScheduleListPage';
 import ProtectedRoute from './components/ProtectedRoute/';
-import Layout from './components/Layout';
+import Layout from './components/Layout/Layout';
 import './App.css';
 
 function App() {

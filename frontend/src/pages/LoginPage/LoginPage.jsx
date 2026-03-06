@@ -66,13 +66,13 @@ const LoginPage = () => {
                       ACADEMIA
                     </div>
                     <div className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-                      School Management System
+                      Hệ thống quản lý trường học
                     </div>
                   </div>
                 </div>
 
                 <h2 className="!mt-10 text-xl font-bold text-slate-900">
-                  Login to your account
+                  Đăng nhập với tài khoản của bạn
                 </h2>
                 <p className="!mt-2 text-sm text-slate-500">
                   Đăng nhập để truy cập hệ thống quản lý
@@ -95,7 +95,7 @@ const LoginPage = () => {
                         type="email"
                         autoComplete="email"
                         required
-                        placeholder="Username or Email"
+                        placeholder="Tên tài khoản"
                         value={formData.email}
                         onChange={handleChange}
                         className="h-11 w-full border-none bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-400"
@@ -106,7 +106,7 @@ const LoginPage = () => {
                   {/* Password */}
                   <div>
                     <label className="!mb-1 block text-sm font-semibold text-slate-700">
-                      Password
+                      Mật khẩu
                     </label>
 
                     <div className="flex items-center !gap-2 rounded-xl border border-slate-200 bg-slate-50 !px-3 focus-within:border-slate-400 focus-within:ring-2 focus-within:ring-slate-200">
@@ -119,7 +119,7 @@ const LoginPage = () => {
                         type={showPwd ? "text" : "password"}
                         autoComplete="current-password"
                         required
-                        placeholder="Password"
+                        placeholder="Mật khẩu"
                         value={formData.password}
                         onChange={handleChange}
                         className="h-11 w-full border-none bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-400"
@@ -153,18 +153,18 @@ const LoginPage = () => {
                     {loading ? (
                       <span className="flex items-center !gap-2">
                         <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />
-                        Logging in...
+                        Đang đăng nhập...
                       </span>
                     ) : (
                       <span className="flex items-center !gap-2">
                         <LogIn size={16} />
-                        Login
+                        Đăng nhập
                       </span>
                     )}
                   </button>
 
                   <p className="!pt-2 text-center text-xs text-slate-500">
-                    © {new Date().getFullYear()} School Management
+                    © {new Date().getFullYear()} Hệ thống quản lý trường học
                   </p>
                 </form>
               </div>
@@ -187,12 +187,6 @@ const LoginPage = () => {
           </div>
         </div>
 
-        {/* Optional mobile note */}
-        <div className="!mt-6 rounded-2xl border border-slate-200 bg-white !p-4 lg:hidden">
-          <p className="text-center text-sm text-slate-600">
-            (Mobile) Bạn có thể thêm illustration phía dưới nếu muốn.
-          </p>
-        </div>
       </div>
     </div>
   );
