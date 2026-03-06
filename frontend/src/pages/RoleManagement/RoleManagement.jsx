@@ -6,6 +6,9 @@ import './RoleManagement.css';
 
 const RoleManagement = () => {
   const { user } = useAuth();
+  const currentUserRole = user?.role?.name?.toUpperCase();
+  const isSchoolAdmin = currentUserRole === 'ADMIN';
+  const ADMIN_ALLOWED_ROLE_NAMES = ['PARENT', 'STUDENT', 'TEACHER'];
   const [roles, setRoles] = useState([]);
   const [schools, setSchools] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -73,6 +76,14 @@ const RoleManagement = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
+    if (isSchoolAdmin) {
+      const inputNameUpper = (formData.name || '').toUpperCase().trim();
+      if (!ADMIN_ALLOWED_ROLE_NAMES.includes(inputNameUpper)) {
+        alert('Admin chỉ được tạo phân quyền: PHỤ HUYNH (PARENT), HỌC SINH (STUDENT), GIÁO VIÊN (TEACHER).');
+        return;
+      }
+    }
+
     // Validation: Kiểm tra role name đã tồn tại chưa
     // Cho phép trùng tên ADMIN, TEACHER, STUDENT giữa các trường khác nhau
     // Chỉ chặn trùng trong cùng một trường
@@ -104,7 +115,10 @@ const RoleManagement = () => {
       if (editingRole) {
         await api.put(`/roles/${editingRole.id}`, formData);
       } else {
-        await api.post('/roles', formData);
+        await api.post('/roles', {
+          ...formData,
+          name: (formData.name || '').toUpperCase().trim()
+        });
       }
       await fetchRoles();
       resetForm();
@@ -252,13 +266,28 @@ const RoleManagement = () => {
             <form onSubmit={handleSubmit} className="common-modal-form">
               <div className="common-form-group">
                 <label>Tên phân quyền *</label>
-                <input
-                  type="text"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  required
-                  placeholder="Nhập tên phân quyền"
-                />
+                {isSchoolAdmin ? (
+                  <select
+                    value={(formData.name || '').toUpperCase()}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    required
+                    disabled={!!editingRole}
+                    style={editingRole ? { backgroundColor: '#f3f4f6', cursor: 'not-allowed' } : {}}
+                  >
+                    <option value="">Chọn phân quyền</option>
+                    <option value="PARENT">PHỤ HUYNH (PARENT)</option>
+                    <option value="STUDENT">HỌC SINH (STUDENT)</option>
+                    <option value="TEACHER">GIÁO VIÊN (TEACHER)</option>
+                  </select>
+                ) : (
+                  <input
+                    type="text"
+                    value={formData.name}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    required
+                    placeholder="Nhập tên phân quyền"
+                  />
+                )}
               </div>
               <div className="common-form-group">
                 <label>Mô tả</label>

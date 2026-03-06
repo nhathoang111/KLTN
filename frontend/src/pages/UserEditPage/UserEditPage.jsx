@@ -7,7 +7,9 @@ const UserEditPage = () => {
   const navigate = useNavigate();
   const { id } = useParams();
   const { user: currentUser } = useAuth();
-  const isAdmin = currentUser?.role?.name?.toUpperCase() === 'ADMIN' || currentUser?.role?.name?.toUpperCase() === 'SUPER_ADMIN';
+  const currentUserRole = currentUser?.role?.name?.toUpperCase();
+  const isAdmin = currentUserRole === 'ADMIN' || currentUserRole === 'SUPER_ADMIN';
+  const isSchoolAdmin = currentUserRole === 'ADMIN';
 
   const [loading, setLoading] = useState(false);
   const [loadingData, setLoadingData] = useState(true);
@@ -70,7 +72,11 @@ const UserEditPage = () => {
       if (schoolId) {
         try {
           const rolesRes = await api.get(`/roles/school/${schoolId}`);
-          setRoles(rolesRes.data.roles || []);
+          let allRoles = rolesRes.data.roles || [];
+          if (isSchoolAdmin) {
+            allRoles = (allRoles || []).filter(r => isAllowedRoleForSchoolAdmin(r?.name));
+          }
+          setRoles(allRoles);
         } catch (_) { }
       }
 
@@ -136,12 +142,19 @@ const UserEditPage = () => {
     const u = (name || '').toUpperCase();
     return u.includes('PARENT') || u.includes('PHỤ HUYNH') || u.includes('PHU HUYNH');
   };
+  const isAllowedRoleForSchoolAdmin = (roleName) => {
+    return isRoleStudent(roleName) || isRoleTeacher(roleName) || isRoleParent(roleName);
+  };
 
   const fetchRolesForSchool = async (schoolId) => {
     try {
       setLoadingRoles(true);
       const res = await api.get(`/roles/school/${schoolId}`);
-      setRoles(res.data.roles || []);
+      let allRoles = res.data.roles || [];
+      if (isSchoolAdmin) {
+        allRoles = (allRoles || []).filter(r => isAllowedRoleForSchoolAdmin(r?.name));
+      }
+      setRoles(allRoles);
     } catch (err) {
       console.error(err);
     } finally {
@@ -235,6 +248,10 @@ const UserEditPage = () => {
     if (!formData.roleId) { setError('Vai trò là bắt buộc'); return false; }
     if (!formData.schoolId) { setError('Trường là bắt buộc'); return false; }
     const selectedRole = roles.find(r => r.id === parseInt(formData.roleId, 10) || r.id === formData.roleId);
+    if (isSchoolAdmin && !isAllowedRoleForSchoolAdmin(selectedRole?.name)) {
+      setError('Admin chỉ được gán vai trò: Phụ huynh / Học sinh / Giáo viên');
+      return false;
+    }
     if (isRoleStudent(selectedRole?.name) && !formData.classId) {
       setError('Học sinh bắt buộc phải chọn lớp'); return false;
     }
