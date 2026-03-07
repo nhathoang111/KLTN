@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import api from '../../../../shared/lib/api';
 import './SubjectListPage.css';
 import { useAuth } from '../../../auth/context/AuthContext';
@@ -7,6 +7,7 @@ const SubjectListPage = () => {
   const { user } = useAuth();
   const [subjects, setSubjects] = useState([]);
   const [schools, setSchools] = useState([]);
+  const [subjectClassCounts, setSubjectClassCounts] = useState({});
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editingSubject, setEditingSubject] = useState(null);
@@ -22,9 +23,10 @@ const SubjectListPage = () => {
 
   const fetchData = async () => {
     try {
-      const [subjectsRes, schoolsRes] = await Promise.all([
+      const [subjectsRes, schoolsRes, countsRes] = await Promise.all([
         api.get('/subjects'),
-        api.get('/schools')
+        api.get('/schools'),
+        api.get('/subjects/counts/classes').catch(() => ({ data: {} }))
       ]);
 
       // Filter subjects for admin - only show subjects from their own school
@@ -41,6 +43,8 @@ const SubjectListPage = () => {
         allSchools = allSchools.filter(school => school.id === user.school.id);
       }
       setSchools(allSchools);
+
+      setSubjectClassCounts(countsRes.data || {});
     } catch (error) {
       console.error('Error fetching data:', error);
     } finally {
@@ -112,11 +116,6 @@ const SubjectListPage = () => {
     });
   };
 
-  const getSchoolName = (schoolId) => {
-    const school = schools.find(s => s.id === schoolId);
-    return school ? school.name : 'N/A';
-  };
-
   if (loading) {
     return (
       <div className="subject-list-page">
@@ -153,7 +152,7 @@ const SubjectListPage = () => {
             <tr>
               <th>Tên môn học</th>
               <th>Mã môn</th>
-              <th>Trường</th>
+              <th>Số lớp đang học</th>
               <th>Thao tác</th>
             </tr>
           </thead>
@@ -162,7 +161,7 @@ const SubjectListPage = () => {
               <tr key={subject.id}>
                 <td>{subject.name}</td>
                 <td>{subject.code}</td>
-                <td>{getSchoolName(subject.school?.id)}</td>
+                <td>{subjectClassCounts[subject.id] ?? subjectClassCounts[String(subject.id)] ?? 0}</td>
                 <td>
                   <div className="action-buttons">
                     <button

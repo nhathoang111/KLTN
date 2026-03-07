@@ -347,9 +347,10 @@ const UserCreatePage = () => {
         userData.schoolId = effectiveSchoolId;
       }
 
-      // Thêm classId (bắt buộc cho học sinh)
+      // Thêm classId (bắt buộc cho học sinh) - bất kỳ role nào chứa STUDENT hoặc Học sinh
       const selectedRole = roles.find(r => r.id === roleIdNum || r.id === formData.roleId);
-      const isStudent = selectedRole && (selectedRole.name?.toUpperCase() === 'STUDENT' || selectedRole.name?.toUpperCase().startsWith('STUDENT'));
+      const roleNameUpper = (selectedRole?.name || '').toUpperCase();
+      const isStudent = selectedRole && (roleNameUpper.includes('STUDENT') || roleNameUpper.includes('HỌC SINH') || roleNameUpper.includes('HOC SINH'));
 
       if (isStudent) {
         if (!formData.classId) {
@@ -857,7 +858,7 @@ const UserCreatePage = () => {
                         <option value="">Chọn lớp</option>
                         {classes.map(cls => (
                           <option key={cls.id} value={cls.id}>
-                            {cls.name} - {typeof cls.schoolYear === 'string' ? cls.schoolYear : (cls.schoolYear?.name ?? '')}
+                            {cls.name}
                           </option>
                         ))}
                       </select>

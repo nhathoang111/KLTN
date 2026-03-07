@@ -26,4 +26,13 @@ public interface EnrollmentRepository extends JpaRepository<Enrollment, Integer>
     
     @Query("SELECT DISTINCT e FROM Enrollment e JOIN FETCH e.student s JOIN FETCH s.role JOIN FETCH e.classEntity WHERE e.classEntity.id = :classId AND e.status = 'ACTIVE'")
     List<Enrollment> findByClassEntityIdWithStudents(@Param("classId") Integer classId);
+
+    @Query("SELECT COUNT(e) FROM Enrollment e WHERE e.classEntity.id = :classId AND (e.status = 'ACTIVE' OR e.status IS NULL)")
+    long countActiveByClassEntityId(@Param("classId") Integer classId);
+
+    @Query("SELECT COUNT(e) FROM Enrollment e WHERE e.classEntity.id = :classId")
+    long countByClassEntityId(@Param("classId") Integer classId);
+
+    @Query(value = "SELECT COUNT(*) FROM enrollments WHERE class_id = :classId", nativeQuery = true)
+    long countByClassIdNative(@Param("classId") Integer classId);
 }

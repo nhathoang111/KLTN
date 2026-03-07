@@ -6,8 +6,8 @@ import { useAuth } from '../../../auth/context/AuthContext';
 const ClassCreatePage = () => {
   const { user } = useAuth();
   const [formData, setFormData] = useState({
-    name: '',
     gradeLevel: '',
+    classNumber: '',
     schoolYear: '',
     capacity: '',
     status: 'ACTIVE',
@@ -95,12 +95,18 @@ const ClassCreatePage = () => {
     setLoading(true);
 
     try {
+      const gradeLevel = parseInt(formData.gradeLevel, 10);
+      const classNumber = parseInt(formData.classNumber, 10);
+      const schoolYearStr = (formData.schoolYear || '').trim();
+      const name = schoolYearStr ? `${gradeLevel}/${classNumber} (${schoolYearStr})` : `Khối ${gradeLevel} - Lớp ${classNumber}`;
       const submitData = {
         ...formData,
-        gradeLevel: parseInt(formData.gradeLevel),
-        capacity: parseInt(formData.capacity),
-        schoolId: parseInt(formData.schoolId),
-        homeroomTeacherId: formData.homeroomTeacherId ? parseInt(formData.homeroomTeacherId) : null
+        name,
+        gradeLevel,
+        classNumber,
+        capacity: parseInt(formData.capacity, 10),
+        schoolId: parseInt(formData.schoolId, 10),
+        homeroomTeacherId: formData.homeroomTeacherId ? parseInt(formData.homeroomTeacherId, 10) : null
       };
 
       await api.post('/classes', submitData);
@@ -124,42 +130,44 @@ const ClassCreatePage = () => {
       <form onSubmit={handleSubmit} className="space-y-6">
         <div className="bg-white shadow px-4 py-5 sm:rounded-lg sm:p-6">
           <div className="grid grid-cols-1 gap-6">
-            <div>
-              <label htmlFor="name" className="block text-sm font-medium text-gray-700">
-                Class Name *
-              </label>
-              <input
-                type="text"
-                name="name"
-                id="name"
-                required
-                value={formData.name}
-                onChange={handleChange}
-                className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-              />
-            </div>
-
-            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
               <div>
                 <label htmlFor="gradeLevel" className="block text-sm font-medium text-gray-700">
-                  Grade Level *
+                  Khối *
                 </label>
-                <input
-                  type="number"
+                <select
                   name="gradeLevel"
                   id="gradeLevel"
                   required
-                  min="1"
-                  max="12"
                   value={formData.gradeLevel}
                   onChange={handleChange}
                   className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                >
+                  <option value="">Chọn khối</option>
+                  <option value="10">10</option>
+                  <option value="11">11</option>
+                  <option value="12">12</option>
+                </select>
+              </div>
+              <div>
+                <label htmlFor="classNumber" className="block text-sm font-medium text-gray-700">
+                  Số lớp *
+                </label>
+                <input
+                  type="number"
+                  name="classNumber"
+                  id="classNumber"
+                  required
+                  min="1"
+                  value={formData.classNumber}
+                  onChange={handleChange}
+                  placeholder="VD: 1, 2, 3"
+                  className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
                 />
               </div>
-
               <div>
                 <label htmlFor="schoolYear" className="block text-sm font-medium text-gray-700">
-                  School Year *
+                  Năm học *
                 </label>
                 <input
                   type="text"
@@ -173,11 +181,16 @@ const ClassCreatePage = () => {
                 />
               </div>
             </div>
+            {formData.gradeLevel && formData.classNumber && (
+              <p className="text-sm text-gray-500 mt-1">
+                Tên lớp sẽ là: <strong>{formData.gradeLevel}/{formData.classNumber}{formData.schoolYear ? ` (${formData.schoolYear.trim()})` : ''}</strong>
+              </p>
+            )}
 
             <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
               <div>
                 <label htmlFor="capacity" className="block text-sm font-medium text-gray-700">
-                  Capacity *
+                  Sĩ số tối đa *
                 </label>
                 <input
                   type="number"

@@ -86,8 +86,26 @@ public class ClassService {
                 }
             }
         }
+
+        for (ClassEntity classEntity : classes) {
+            long count = enrollmentRepository.countByClassIdNative(classEntity.getId());
+            classEntity.setStudentCount((int) count);
+        }
         
         return classes;
+    }
+
+    /** Trả về map classId -> số học sinh (để frontend gắn vào từng lớp). */
+    public Map<Integer, Integer> getStudentCountByClassId() {
+        List<ClassEntity> all = classRepository.findAll();
+        Map<Integer, Integer> map = new HashMap<>();
+        for (ClassEntity c : all) {
+            if (c.getId() != null) {
+                long count = enrollmentRepository.countByClassEntityId(c.getId());
+                map.put(c.getId(), (int) count);
+            }
+        }
+        return map;
     }
 
     public ClassEntity getClassById(Integer id) {
@@ -287,8 +305,21 @@ public class ClassService {
 
     public ClassEntity createClass(Map<String, Object> classData) {
         ClassEntity classEntity = new ClassEntity();
-        classEntity.setName((String) classData.get("name"));
-        classEntity.setGradeLevel((Integer) classData.get("gradeLevel"));
+        Integer gradeLevel = classData.get("gradeLevel") instanceof Number
+                ? ((Number) classData.get("gradeLevel")).intValue() : null;
+        Integer classNumber = classData.get("classNumber") instanceof Number
+                ? ((Number) classData.get("classNumber")).intValue() : null;
+        String name = (String) classData.get("name");
+        if ((name == null || name.trim().isEmpty()) && gradeLevel != null && classNumber != null) {
+            Object syObj = classData.get("schoolYear");
+            String schoolYearStr = syObj != null ? syObj.toString().trim() : null;
+            name = (schoolYearStr != null && !schoolYearStr.isEmpty())
+                    ? gradeLevel + "/" + classNumber + " (" + schoolYearStr + ")"
+                    : "Khối " + gradeLevel + " - Lớp " + classNumber;
+        }
+        classEntity.setName(name);
+        classEntity.setGradeLevel(gradeLevel);
+        classEntity.setClassNumber(classNumber);
         resolveAndSetSchoolYear(classEntity, classData.get("schoolId"), classData.get("schoolYear"));
         classEntity.setCapacity((Integer) classData.get("capacity"));
         classEntity.setStatus((String) classData.getOrDefault("status", "ACTIVE"));
@@ -325,8 +356,23 @@ public class ClassService {
 
     public ClassEntity updateClass(Integer id, Map<String, Object> classData) {
         ClassEntity existing = getClassById(id);
-        if (classData.get("name") != null) existing.setName((String) classData.get("name"));
-        if (classData.get("gradeLevel") != null) existing.setGradeLevel((Integer) classData.get("gradeLevel"));
+        String name = (String) classData.get("name");
+        Integer gradeLevel = classData.get("gradeLevel") instanceof Number
+                ? ((Number) classData.get("gradeLevel")).intValue() : null;
+        Integer classNumber = classData.get("classNumber") instanceof Number
+                ? ((Number) classData.get("classNumber")).intValue() : null;
+        if (name != null && !name.trim().isEmpty()) {
+            existing.setName(name);
+        } else if (gradeLevel != null && classNumber != null) {
+            Object syObj = classData.get("schoolYear");
+            String schoolYearStr = syObj != null ? syObj.toString().trim() : null;
+            String generatedName = (schoolYearStr != null && !schoolYearStr.isEmpty())
+                    ? gradeLevel + "/" + classNumber + " (" + schoolYearStr + ")"
+                    : "Khối " + gradeLevel + " - Lớp " + classNumber;
+            existing.setName(generatedName);
+        }
+        if (gradeLevel != null) existing.setGradeLevel(gradeLevel);
+        if (classNumber != null) existing.setClassNumber(classNumber);
         if (classData.get("schoolYear") != null) {
             Integer schoolId = existing.getSchool() != null ? existing.getSchool().getId() : (Integer) classData.get("schoolId");
             resolveAndSetSchoolYear(existing, schoolId, classData.get("schoolYear"));

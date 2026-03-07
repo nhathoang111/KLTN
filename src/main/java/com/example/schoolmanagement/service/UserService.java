@@ -595,8 +595,8 @@ public class UserService {
 
         Integer classId = parseIntFromMap(userData.get("classId"));
         if (classId != null && savedUser.getRole() != null) {
-            String rn = savedUser.getRole().getName().toUpperCase();
-            if ("STUDENT".equals(rn) || rn.startsWith("STUDENT")) {
+            String rn = savedUser.getRole().getName() != null ? savedUser.getRole().getName().toUpperCase() : "";
+            if (rn.contains("STUDENT")) {
                 Optional<ClassEntity> classOpt = classRepository.findById(classId);
                 if (classOpt.isPresent()) {
                     List<Enrollment> existingEnrollments = enrollmentRepository.findByClassEntityId(classId);
@@ -615,6 +615,7 @@ public class UserService {
                                 .orElse(0);
                         enrollment.setRollno(maxRollno + 1);
                         enrollmentRepository.save(enrollment);
+                        enrollmentRepository.flush();
                     }
                 }
             }

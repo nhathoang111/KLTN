@@ -22,9 +22,13 @@ public interface ScheduleRepository extends JpaRepository<Schedule, Integer> {
     List<Schedule> findByTeacherId(@Param("teacherId") Integer teacherId);
     
     @Query("SELECT DISTINCT s FROM Schedule s LEFT JOIN FETCH s.classEntity LEFT JOIN FETCH s.teacher LEFT JOIN FETCH s.subject LEFT JOIN FETCH s.school WHERE s.date = :date AND s.period = :period AND (s.teacher.id = :teacherId OR s.classEntity.id = :classId)")
-    List<Schedule> findConflictsByDate(@Param("date") java.time.LocalDate date, 
-                                      @Param("period") Integer period, 
-                                      @Param("teacherId") Integer teacherId, 
+    List<Schedule> findConflictsByDate(@Param("date") java.time.LocalDate date,
+                                      @Param("period") Integer period,
+                                      @Param("teacherId") Integer teacherId,
                                       @Param("classId") Integer classId);
+
+    /** Số lớp (distinct class_id) có ít nhất một tiết trong TKB cho từng môn. */
+    @Query("SELECT s.subject.id, COUNT(DISTINCT s.classEntity.id) FROM Schedule s WHERE s.subject.id IS NOT NULL GROUP BY s.subject.id")
+    List<Object[]> countDistinctClassesBySubjectIdFromSchedules();
 }
 

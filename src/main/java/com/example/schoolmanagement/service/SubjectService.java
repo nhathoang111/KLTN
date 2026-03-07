@@ -9,10 +9,12 @@ import com.example.schoolmanagement.entity.Subject;
 import com.example.schoolmanagement.exception.BadRequestException;
 import com.example.schoolmanagement.exception.ResourceNotFoundException;
 import com.example.schoolmanagement.repository.SchoolRepository;
+import com.example.schoolmanagement.repository.ScheduleRepository;
 import com.example.schoolmanagement.repository.SubjectRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -23,6 +25,19 @@ public class SubjectService {
 
     @Autowired
     private SchoolRepository schoolRepository;
+
+    @Autowired
+    private ScheduleRepository scheduleRepository;
+
+    /** Số lớp đang học từng môn (subjectId -> count). Đếm theo thời khóa biểu (Schedule). */
+    public Map<Integer, Long> getSubjectClassCounts() {
+        List<Object[]> rows = scheduleRepository.countDistinctClassesBySubjectIdFromSchedules();
+        Map<Integer, Long> map = new HashMap<>();
+        for (Object[] row : rows) {
+            map.put((Integer) row[0], ((Number) row[1]).longValue());
+        }
+        return map;
+    }
 
     public List<Subject> getAllSubjects() {
         return subjectRepository.findAll();
