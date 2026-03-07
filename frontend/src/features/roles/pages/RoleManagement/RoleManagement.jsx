@@ -24,7 +24,6 @@ const RoleManagement = () => {
     fetchRoles();
     fetchSchools();
 
-    // Set default school for Admin users
     if (user?.role?.name?.toUpperCase() === 'ADMIN' && user?.school?.id) {
       setFormData(prev => ({
         ...prev,
@@ -35,13 +34,10 @@ const RoleManagement = () => {
 
   const fetchRoles = async () => {
     try {
-      // Get current user role and school
       const userRole = user?.role?.name?.toUpperCase();
       const schoolId = user?.school?.id;
 
       let url = '/roles';
-
-      // Add query params based on user role
       if (userRole === 'SUPER_ADMIN') {
         url += '?userRole=SUPER_ADMIN';
       } else if (userRole === 'ADMIN' && schoolId) {
@@ -52,9 +48,7 @@ const RoleManagement = () => {
         return;
       }
 
-      console.log('Fetching roles from:', url);
       const response = await api.get(url);
-      console.log('Received roles:', response.data.roles);
       setRoles(response.data.roles || []);
     } catch (error) {
       console.error('Error fetching roles:', error);
@@ -79,21 +73,12 @@ const RoleManagement = () => {
     if (isSchoolAdmin) {
       const inputNameUpper = (formData.name || '').toUpperCase().trim();
       if (!ADMIN_ALLOWED_ROLE_NAMES.includes(inputNameUpper)) {
-        alert('Admin ch�?được tạo phân quyền: PH�?HUYNH (PARENT), HỌC SINH (STUDENT), GIÁO VIÊN (TEACHER).');
+        alert('Admin chỉ được tạo phân quyền: PHỤ HUYNH (PARENT), HỌC SINH (STUDENT), GIÁO VIÊN (TEACHER).');
         return;
       }
     }
 
-    // Validation: Kiểm tra role name đã tồn tại chưa
-    // Cho phép trùng tên ADMIN, TEACHER, STUDENT giữa các trường khác nhau
-    // Ch�?chặn trùng trong cùng một trường
     if (!editingRole) {
-      const inputNameUpper = formData.name?.toUpperCase();
-      const isStandardRole = inputNameUpper === 'ADMIN' ||
-        inputNameUpper === 'TEACHER' ||
-        inputNameUpper === 'STUDENT';
-
-      // Ch�?kiểm tra trùng trong cùng một trường (không kiểm tra giữa các trường khác nhau)
       const existingRole = roles.find(r => {
         const roleName = r.name?.toUpperCase();
         const inputName = formData.name?.toUpperCase();
@@ -104,7 +89,7 @@ const RoleManagement = () => {
       });
 
       if (existingRole) {
-        const schoolName = existingRole.school?.name || 'Toàn h�?thống';
+        const schoolName = existingRole.school?.name || 'Toàn hệ thống';
         alert(`Tên phân quyền "${formData.name}" đã tồn tại trong ${schoolName}. Vui lòng chọn tên khác.`);
         return;
       }
@@ -129,11 +114,8 @@ const RoleManagement = () => {
 
       if (error.response?.data?.error) {
         errorMsg = error.response.data.error;
-        // X�?lý các thông báo lỗi ph�?biến
         if (errorMsg.includes('Duplicate entry') || errorMsg.includes('UKofx66keruapi6vyqpv6f2or37')) {
-          errorMsg = `Tên phân quyền "${formData.name}" đã tồn tại trong h�?thống. Vui lòng chọn tên khác.`;
-        } else if (errorMsg.includes('already exists')) {
-          errorMsg = errorMsg;
+          errorMsg = `Tên phân quyền "${formData.name}" đã tồn tại trong hệ thống. Vui lòng chọn tên khác.`;
         }
       } else if (error.message) {
         errorMsg = error.message;
@@ -168,7 +150,6 @@ const RoleManagement = () => {
   };
 
   const resetForm = () => {
-    // Reset to default school for Admin users
     if (user?.role?.name?.toUpperCase() === 'ADMIN' && user?.school?.id) {
       setFormData({ name: '', description: '', schoolId: user.school.id.toString() });
     } else {
@@ -183,7 +164,7 @@ const RoleManagement = () => {
       <div className="role-management">
         <div className="loading">
           <div className="spinner"></div>
-          <p>Đang tải d�?liệu...</p>
+          <p>Đang tải dữ liệu...</p>
         </div>
       </div>
     );
@@ -197,7 +178,7 @@ const RoleManagement = () => {
           className="btn btn-primary"
           onClick={() => setShowModal(true)}
         >
-          �?Thêm phân quyền
+          + Thêm phân quyền
         </button>
       </div>
 
@@ -207,7 +188,7 @@ const RoleManagement = () => {
             <div className="empty-state-icon">📋</div>
             <div className="empty-state-title">Chưa có phân quyền nào</div>
             <div className="empty-state-description">
-              Nhấn "Thêm phân quyền" đ�?tạo phân quyền mới
+              Nhấn &quot;Thêm phân quyền&quot; để tạo phân quyền mới
             </div>
           </div>
         ) : (
@@ -216,7 +197,7 @@ const RoleManagement = () => {
               <tr>
                 <th>ID</th>
                 <th>Tên phân quyền</th>
-                <th>Mô t�?</th>
+                <th>Mô tả</th>
                 <th>Trường</th>
                 <th>Ngày tạo</th>
                 <th>Thao tác</th>
@@ -230,7 +211,7 @@ const RoleManagement = () => {
                     <span className="role-name">{role.name}</span>
                   </td>
                   <td>{role.description}</td>
-                  <td>{role.school?.name || 'Toàn h�?thống'}</td>
+                  <td>{role.school?.name || 'Toàn hệ thống'}</td>
                   <td>{role.createdAt ? new Date(role.createdAt).toLocaleDateString('vi-VN') : '-'}</td>
                   <td>
                     <div className="action-buttons">
@@ -238,13 +219,13 @@ const RoleManagement = () => {
                         className="btn btn-sm btn-secondary"
                         onClick={() => handleEdit(role)}
                       >
-                        ✏️ Sửa
+                        Sửa
                       </button>
                       <button
                         className="btn btn-sm btn-danger"
                         onClick={() => handleDelete(role.id)}
                       >
-                        🗑�?Xóa
+                        Xóa
                       </button>
                     </div>
                   </td>
@@ -255,7 +236,6 @@ const RoleManagement = () => {
         )}
       </div>
 
-      {/* Modal */}
       {showModal && (
         <div className="common-modal-overlay" onClick={resetForm}>
           <div className="common-modal" onClick={(e) => e.stopPropagation()}>
@@ -275,7 +255,7 @@ const RoleManagement = () => {
                     style={editingRole ? { backgroundColor: '#f3f4f6', cursor: 'not-allowed' } : {}}
                   >
                     <option value="">Chọn phân quyền</option>
-                    <option value="PARENT">PH�?HUYNH (PARENT)</option>
+                    <option value="PARENT">PHỤ HUYNH (PARENT)</option>
                     <option value="STUDENT">HỌC SINH (STUDENT)</option>
                     <option value="TEACHER">GIÁO VIÊN (TEACHER)</option>
                   </select>
@@ -290,11 +270,11 @@ const RoleManagement = () => {
                 )}
               </div>
               <div className="common-form-group">
-                <label>Mô t�?</label>
+                <label>Mô tả</label>
                 <textarea
                   value={formData.description}
                   onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  placeholder="Nhập mô t�?phân quyền"
+                  placeholder="Nhập mô tả phân quyền"
                   rows="3"
                 />
               </div>
@@ -306,7 +286,7 @@ const RoleManagement = () => {
                   disabled={user?.role?.name?.toUpperCase() === 'ADMIN'}
                   style={user?.role?.name?.toUpperCase() === 'ADMIN' ? { backgroundColor: '#f3f4f6', cursor: 'not-allowed' } : {}}
                 >
-                  <option value="">Toàn h�?thống</option>
+                  <option value="">Toàn hệ thống</option>
                   {schools.map((school) => (
                     <option key={school.id} value={school.id}>
                       {school.name}
@@ -331,6 +311,3 @@ const RoleManagement = () => {
 };
 
 export default RoleManagement;
-
-
-

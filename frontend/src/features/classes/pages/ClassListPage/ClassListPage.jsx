@@ -19,7 +19,7 @@ const ClassListPage = () => {
     status: 'ACTIVE',
     schoolId: '',
     homeroomTeacherId: '',
-    room: '' // Ph貌ng h峄峜 c峄?膽峄媙h
+    room: '' // Phòng học cố định
   });
 
   useEffect(() => {
@@ -43,10 +43,10 @@ const ClassListPage = () => {
       let allClasses = classesRes.data.classes || [];
 
       // Debug: Log class data to check room field
-      console.log('馃搵 Classes data:', allClasses);
+      console.log('📋 Classes data:', allClasses);
       if (allClasses.length > 0) {
-        console.log('馃搵 First class:', allClasses[0]);
-        console.log('馃搵 First class room:', allClasses[0].room);
+        console.log('📋 First class:', allClasses[0]);
+        console.log('📋 First class room:', allClasses[0].room);
       }
 
       // Filter for admin and teacher users
@@ -128,7 +128,7 @@ const ClassListPage = () => {
           const allUsers = usersRes.data.users || [];
           const teacherUsers = allUsers.filter(user => {
             const roleName = user.role?.name?.toUpperCase();
-            return roleName === 'TEACHER' || roleName?.startsWith('TEACHER') || roleName === 'GI脕O VI脢N';
+            return roleName === 'TEACHER' || roleName?.startsWith('TEACHER') || roleName === 'GIÁO VIÊN';
           });
           console.log('All teachers loaded:', teacherUsers);
           setTeachers(teacherUsers);
@@ -154,11 +154,11 @@ const ClassListPage = () => {
         capacity: parseInt(formData.capacity),
         schoolId: parseInt(formData.schoolId),
         homeroomTeacherId: formData.homeroomTeacherId ? parseInt(formData.homeroomTeacherId) : null,
-        room: formData.room || null // 膼岷 b岷 g峄璱 room (c贸 th峄?null)
+        room: formData.room || null // Đảm bảo gửi room (có thể null)
       };
 
-      console.log('馃摛 Submitting class data:', submitData);
-      console.log('馃摛 Room value:', submitData.room);
+      console.log('📤 Submitting class data:', submitData);
+      console.log('📤 Room value:', submitData.room);
 
       const headers = {
         'X-User-Role': user?.role?.name || ''
@@ -171,9 +171,9 @@ const ClassListPage = () => {
         response = await api.post('/classes', submitData, { headers });
       }
 
-      console.log('馃摜 Response from backend:', response.data);
+      console.log('📥 Response from backend:', response.data);
       if (response.data.class) {
-        console.log('馃摜 Created/Updated class room:', response.data.class.room);
+        console.log('📥 Created/Updated class room:', response.data.class.room);
       }
 
       setShowModal(false);
@@ -196,7 +196,7 @@ const ClassListPage = () => {
     } catch (error) {
       console.error('Error saving class:', error);
       if (error.response?.status === 403) {
-        alert('B岷 kh么ng c贸 quy峄乶 th锚m/s峄璦 l峄沺 h峄峜');
+        alert('Bạn không có quyền thêm/sửa lớp học');
       }
     }
   };
@@ -221,7 +221,7 @@ const ClassListPage = () => {
   };
 
   const handleDelete = async (id) => {
-    if (window.confirm('B岷 c贸 ch岷痗 ch岷痭 mu峄憂 x贸a l峄沺 h峄峜 n脿y?')) {
+    if (window.confirm('Bạn có chắc chắn muốn xóa lớp học này?')) {
       try {
         const headers = {
           'X-User-Role': user?.role?.name || ''
@@ -231,7 +231,7 @@ const ClassListPage = () => {
       } catch (error) {
         console.error('Error deleting class:', error);
         if (error.response?.status === 403) {
-          alert('B岷 kh么ng c贸 quy峄乶 x贸a l峄沺 h峄峜');
+          alert('Bạn không có quyền xóa lớp học');
         }
       }
     }
@@ -258,18 +258,18 @@ const ClassListPage = () => {
 
   const getSchoolName = (schoolId) => {
     const school = schools.find(s => s.id === schoolId);
-    return school ? school.name : 'Không có';
+    return school ? school.name : 'N/A';
   };
 
   const getTeacherName = (teacherId) => {
     const teacher = teachers.find(t => t.id === teacherId);
-    return teacher ? teacher.fullName : 'Không có';
+    return teacher ? teacher.fullName : 'N/A';
   };
 
   if (loading) {
     return (
       <div className="class-list-page">
-        <div className="loading">膼ang t岷...</div>
+        <div className="loading">Đang tải...</div>
       </div>
     );
   }
@@ -278,12 +278,12 @@ const ClassListPage = () => {
   const isTeacher = userRole === 'TEACHER';
   const isAdmin = userRole === 'ADMIN';
   const isSuperAdmin = userRole === 'SUPER_ADMIN';
-  const canManageClasses = isAdmin || isSuperAdmin; // Ch峄?ADMIN v脿 SUPER_ADMIN m峄沬 c贸 th峄?qu岷 l媒 l峄沺
+  const canManageClasses = isAdmin || isSuperAdmin; // Chỉ ADMIN và SUPER_ADMIN mới có thể quản lý lớp
 
   return (
     <div className="class-list-page">
       <div className="common-page-header">
-        <h1>Qu岷 l媒 l峄沺 h峄峜</h1>
+        <h1>Quản lý lớp học</h1>
         {canManageClasses && (
           <button
             className="btn btn-primary"
@@ -304,7 +304,7 @@ const ClassListPage = () => {
               setShowModal(true);
             }}
           >
-            Th锚m l峄沺 h峄峜
+            Thêm lớp học
           </button>
         )}
       </div>
@@ -313,22 +313,22 @@ const ClassListPage = () => {
         <table className="common-table classes-table">
           <thead>
             <tr>
-              <th>T锚n l峄沺</th>
-              <th>Kh峄慽</th>
-              <th>N膬m h峄峜</th>
-              <th>S末 s峄?</th>
-              <th>Ph貌ng h峄峜</th>
-              <th>Tr瓢峄漬g</th>
+              <th>Tên lớp</th>
+              <th>Khối</th>
+              <th>Năm học</th>
+              <th>Sĩ số</th>
+              <th>Phòng học</th>
+              <th>Trường</th>
               <th>GVCN</th>
-              <th>Tr岷g th谩i</th>
-              {canManageClasses && <th>Thao t谩c</th>}
+              <th>Trạng thái</th>
+              {canManageClasses && <th>Thao tác</th>}
             </tr>
           </thead>
           <tbody>
             {classes.map((classItem) => {
               // Debug: Log room value for each class
               if (!classItem.room) {
-                console.log(`鈿狅笍 Class ${classItem.name} (ID: ${classItem.id}) has no room field or room is empty`);
+                console.log(`⚠️ Class ${classItem.name} (ID: ${classItem.id}) has no room field or room is empty`);
                 console.log('   Full classItem:', classItem);
               }
 
@@ -347,7 +347,7 @@ const ClassListPage = () => {
                       fontWeight: '500',
                       fontSize: '13px'
                     }}>
-                      {classItem.room || 'Ch瓢a c贸 ph貌ng'}
+                      {classItem.room || 'Chưa có phòng'}
                     </span>
                   </td>
                   <td>{getSchoolName(classItem.school?.id)}</td>
@@ -364,13 +364,13 @@ const ClassListPage = () => {
                           className="btn btn-sm btn-secondary"
                           onClick={() => handleEdit(classItem)}
                         >
-                          S峄璦
+                          Sửa
                         </button>
                         <button
                           className="btn btn-sm btn-danger"
                           onClick={() => handleDelete(classItem.id)}
                         >
-                          X贸a
+                          Xóa
                         </button>
                       </div>
                     </td>
@@ -386,12 +386,12 @@ const ClassListPage = () => {
         <div className="common-modal-overlay">
           <div className="common-modal">
             <div className="common-modal-header">
-              <h2>{editingClass ? 'S峄璦 l峄沺 h峄峜' : 'Th锚m l峄沺 h峄峜'}</h2>
-              <button className="common-close-btn" onClick={handleCloseModal}>脳</button>
+              <h2>{editingClass ? 'Sửa lớp học' : 'Thêm lớp học'}</h2>
+              <button className="common-close-btn" onClick={handleCloseModal}>×</button>
             </div>
             <form onSubmit={handleSubmit} className="common-modal-form">
               <div className="common-form-group">
-                <label>T锚n l峄沺 *</label>
+                <label>Tên lớp *</label>
                 <input
                   type="text"
                   value={formData.name}
@@ -400,20 +400,20 @@ const ClassListPage = () => {
                 />
               </div>
               <div className="common-form-group">
-                <label>Kh峄慽 *</label>
+                <label>Khối *</label>
                 <select
                   value={formData.gradeLevel}
                   onChange={(e) => setFormData({ ...formData, gradeLevel: e.target.value })}
                   required
                 >
-                  <option value="">Ch峄峮 kh峄慽</option>
+                  <option value="">Chọn khối</option>
                   <option value="10">10</option>
                   <option value="11">11</option>
                   <option value="12">12</option>
                 </select>
               </div>
               <div className="common-form-group">
-                <label>N膬m h峄峜 *</label>
+                <label>Năm học *</label>
                 <input
                   type="text"
                   value={typeof formData.schoolYear === 'string' ? formData.schoolYear : (formData.schoolYear?.name ?? '')}
@@ -423,7 +423,7 @@ const ClassListPage = () => {
                 />
               </div>
               <div className="common-form-group">
-                <label>S末 s峄?*</label>
+                <label>Sĩ số *</label>
                 <input
                   type="number"
                   value={formData.capacity}
@@ -433,7 +433,7 @@ const ClassListPage = () => {
                 />
               </div>
               <div className="common-form-group">
-                <label>Ph貌ng h峄峜</label>
+                <label>Phòng học</label>
                 <input
                   type="text"
                   value={formData.room}
@@ -442,11 +442,11 @@ const ClassListPage = () => {
                   style={{ padding: '8px 12px', borderRadius: '4px', border: '1px solid #ddd' }}
                 />
                 <small style={{ color: '#666', fontSize: '12px', marginTop: '4px', display: 'block' }}>
-                  Ph貌ng h峄峜 c峄?膽峄媙h c峄 l峄沺 (t岷 c岷?c谩c ti岷縯 h峄峜 s岷?di峄卬 ra t岷 ph貌ng n脿y)
+                  Phòng học cố định của lớp (tất cả các tiết học sẽ diễn ra tại phòng này)
                 </small>
               </div>
               <div className="common-form-group">
-                <label>Tr瓢峄漬g *</label>
+                <label>Trường *</label>
                 <select
                   value={formData.schoolId}
                   onChange={(e) => setFormData({ ...formData, schoolId: e.target.value, homeroomTeacherId: '' })}
@@ -454,7 +454,7 @@ const ClassListPage = () => {
                   required
                   style={(user?.role?.name?.toUpperCase() === 'ADMIN' || user?.role?.name?.toUpperCase() === 'TEACHER') && user?.school?.id ? { backgroundColor: '#f3f4f6', cursor: 'not-allowed' } : {}}
                 >
-                  <option value="">Ch峄峮 tr瓢峄漬g</option>
+                  <option value="">Chọn trường</option>
                   {schools.map(school => (
                     <option key={school.id} value={school.id}>
                       {school.name}
@@ -463,13 +463,13 @@ const ClassListPage = () => {
                 </select>
               </div>
               <div className="common-form-group">
-                <label>Gi谩o vi锚n ch峄?nhi峄噈</label>
+                <label>Giáo viên chủ nhiệm</label>
                 <select
                   value={formData.homeroomTeacherId}
                   onChange={(e) => setFormData({ ...formData, homeroomTeacherId: e.target.value })}
                   disabled={!formData.schoolId}
                 >
-                  <option value="">{formData.schoolId ? "Ch峄峮 gi谩o vi锚n" : "Ch峄峮 tr瓢峄漬g tr瓢峄沜"}</option>
+                  <option value="">{formData.schoolId ? "Chọn giáo viên" : "Chọn trường trước"}</option>
                   {teachers
                     .filter(teacher => teacher.school?.id === parseInt(formData.schoolId))
                     .map(teacher => (
@@ -480,21 +480,21 @@ const ClassListPage = () => {
                 </select>
               </div>
               <div className="common-form-group">
-                <label>Tr岷g th谩i</label>
+                <label>Trạng thái</label>
                 <select
                   value={formData.status}
                   onChange={(e) => setFormData({ ...formData, status: e.target.value })}
                 >
-                  <option value="ACTIVE">Ho岷 膽峄檔g</option>
-                  <option value="INACTIVE">Kh么ng ho岷 膽峄檔g</option>
+                  <option value="ACTIVE">Hoạt động</option>
+                  <option value="INACTIVE">Không hoạt động</option>
                 </select>
               </div>
               <div className="common-modal-actions">
                 <button type="button" className="btn btn-secondary" onClick={handleCloseModal}>
-                  H峄
+                  Hủy
                 </button>
                 <button type="submit" className="btn btn-primary">
-                  {editingClass ? 'C岷璸 nh岷璽' : 'T岷 m峄沬'}
+                  {editingClass ? 'Cập nhật' : 'Tạo mới'}
                 </button>
               </div>
             </form>
@@ -506,5 +506,4 @@ const ClassListPage = () => {
 };
 
 export default ClassListPage;
-
 

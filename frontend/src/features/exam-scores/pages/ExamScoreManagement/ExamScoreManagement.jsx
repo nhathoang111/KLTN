@@ -16,9 +16,9 @@ const ExamScoreManagement = () => {
   const [selectedSubjectForScore, setSelectedSubjectForScore] = useState('');
   const [classStudents, setClassStudents] = useState([]);
   const [classScoreData, setClassScoreData] = useState({}); // {studentId: {score15P, score1Tiet, scoreCuoiKi, note15P, note1Tiet, noteCuoiKi}}
-  const [filteredSubjectsForClass, setFilteredSubjectsForClass] = useState([]); // Subjects 膽瓢峄 ph芒n c么ng cho l峄沺 膽茫 ch峄峮
-  const [displayFilterClassId, setDisplayFilterClassId] = useState(''); // L峄沺 膽茫 ch峄峮 膽峄?filter hi峄僴 th峄?(cho Teacher)
-  const [isEditMode, setIsEditMode] = useState(false); // Ph芒n bi峄噒 gi峄痑 nh岷璸 膽i峄僲 m峄沬 v脿 s峄璦 膽i峄僲
+  const [filteredSubjectsForClass, setFilteredSubjectsForClass] = useState([]); // Subjects được phân công cho lớp đã chọn
+  const [displayFilterClassId, setDisplayFilterClassId] = useState(''); // Lớp đã chọn để filter hiển thị (cho Teacher)
+  const [isEditMode, setIsEditMode] = useState(false); // Phân biệt giữa nhập điểm mới và sửa điểm
 
   useEffect(() => {
     fetchExamScores();
@@ -96,11 +96,11 @@ const ExamScoreManagement = () => {
         }
       }
 
-      // Log 膽峄?debug scoreType
+      // Log để debug scoreType
       console.log('=== FETCHED EXAM SCORES ===');
       console.log('Total scores:', allScores.length);
       allScores.forEach(score => {
-        console.log(`Score ID ${score.id}: scoreType = "${score.scoreType || score.score_type || 'Không có'}"`);
+        console.log(`Score ID ${score.id}: scoreType = "${score.scoreType || score.score_type || 'N/A'}"`);
         console.log(`  - score.scoreType: "${score.scoreType}"`);
         console.log(`  - score.score_type: "${score.score_type}"`);
       });
@@ -258,25 +258,25 @@ const ExamScoreManagement = () => {
 
   const handleEdit = async (group) => {
     if (isScoreLocked) {
-      alert('膼i峄僲 s峄?膽茫 b峄?kh贸a. Kh么ng th峄?ch峄塶h s峄璦 膽i峄僲.');
+      alert('Điểm số đã bị khóa. Không thể chỉnh sửa điểm.');
       return;
     }
 
-    // M峄?modal nh岷璸 膽i峄僲 theo l峄沺 v峄沬 l峄沺 v脿 m么n h峄峜 膽茫 膽瓢峄 ch峄峮
+    // Mở modal nhập điểm theo lớp với lớp và môn học đã được chọn
     const classId = group.classEntity?.id?.toString() || '';
     const subjectId = group.subject?.id?.toString() || '';
 
     setSelectedClassForScore(classId);
     setSelectedSubjectForScore(subjectId);
-    setIsEditMode(true); // 膼岷穞 ch岷?膽峄?s峄璦
+    setIsEditMode(true); // Đặt chế độ sửa
 
-    // Fetch schedules c峄 l峄沺 膽峄?l岷 danh s谩ch m么n h峄峜 膽瓢峄 ph芒n c么ng
+    // Fetch schedules của lớp để lấy danh sách môn học được phân công
     if (classId) {
       try {
         const schedulesResponse = await api.get(`/schedules/class/${classId}`);
         const classSchedules = schedulesResponse.data.schedules || [];
 
-        // L岷 danh s谩ch subject IDs t峄?schedules
+        // Lấy danh sách subject IDs từ schedules
         const assignedSubjectIds = new Set();
         classSchedules.forEach(schedule => {
           const scheduleSubjectId = schedule.subject?.id || schedule.subject_id;
@@ -285,13 +285,13 @@ const ExamScoreManagement = () => {
           }
         });
 
-        // Filter subjects 膽峄?ch峄?hi峄僴 th峄?c谩c m么n 膽瓢峄 ph芒n c么ng cho l峄沺 n脿y
+        // Filter subjects để chỉ hiển thị các môn được phân công cho lớp này
         const userRole = user?.role?.name?.toUpperCase();
         let filteredSubjects = subjects.filter(subject => {
           const subjectId = subject.id;
           const isAssignedToClass = assignedSubjectIds.has(subjectId);
 
-          // N岷縰 l脿 teacher, c农ng c岷 ki峄僲 tra xem teacher c贸 d岷 m么n n脿y kh么ng
+          // Nếu là teacher, cũng cần kiểm tra xem teacher có dạy môn này không
           if (userRole === 'TEACHER' && user?.id) {
             const isTaughtByTeacher = classSchedules.some(schedule => {
               const scheduleTeacherId = schedule.teacher?.id || schedule.teacher_id;
@@ -311,8 +311,8 @@ const ExamScoreManagement = () => {
       }
     }
 
-    // Load danh s谩ch h峄峜 sinh v脿 膽i峄僲 hi峄噉 c贸
-    // Refresh examScores tr瓢峄沜 膽峄?膽岷 b岷 c贸 d峄?li峄噓 m峄沬 nh岷
+    // Load danh sách học sinh và điểm hiện có
+    // Refresh examScores trước để đảm bảo có dữ liệu mới nhất
     await fetchExamScores();
     await fetchStudentsByClass(classId);
     setShowClassModal(true);
@@ -320,75 +320,75 @@ const ExamScoreManagement = () => {
 
   const handleDelete = async (scoreId) => {
     if (isScoreLocked) {
-      alert('膼i峄僲 s峄?膽茫 b峄?kh贸a. Kh么ng th峄?x贸a 膽i峄僲.');
+      alert('Điểm số đã bị khóa. Không thể xóa điểm.');
       return;
     }
 
     try {
       await api.delete(`/exam-scores/${scoreId}`);
-      console.log('鉁?Deleted score ID:', scoreId);
+      console.log('✅ Deleted score ID:', scoreId);
     } catch (error) {
-      console.error('鉂?Error deleting exam score:', error);
-      throw error; // Re-throw 膽峄?x峄?l媒 峄?n啤i g峄峣
+      console.error('❌ Error deleting exam score:', error);
+      throw error; // Re-throw để xử lý ở nơi gọi
     }
   };
 
   const handleDeleteAll = async (group) => {
     if (isScoreLocked) {
-      alert('膼i峄僲 s峄?膽茫 b峄?kh贸a. Kh么ng th峄?x贸a 膽i峄僲.');
+      alert('Điểm số đã bị khóa. Không thể xóa điểm.');
       return;
     }
 
     const scoresToDelete = [];
     if (group.score15P) {
-      scoresToDelete.push({ type: '15 ph煤t', id: group.score15P.id });
+      scoresToDelete.push({ type: '15 phút', id: group.score15P.id });
     }
     if (group.score1Tiet) {
-      scoresToDelete.push({ type: '1 ti岷縯', id: group.score1Tiet.id });
+      scoresToDelete.push({ type: '1 tiết', id: group.score1Tiet.id });
     }
     if (group.scoreCuoiKi) {
-      scoresToDelete.push({ type: 'cuoi ki', id: group.scoreCuoiKi.id });
+      scoresToDelete.push({ type: 'cuối kỳ', id: group.scoreCuoiKi.id });
     }
 
     if (scoresToDelete.length === 0) {
-      alert('Kh么ng c贸 膽i峄僲 n脿o 膽峄?x贸a');
+      alert('Không có điểm nào để xóa');
       return;
     }
 
     const confirmMessage = scoresToDelete.length === 1
-      ? `B岷 c贸 ch岷痗 ch岷痭 mu峄憂 x贸a 膽i峄僲 ${scoresToDelete[0].type}?`
-      : `B岷 c贸 ch岷痗 ch岷痭 mu峄憂 x贸a t岷 c岷?膽i峄僲 (${scoresToDelete.map(s => s.type).join(', ')})?`;
+      ? `Bạn có chắc chắn muốn xóa điểm ${scoresToDelete[0].type}?`
+      : `Bạn có chắc chắn muốn xóa tất cả điểm (${scoresToDelete.map(s => s.type).join(', ')})?`;
 
     if (window.confirm(confirmMessage)) {
       try {
         console.log('=== DELETING ALL SCORES ===');
         console.log('Scores to delete:', scoresToDelete);
 
-        // X贸a t岷 c岷?膽i峄僲 膽峄搉g th峄漣 v脿 膽峄 t岷 c岷?ho脿n th脿nh
+        // Xóa tất cả điểm đồng thời và đợi tất cả hoàn thành
         const deletePromises = scoresToDelete.map(({ id, type }) => {
           console.log(`Deleting ${type} score ID:`, id);
           return handleDelete(id);
         });
 
         await Promise.all(deletePromises);
-        console.log('鉁?All scores deleted successfully');
+        console.log('✅ All scores deleted successfully');
 
-        // 膼峄 m峄檛 ch煤t 膽峄?膽岷 b岷 database 膽茫 c岷璸 nh岷璽
+        // Đợi một chút để đảm bảo database đã cập nhật
         await new Promise(resolve => setTimeout(resolve, 300));
 
-        // Refresh danh s谩ch 膽i峄僲
+        // Refresh danh sách điểm
         await fetchExamScores();
 
-        alert('X贸a 膽i峄僲 th脿nh c么ng!');
+        alert('Xóa điểm thành công!');
       } catch (error) {
-        console.error('鉂?Error deleting scores:', error);
-        ('');
+        console.error('❌ Error deleting scores:', error);
+        alert('Có lỗi xảy ra khi xóa điểm số');
       }
     }
   };
 
 
-  // L岷 danh s谩ch h峄峜 sinh theo l峄沺
+  // Lấy danh sách học sinh theo lớp
   const fetchStudentsByClass = async (classId) => {
     if (!classId) {
       setClassStudents([]);
@@ -403,46 +403,46 @@ const ExamScoreManagement = () => {
 
       let studentsInClass = [];
 
-      // Th峄?l岷 h峄峜 sinh t峄?API theo l峄沺
+      // Thử lấy học sinh từ API theo lớp
       try {
         console.log('Calling API: /classes/' + classId + '/students');
         const response = await api.get(`/classes/${classId}/students`);
-        console.log('鉁?API Response received:', response);
+        console.log('✅ API Response received:', response);
         console.log('Response data:', response.data);
         studentsInClass = response.data.students || [];
-        console.log('鉁?Fetched students by class:', studentsInClass.length);
-        console.log('鉁?Students data:', studentsInClass);
+        console.log('✅ Fetched students by class:', studentsInClass.length);
+        console.log('✅ Students data:', studentsInClass);
 
         if (studentsInClass.length === 0) {
-          console.warn('鈿狅笍 API returned empty students array. This class may have no enrolled students.');
+          console.warn('⚠️ API returned empty students array. This class may have no enrolled students.');
         }
       } catch (apiError) {
-        console.error('鉂?API error when fetching students by class:', apiError);
+        console.error('❌ API error when fetching students by class:', apiError);
         console.error('Error status:', apiError.response?.status);
         console.error('Error message:', apiError.message);
         console.error('Error response data:', apiError.response?.data);
 
-        // N岷縰 API tr岷?v峄?404, class kh么ng t峄搉 t岷 ho岷穋 route kh么ng 膽瓢峄 match
+        // Nếu API trả về 404, class không tồn tại hoặc route không được match
         if (apiError.response?.status === 404) {
-          console.error('鉂?Class not found (404). Route may not be matched correctly.');
+          console.error('❌ Class not found (404). Route may not be matched correctly.');
           console.error('Please check backend logs to see if endpoint was called.');
         }
         studentsInClass = [];
       }
 
-      // Ch峄?hi峄僴 th峄?h峄峜 sinh t峄?enrollments c峄 l峄沺 膽茫 ch峄峮
+      // Chỉ hiển thị học sinh từ enrollments của lớp đã chọn
       if (studentsInClass.length === 0) {
-        console.log('鈿狅笍 No students enrolled in this class. Only students enrolled in the selected class will be displayed.');
+        console.log('⚠️ No students enrolled in this class. Only students enrolled in the selected class will be displayed.');
       } else {
-        console.log('鉁?Successfully fetched', studentsInClass.length, 'students enrolled in class from API');
+        console.log('✅ Successfully fetched', studentsInClass.length, 'students enrolled in class from API');
       }
 
       setClassStudents(studentsInClass);
 
-      // Kh峄焛 t岷 classScoreData v峄沬 c谩c h峄峜 sinh
+      // Khởi tạo classScoreData với các học sinh
       const initialScoreData = {};
       studentsInClass.forEach(student => {
-        // T矛m 膽i峄僲 hi峄噉 c贸 c峄 h峄峜 sinh n脿y cho m么n h峄峜 膽茫 ch峄峮
+        // Tìm điểm hiện có của học sinh này cho môn học đã chọn
         const subjectId = selectedSubjectForScore ? parseInt(selectedSubjectForScore) : null;
         let existing15P = '', existing1Tiet = '', existingCuoiKi = '';
         let note15P = '', note1Tiet = '', noteCuoiKi = '';
@@ -491,13 +491,13 @@ const ExamScoreManagement = () => {
     }
   };
 
-  // X峄?l媒 khi ch峄峮 l峄沺
+  // Xử lý khi chọn lớp
   const handleClassSelect = async (classId) => {
     setSelectedClassForScore(classId);
-    setSelectedSubjectForScore(''); // Reset m么n h峄峜 khi 膽峄昳 l峄沺
+    setSelectedSubjectForScore(''); // Reset môn học khi đổi lớp
     setFilteredSubjectsForClass([]); // Reset filtered subjects
 
-    // Fetch schedules c峄 l峄沺 膽峄?l岷 danh s谩ch m么n h峄峜 膽瓢峄 ph芒n c么ng
+    // Fetch schedules của lớp để lấy danh sách môn học được phân công
     if (classId) {
       try {
         console.log('Fetching schedules for class ID:', classId);
@@ -506,7 +506,7 @@ const ExamScoreManagement = () => {
 
         console.log('Schedules for class:', classSchedules);
 
-        // L岷 danh s谩ch subject IDs t峄?schedules
+        // Lấy danh sách subject IDs từ schedules
         const assignedSubjectIds = new Set();
         classSchedules.forEach(schedule => {
           const subjectId = schedule.subject?.id || schedule.subject_id;
@@ -517,16 +517,16 @@ const ExamScoreManagement = () => {
 
         console.log('Assigned subject IDs for class:', Array.from(assignedSubjectIds));
 
-        // Filter subjects 膽峄?ch峄?hi峄僴 th峄?c谩c m么n 膽瓢峄 ph芒n c么ng cho l峄沺 n脿y
-        // N岷縰 l脿 teacher, c农ng c岷 filter theo m么n m脿 teacher 膽贸 d岷
+        // Filter subjects để chỉ hiển thị các môn được phân công cho lớp này
+        // Nếu là teacher, cũng cần filter theo môn mà teacher đó dạy
         const userRole = user?.role?.name?.toUpperCase();
         let filteredSubjects = subjects.filter(subject => {
           const subjectId = subject.id;
           const isAssignedToClass = assignedSubjectIds.has(subjectId);
 
-          // N岷縰 l脿 teacher, c农ng c岷 ki峄僲 tra xem teacher c贸 d岷 m么n n脿y kh么ng
+          // Nếu là teacher, cũng cần kiểm tra xem teacher có dạy môn này không
           if (userRole === 'TEACHER' && user?.id) {
-            // Ki峄僲 tra xem schedule c贸 teacher_id tr霉ng v峄沬 user.id kh么ng
+            // Kiểm tra xem schedule có teacher_id trùng với user.id không
             const isTaughtByTeacher = classSchedules.some(schedule => {
               const scheduleTeacherId = schedule.teacher?.id || schedule.teacher_id;
               const scheduleSubjectId = schedule.subject?.id || schedule.subject_id;
@@ -542,18 +542,18 @@ const ExamScoreManagement = () => {
         setFilteredSubjectsForClass(filteredSubjects);
       } catch (error) {
         console.error('Error fetching schedules for class:', error);
-        // N岷縰 l峄梚, hi峄僴 th峄?t岷 c岷?subjects (fallback)
+        // Nếu lỗi, hiển thị tất cả subjects (fallback)
         setFilteredSubjectsForClass(subjects);
       }
     } else {
-      // N岷縰 kh么ng ch峄峮 l峄沺, hi峄僴 th峄?t岷 c岷?subjects
+      // Nếu không chọn lớp, hiển thị tất cả subjects
       setFilteredSubjectsForClass(subjects);
     }
 
     await fetchStudentsByClass(classId);
   };
 
-  // X峄?l媒 khi ch峄峮 m么n h峄峜 (reload danh s谩ch h峄峜 sinh v峄沬 膽i峄僲 hi峄噉 c贸)
+  // Xử lý khi chọn môn học (reload danh sách học sinh với điểm hiện có)
   const handleSubjectSelectForClass = async (subjectId) => {
     setSelectedSubjectForScore(subjectId);
     if (selectedClassForScore) {
@@ -561,26 +561,26 @@ const ExamScoreManagement = () => {
     }
   };
 
-  // X峄?l媒 submit 膽i峄僲 theo l峄沺
+  // Xử lý submit điểm theo lớp
   const handleClassScoreSubmit = async (e) => {
     e.preventDefault();
 
     if (isScoreLocked) {
-      alert('膼i峄僲 s峄?膽茫 b峄?kh贸a. Kh么ng th峄?th锚m ho岷穋 ch峄塶h s峄璦 膽i峄僲.');
+      alert('Điểm số đã bị khóa. Không thể thêm hoặc chỉnh sửa điểm.');
       return;
     }
 
     if (!selectedClassForScore || !selectedSubjectForScore) {
-      alert('Vui l貌ng ch峄峮 l峄沺 v脿 m么n h峄峜');
+      alert('Vui lòng chọn lớp và môn học');
       return;
     }
 
-    // L瓢u isEditMode v脿o bi岷縩 local tr瓢峄沜 khi reset
+    // Lưu isEditMode vào biến local trước khi reset
     const currentEditMode = isEditMode;
-    console.log('馃攳 handleClassScoreSubmit - isEditMode:', isEditMode, 'currentEditMode:', currentEditMode);
+    console.log('🔍 handleClassScoreSubmit - isEditMode:', isEditMode, 'currentEditMode:', currentEditMode);
 
-    // Refresh examScores tr瓢峄沜 khi submit 膽峄?膽岷 b岷 c贸 d峄?li峄噓 m峄沬 nh岷
-    console.log('馃攧 Fetching fresh examScores before submit...');
+    // Refresh examScores trước khi submit để đảm bảo có dữ liệu mới nhất
+    console.log('🔄 Fetching fresh examScores before submit...');
     let freshExamScores = [];
     try {
       const response = await api.get('/exam-scores');
@@ -623,12 +623,12 @@ const ExamScoreManagement = () => {
       }
 
       freshExamScores = allScores;
-      console.log('鉁?Fresh examScores fetched, total:', freshExamScores.length);
+      console.log('✅ Fresh examScores fetched, total:', freshExamScores.length);
     } catch (error) {
       console.error('Error fetching fresh examScores:', error);
       // Fallback to existing examScores state
       freshExamScores = examScores;
-      console.log('鈿狅笍 Using existing examScores state, total:', freshExamScores.length);
+      console.log('⚠️ Using existing examScores state, total:', freshExamScores.length);
     }
 
     try {
@@ -636,19 +636,19 @@ const ExamScoreManagement = () => {
       const subjectId = parseInt(selectedSubjectForScore);
       const promises = [];
 
-      // X峄?l媒 膽i峄僲 cho t峄玭g h峄峜 sinh
+      // Xử lý điểm cho từng học sinh
       Object.keys(classScoreData).forEach(studentId => {
         const studentData = classScoreData[studentId];
         const studentIdInt = parseInt(studentId);
 
-        // T矛m 膽i峄僲 hi峄噉 c贸 c峄 h峄峜 sinh n脿y t峄?freshExamScores
-        // Ki峄僲 tra c岷?student.id v脿 student_id, subject.id v脿 subject_id
+        // Tìm điểm hiện có của học sinh này từ freshExamScores
+        // Kiểm tra cả student.id và student_id, subject.id và subject_id
         const existingScores = freshExamScores.filter(score => {
           const scoreStudentId = score.student?.id || score.student_id;
           const scoreSubjectId = score.subject?.id || score.subject_id;
           const scoreClassId = score.classEntity?.id || score.class_id;
 
-          // So s谩nh v峄沬 parseInt 膽峄?膽岷 b岷 c霉ng ki峄僽 d峄?li峄噓
+          // So sánh với parseInt để đảm bảo cùng kiểu dữ liệu
           const studentMatch = scoreStudentId === studentIdInt || parseInt(scoreStudentId) === studentIdInt;
           const subjectMatch = scoreSubjectId === subjectId || parseInt(scoreSubjectId) === subjectId;
           const classMatch = scoreClassId === classId || parseInt(scoreClassId) === classId;
@@ -656,7 +656,7 @@ const ExamScoreManagement = () => {
           const match = studentMatch && subjectMatch && classMatch;
 
           if (match) {
-            console.log(`鉁?Found existing score:`, {
+            console.log(`✅ Found existing score:`, {
               id: score.id,
               studentId: scoreStudentId,
               subjectId: scoreSubjectId,
@@ -666,8 +666,8 @@ const ExamScoreManagement = () => {
               matching: { student: studentMatch, subject: subjectMatch, class: classMatch }
             });
           } else {
-            // Log 膽峄?debug t岷 sao kh么ng match
-            console.log(`鉂?Score not matching:`, {
+            // Log để debug tại sao không match
+            console.log(`❌ Score not matching:`, {
               id: score.id,
               scoreStudentId, studentIdInt, studentMatch,
               scoreSubjectId, subjectId, subjectMatch,
@@ -679,13 +679,13 @@ const ExamScoreManagement = () => {
 
         console.log(`Student ${studentIdInt} - Total existing scores found:`, existingScores.length);
         if (existingScores.length > 0) {
-          console.log(`鉁?Found scores:`, existingScores.map(s => ({
+          console.log(`✅ Found scores:`, existingScores.map(s => ({
             id: s.id,
             type: s.scoreType || s.score_type,
             score: s.score
           })));
         } else {
-          console.log(`鈿狅笍 No existing scores found for student ${studentIdInt}, subject ${subjectId}, class ${classId}`);
+          console.log(`⚠️ No existing scores found for student ${studentIdInt}, subject ${subjectId}, class ${classId}`);
         }
 
         const existing15P = existingScores.find(s => {
@@ -701,7 +701,7 @@ const ExamScoreManagement = () => {
           return st === 'CUOIKI';
         });
 
-        // X峄?l媒 膽i峄僲 15p
+        // Xử lý điểm 15p
         const score15PInput = studentData.score15P ? studentData.score15P.trim() : '';
         if (score15PInput !== '') {
           const score15PValue = parseFloat(score15PInput);
@@ -716,7 +716,7 @@ const ExamScoreManagement = () => {
             };
 
             if (existing15P) {
-              // 峄?ch岷?膽峄?s峄璦, lu么n update n岷縰 c贸 gi谩 tr峄?trong form
+              // Ở chế độ sửa, luôn update nếu có giá trị trong form
               console.log(`Student ${studentId} - 15P: updating existing score ${existing15P.id} to ${score15PValue}`);
               promises.push(api.put(`/exam-scores/${existing15P.id}`, scoreData, {
                 headers: {
@@ -725,7 +725,7 @@ const ExamScoreManagement = () => {
                 }
               }));
             } else {
-              // T岷 m峄沬 n岷縰 ch瓢a c贸
+              // Tạo mới nếu chưa có
               promises.push(api.post('/exam-scores', scoreData, {
                 headers: {
                   'X-User-Id': user?.id,
@@ -735,12 +735,12 @@ const ExamScoreManagement = () => {
             }
           }
         } else if (existing15P && isEditMode) {
-          // N岷縰 峄?ch岷?膽峄?s峄璦 v脿 input r峄梟g nh瓢ng 膽茫 c贸 膽i峄僲, c贸 th峄?x贸a 膽i峄僲 (t霉y ch峄峮)
-          // Ho岷穋 gi峄?nguy锚n 膽i峄僲 c农 (kh么ng l脿m g矛)
-          // 峄?膽芒y t么i s岷?gi峄?nguy锚n 膽i峄僲 c农 (kh么ng x贸a)
+          // Nếu ở chế độ sửa và input rỗng nhưng đã có điểm, có thể xóa điểm (tùy chọn)
+          // Hoặc giữ nguyên điểm cũ (không làm gì)
+          // Ở đây tôi sẽ giữ nguyên điểm cũ (không xóa)
         }
 
-        // X峄?l媒 膽i峄僲 1 ti岷縯
+        // Xử lý điểm 1 tiết
         const score1TietInput = studentData.score1Tiet ? studentData.score1Tiet.trim() : '';
         if (score1TietInput !== '') {
           const score1TietValue = parseFloat(score1TietInput);
@@ -755,7 +755,7 @@ const ExamScoreManagement = () => {
             };
 
             if (existing1Tiet) {
-              // 峄?ch岷?膽峄?s峄璦, lu么n update n岷縰 c贸 gi谩 tr峄?trong form
+              // Ở chế độ sửa, luôn update nếu có giá trị trong form
               console.log(`Student ${studentId} - 1Tiet: updating existing score ${existing1Tiet.id} to ${score1TietValue}`);
               promises.push(api.put(`/exam-scores/${existing1Tiet.id}`, scoreData, {
                 headers: {
@@ -764,7 +764,7 @@ const ExamScoreManagement = () => {
                 }
               }));
             } else {
-              // T岷 m峄沬 n岷縰 ch瓢a c贸
+              // Tạo mới nếu chưa có
               promises.push(api.post('/exam-scores', scoreData, {
                 headers: {
                   'X-User-Id': user?.id,
@@ -774,10 +774,10 @@ const ExamScoreManagement = () => {
             }
           }
         } else if (existing1Tiet && isEditMode) {
-          // N岷縰 峄?ch岷?膽峄?s峄璦 v脿 input r峄梟g nh瓢ng 膽茫 c贸 膽i峄僲, gi峄?nguy锚n 膽i峄僲 c农
+          // Nếu ở chế độ sửa và input rỗng nhưng đã có điểm, giữ nguyên điểm cũ
         }
 
-        // X峄?l媒 膽i峄僲 cu峄慽 k峄?
+        // Xử lý điểm cuối kỳ
         const scoreCuoiKiInput = studentData.scoreCuoiKi ? studentData.scoreCuoiKi.trim() : '';
         if (scoreCuoiKiInput !== '') {
           const scoreCuoiKiValue = parseFloat(scoreCuoiKiInput);
@@ -792,7 +792,7 @@ const ExamScoreManagement = () => {
             };
 
             if (existingCuoiKi) {
-              // 峄?ch岷?膽峄?s峄璦, lu么n update n岷縰 c贸 gi谩 tr峄?trong form
+              // Ở chế độ sửa, luôn update nếu có giá trị trong form
               console.log(`Student ${studentId} - CuoiKi: updating existing score ${existingCuoiKi.id} to ${scoreCuoiKiValue}`);
               promises.push(api.put(`/exam-scores/${existingCuoiKi.id}`, scoreData, {
                 headers: {
@@ -801,7 +801,7 @@ const ExamScoreManagement = () => {
                 }
               }));
             } else {
-              // T岷 m峄沬 n岷縰 ch瓢a c贸
+              // Tạo mới nếu chưa có
               promises.push(api.post('/exam-scores', scoreData, {
                 headers: {
                   'X-User-Id': user?.id,
@@ -811,7 +811,7 @@ const ExamScoreManagement = () => {
             }
           }
         } else if (existingCuoiKi && isEditMode) {
-          // N岷縰 峄?ch岷?膽峄?s峄璦 v脿 input r峄梟g nh瓢ng 膽茫 c贸 膽i峄僲, gi峄?nguy锚n 膽i峄僲 c农
+          // Nếu ở chế độ sửa và input rỗng nhưng đã có điểm, giữ nguyên điểm cũ
         }
       });
 
@@ -833,23 +833,23 @@ const ExamScoreManagement = () => {
       }));
 
       if (promises.length === 0) {
-        console.log('鈿狅笍 No promises to execute');
+        console.log('⚠️ No promises to execute');
         if (currentEditMode) {
-          alert('Kh么ng c贸 thay 膽峄昳 n脿o 膽峄?l瓢u. Vui l貌ng thay 膽峄昳 膽i峄僲 tr瓢峄沜 khi l瓢u.');
+          alert('Không có thay đổi nào để lưu. Vui lòng thay đổi điểm trước khi lưu.');
         } else {
-          alert('Vui l貌ng nh岷璸 铆t nh岷 m峄檛 膽i峄僲');
+          alert('Vui lòng nhập ít nhất một điểm');
         }
         return;
       }
 
-      console.log('鉁?Executing', promises.length, 'promises');
+      console.log('✅ Executing', promises.length, 'promises');
 
       try {
         await Promise.all(promises);
         await new Promise(resolve => setTimeout(resolve, 500));
         await fetchExamScores();
 
-        // L瓢u l峄沺 膽茫 ch峄峮 膽峄?filter hi峄僴 th峄?(cho Teacher)
+        // Lưu lớp đã chọn để filter hiển thị (cho Teacher)
         const userRole = user?.role?.name?.toUpperCase();
         if (userRole === 'TEACHER') {
           setDisplayFilterClassId(selectedClassForScore);
@@ -863,14 +863,14 @@ const ExamScoreManagement = () => {
         setIsEditMode(false);
         setShowClassModal(false);
 
-        alert(currentEditMode ? 'S峄璦 膽i峄僲 th脿nh c么ng!' : 'Nh岷璸 膽i峄僲 theo l峄沺 th脿nh c么ng!');
+        alert(currentEditMode ? 'Sửa điểm thành công!' : 'Nhập điểm theo lớp thành công!');
       } catch (submitError) {
         console.error('Error submitting scores:', submitError);
-        alert('C贸 l峄梚 x岷 ra khi l瓢u 膽i峄僲 s峄? Vui l貌ng th峄?l岷.');
+        alert('Có lỗi xảy ra khi lưu điểm số. Vui lòng thử lại.');
       }
     } catch (error) {
       console.error('Error saving class scores:', error);
-      ('');
+      alert('Có lỗi xảy ra khi lưu điểm số');
     }
   };
 
@@ -884,22 +884,22 @@ const ExamScoreManagement = () => {
   const getScoreTypeLabel = (scoreType) => {
     switch (scoreType) {
       case '15P':
-        return '15 ph煤t';
+        return '15 phút';
       case '1TIET':
-        return '1 ti岷縯';
+        return '1 tiết';
       case 'CUOIKI':
-        return 'Cu峄慽 k矛';
+        return 'Cuối kì';
       default:
-        return scoreType || '15 ph煤t';
+        return scoreType || '15 phút';
     }
   };
 
-  // Nh贸m 膽i峄僲 theo h峄峜 sinh v脿 m么n h峄峜
+  // Nhóm điểm theo học sinh và môn học
   const groupScoresByStudentAndSubject = () => {
     const grouped = {};
     const userRole = user?.role?.name?.toUpperCase();
 
-    // Filter scores theo l峄沺 膽茫 ch峄峮 n岷縰 l脿 Teacher v脿 膽茫 ch峄峮 l峄沺
+    // Filter scores theo lớp đã chọn nếu là Teacher và đã chọn lớp
     let filteredScores = examScores;
     if (userRole === 'TEACHER' && displayFilterClassId) {
       filteredScores = examScores.filter(score => {
@@ -918,7 +918,7 @@ const ExamScoreManagement = () => {
           student: score.student,
           subject: score.subject,
           classEntity: score.classEntity,
-          score15P: null, // Ch峄?l瓢u 1 膽i峄僲 15p (膽i峄僲 膽岷 ti锚n)
+          score15P: null, // Chỉ lưu 1 điểm 15p (điểm đầu tiên)
           score1Tiet: null,
           scoreCuoiKi: null,
           allScores: []
@@ -927,11 +927,11 @@ const ExamScoreManagement = () => {
 
       grouped[key].allScores.push(score);
 
-      // Ph芒n lo岷 膽i峄僲 - chuy峄僴 sang uppercase 膽峄?so s谩nh nh岷 qu谩n
+      // Phân loại điểm - chuyển sang uppercase để so sánh nhất quán
       const scoreType = (score.scoreType || score.score_type || '15P').toUpperCase();
 
       if (scoreType === '15P') {
-        // Ch峄?l瓢u 膽i峄僲 15p 膽岷 ti锚n (kh么ng t铆nh trung b矛nh)
+        // Chỉ lưu điểm 15p đầu tiên (không tính trung bình)
         if (grouped[key].score15P === null) {
           grouped[key].score15P = score;
         }
@@ -940,7 +940,7 @@ const ExamScoreManagement = () => {
       } else if (scoreType === 'CUOIKI') {
         grouped[key].scoreCuoiKi = score;
       } else {
-        // N岷縰 kh么ng x谩c 膽峄媙h 膽瓢峄, m岷穋 膽峄媙h l脿 15P
+        // Nếu không xác định được, mặc định là 15P
         if (grouped[key].score15P === null) {
           grouped[key].score15P = score;
         }
@@ -956,7 +956,7 @@ const ExamScoreManagement = () => {
       <div className="exam-score-management">
         <div className="loading">
           <div className="spinner"></div>
-          <p>膼ang t岷 d峄?li峄噓...</p>
+          <p>Đang tải dữ liệu...</p>
         </div>
       </div>
     );
@@ -972,14 +972,14 @@ const ExamScoreManagement = () => {
 
     // Only admin can lock/unlock scores
     if (userRole !== 'ADMIN' || !schoolId) {
-      ('');
+      alert('Chỉ admin mới có quyền khóa/mở khóa điểm số');
       return;
     }
 
     const newLockStatus = !isScoreLocked;
     const confirmMessage = newLockStatus
-      ? 'B岷 c贸 ch岷痗 ch岷痭 mu峄憂 kh贸a 膽i峄僲 s峄? 膼i峄乽 n脿y s岷?ng膬n ch峄塶h s峄璦 v脿 th锚m 膽i峄僲 m峄沬 cho t岷 c岷?gi谩o vi锚n.'
-      : 'B岷 c贸 ch岷痗 ch岷痭 mu峄憂 m峄?kh贸a 膽i峄僲 s峄? 膼i峄乽 n脿y s岷?cho ph茅p ch峄塶h s峄璦 v脿 th锚m 膽i峄僲 m峄沬.';
+      ? 'Bạn có chắc chắn muốn khóa điểm số? Điều này sẽ ngăn chỉnh sửa và thêm điểm mới cho tất cả giáo viên.'
+      : 'Bạn có chắc chắn muốn mở khóa điểm số? Điều này sẽ cho phép chỉnh sửa và thêm điểm mới.';
 
     if (window.confirm(confirmMessage)) {
       try {
@@ -988,10 +988,10 @@ const ExamScoreManagement = () => {
         });
 
         setIsScoreLocked(newLockStatus);
-        alert(newLockStatus ? '膼茫 kh贸a 膽i峄僲 s峄?th脿nh c么ng' : '膼茫 m峄?kh贸a 膽i峄僲 s峄?th脿nh c么ng');
+        alert(newLockStatus ? 'Đã khóa điểm số thành công' : 'Đã mở khóa điểm số thành công');
       } catch (error) {
         console.error('Error updating score lock status:', error);
-        ('');
+        alert('Có lỗi xảy ra khi cập nhật trạng thái khóa điểm số');
       }
     }
   };
@@ -999,14 +999,14 @@ const ExamScoreManagement = () => {
   return (
     <div className="exam-score-management">
       <div className="common-page-header">
-        <h2>{isStudent ? 'Xem diem va nhan xet' : 'Quan ly diem so'}</h2>
+        <h2>{isStudent ? 'Xem điểm và nhận xét' : 'Quản lý điểm số'}</h2>
         <div className="header-actions">
           {isAdmin && (
             <button
               className={`btn ${isScoreLocked ? 'btn-unlock' : 'btn-lock'}`}
               onClick={handleToggleLock}
             >
-              {isScoreLocked ? 'Mo khoa diem so' : 'Khoa diem so'}
+              {isScoreLocked ? '🔓 Mở khóa điểm số' : '🔒 Khóa điểm số'}
             </button>
           )}
           {isScoreLocked && (
@@ -1018,16 +1018,16 @@ const ExamScoreManagement = () => {
               borderRadius: '6px',
               fontSize: '0.9rem'
             }}>
-              鈿狅笍 膼i峄僲 s峄?膽茫 b峄?kh贸a
+              ⚠️ Điểm số đã bị khóa
             </span>
           )}
-          {/* Only show "Nh岷璸 膽i峄僲" button for TEACHER, not for ADMIN */}
+          {/* Only show "Nhập điểm" button for TEACHER, not for ADMIN */}
           {!isStudent && !isAdmin && (
             <button
               className="btn btn-primary"
               onClick={() => {
                 if (isScoreLocked) {
-                  alert('膼i峄僲 s峄?膽茫 b峄?kh贸a. Kh么ng th峄?th锚m 膽i峄僲 m峄沬.');
+                  alert('Điểm số đã bị khóa. Không thể thêm điểm mới.');
                   return;
                 }
                 setSelectedClassForScore('');
@@ -1035,18 +1035,18 @@ const ExamScoreManagement = () => {
                 setClassStudents([]);
                 setClassScoreData({});
                 setFilteredSubjectsForClass([]);
-                setIsEditMode(false); // 膼岷穞 ch岷?膽峄?nh岷璸 m峄沬
+                setIsEditMode(false); // Đặt chế độ nhập mới
                 setShowClassModal(true);
               }}
               disabled={isScoreLocked}
             >
-              馃搵 Nh岷璸 膽i峄僲
+              📋 Nhập điểm
             </button>
           )}
         </div>
       </div>
 
-      {/* Filter l峄沺 cho Teacher */}
+      {/* Filter lớp cho Teacher */}
       {userRole === 'TEACHER' && (
         <div style={{
           marginBottom: '20px',
@@ -1059,7 +1059,7 @@ const ExamScoreManagement = () => {
           flexWrap: 'wrap'
         }}>
           <label style={{ fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <span>L峄峜 theo l峄沺:</span>
+            <span>Lọc theo lớp:</span>
             <select
               value={displayFilterClassId}
               onChange={(e) => setDisplayFilterClassId(e.target.value)}
@@ -1071,7 +1071,7 @@ const ExamScoreManagement = () => {
                 minWidth: '200px'
               }}
             >
-              <option value="">-- T岷 c岷?c谩c l峄沺 --</option>
+              <option value="">-- Tất cả các lớp --</option>
               {classes.map(cls => (
                 <option key={cls.id} value={cls.id}>
                   {cls.name}
@@ -1092,13 +1092,13 @@ const ExamScoreManagement = () => {
                 fontSize: '14px'
               }}
             >
-              X贸a b峄?l峄峜
+              Xóa bộ lọc
             </button>
           )}
         </div>
       )}
 
-      {/* B岷g 膽i峄僲 s峄?- Admin c贸 th峄?xem nh瓢ng kh么ng th峄?s峄璦/x贸a */}
+      {/* Bảng điểm số - Admin có thể xem nhưng không thể sửa/xóa */}
       <div className="common-table-container exam-scores-table-container">
         {groupScoresByStudentAndSubject().length === 0 ? (
           <div style={{
@@ -1109,7 +1109,7 @@ const ExamScoreManagement = () => {
             marginTop: '20px'
           }}>
             <p style={{ fontSize: '18px', color: '#666' }}>
-              Ch瓢a c贸 膽i峄僲 s峄?n脿o
+              Chưa có điểm số nào
             </p>
           </div>
         ) : (
@@ -1117,14 +1117,14 @@ const ExamScoreManagement = () => {
             <thead>
               <tr>
                 <th>STT</th>
-                <th>H峄峜 sinh</th>
-                <th>M么n h峄峜</th>
-                <th>L峄沺</th>
-                <th>膼i峄僲 15p</th>
-                <th>膼i峄僲 1 ti岷縯</th>
-                <th>膼i峄僲 cu峄慽 k峄?</th>
-                {/* Ch峄?hi峄僴 th峄?c峄檛 "Thao t谩c" cho TEACHER, kh么ng hi峄僴 th峄?cho ADMIN v脿 STUDENT */}
-                {!isStudent && !isAdmin && <th>Thao t谩c</th>}
+                <th>Học sinh</th>
+                <th>Môn học</th>
+                <th>Lớp</th>
+                <th>Điểm 15p</th>
+                <th>Điểm 1 tiết</th>
+                <th>Điểm cuối kỳ</th>
+                {/* Chỉ hiển thị cột "Thao tác" cho TEACHER, không hiển thị cho ADMIN và STUDENT */}
+                {!isStudent && !isAdmin && <th>Thao tác</th>}
               </tr>
             </thead>
             <tbody>
@@ -1180,28 +1180,28 @@ const ExamScoreManagement = () => {
                         <span style={{ color: '#999' }}>-</span>
                       )}
                     </td>
-                    {/* Ch峄?hi峄僴 th峄?n煤t S峄璦/X贸a cho TEACHER, kh么ng hi峄僴 th峄?cho ADMIN */}
+                    {/* Chỉ hiển thị nút Sửa/Xóa cho TEACHER, không hiển thị cho ADMIN */}
                     {!isStudent && !isAdmin && (
                       <td>
                         <div className="action-buttons">
                           <button
                             className="btn btn-edit"
                             onClick={() => {
-                              // M峄?modal v峄沬 group 膽峄?s峄璦 t岷 c岷?膽i峄僲
+                              // Mở modal với group để sửa tất cả điểm
                               handleEdit(group);
                             }}
                             disabled={isScoreLocked}
-                            title={isScoreLocked ? 'Mo khoa diem so' : 'Khoa diem so'}
+                            title={isScoreLocked ? 'Điểm số đã bị khóa' : 'Sửa điểm'}
                           >
-                            鉁忥笍 S峄璦
+                            ✏️ Sửa
                           </button>
                           <button
                             className="btn btn-delete"
                             onClick={() => handleDeleteAll(group)}
                             disabled={isScoreLocked}
-                            title={isScoreLocked ? 'Mo khoa diem so' : 'Khoa diem so'}
+                            title={isScoreLocked ? 'Điểm số đã bị khóa' : 'Xóa tất cả điểm'}
                           >
-                            馃棏锔?X贸a
+                            🗑️ Xóa
                           </button>
                         </div>
                       </td>
@@ -1215,7 +1215,7 @@ const ExamScoreManagement = () => {
       </div>
 
 
-      {/* Modal nh岷璸 膽i峄僲 theo l峄沺 */}
+      {/* Modal nhập điểm theo lớp */}
       {showClassModal && !isStudent && !isAdmin && (
         <div className="common-modal-overlay" onClick={() => {
           setShowClassModal(false);
@@ -1227,7 +1227,7 @@ const ExamScoreManagement = () => {
         }}>
           <div className="common-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '90%', width: '1200px', maxHeight: '90vh', overflow: 'auto' }}>
             <div className="common-modal-header">
-              <h3>{isEditMode ? 'S峄璦 膽i峄僲 theo l峄沺' : 'Nh岷璸 膽i峄僲 theo l峄沺'}</h3>
+              <h3>{isEditMode ? 'Sửa điểm theo lớp' : 'Nhập điểm theo lớp'}</h3>
               <button className="common-close-btn" onClick={() => {
                 setShowClassModal(false);
                 setSelectedClassForScore('');
@@ -1235,18 +1235,18 @@ const ExamScoreManagement = () => {
                 setClassStudents([]);
                 setClassScoreData({});
                 setIsEditMode(false);
-              }}>×</button>
+              }}>✕</button>
             </div>
             <form onSubmit={handleClassScoreSubmit} className="common-modal-form">
               <div style={{ display: 'flex', gap: '20px', marginBottom: '20px' }}>
                 <div className="common-form-group" style={{ flex: 1 }}>
-                  <label>L峄沺 *</label>
+                  <label>Lớp *</label>
                   <select
                     value={selectedClassForScore}
                     onChange={(e) => handleClassSelect(e.target.value)}
                     required
                   >
-                    <option value="">Ch峄峮 l峄沺</option>
+                    <option value="">Chọn lớp</option>
                     {classes.map((classItem) => (
                       <option key={classItem.id} value={classItem.id}>
                         {classItem.name}
@@ -1255,7 +1255,7 @@ const ExamScoreManagement = () => {
                   </select>
                 </div>
                 <div className="common-form-group" style={{ flex: 1 }}>
-                  <label>M么n h峄峜 *</label>
+                  <label>Môn học *</label>
                   <select
                     value={selectedSubjectForScore}
                     onChange={(e) => handleSubjectSelectForClass(e.target.value)}
@@ -1263,7 +1263,7 @@ const ExamScoreManagement = () => {
                     disabled={!selectedClassForScore}
                   >
                     <option value="">
-                      {selectedClassForScore ? 'Ch峄峮 m么n h峄峜' : 'Ch峄峮 l峄沺 tr瓢峄沜'}
+                      {selectedClassForScore ? 'Chọn môn học' : 'Chọn lớp trước'}
                     </option>
                     {(selectedClassForScore ? filteredSubjectsForClass : subjects).map((subject) => (
                       <option key={subject.id} value={subject.id}>
@@ -1273,7 +1273,7 @@ const ExamScoreManagement = () => {
                   </select>
                   {selectedClassForScore && filteredSubjectsForClass.length === 0 && (
                     <p style={{ fontSize: '12px', color: '#999', marginTop: '5px' }}>
-                      L峄沺 n脿y ch瓢a 膽瓢峄 ph芒n c么ng m么n h峄峜 n脿o
+                      Lớp này chưa được phân công môn học nào
                     </p>
                   )}
                 </div>
@@ -1284,11 +1284,11 @@ const ExamScoreManagement = () => {
                   {(() => {
                     const subjectId = selectedSubjectForScore ? parseInt(selectedSubjectForScore) : null;
 
-                    // N岷縰 峄?ch岷?膽峄?nh岷璸 m峄沬, ch峄?hi峄僴 th峄?h峄峜 sinh ch瓢a c贸 膽i峄僲
-                    // N岷縰 峄?ch岷?膽峄?s峄璦, hi峄僴 th峄?t岷 c岷?h峄峜 sinh (cho ph茅p s峄璦 c岷?h峄峜 sinh 膽茫 c贸 膽i峄僲)
+                    // Nếu ở chế độ nhập mới, chỉ hiển thị học sinh chưa có điểm
+                    // Nếu ở chế độ sửa, hiển thị tất cả học sinh (cho phép sửa cả học sinh đã có điểm)
                     let studentsToShow = classStudents;
                     if (!isEditMode) {
-                      // Ch岷?膽峄?nh岷璸 m峄沬: ch峄?hi峄僴 th峄?h峄峜 sinh ch瓢a c贸 膽i峄僲
+                      // Chế độ nhập mới: chỉ hiển thị học sinh chưa có điểm
                       studentsToShow = classStudents.filter(student => {
                         if (!subjectId) return true;
                         const existingScores = examScores.filter(score =>
@@ -1299,7 +1299,7 @@ const ExamScoreManagement = () => {
                       });
                     }
 
-                    // H脿m ki峄僲 tra h峄峜 sinh 膽茫 c贸 膽i峄僲 ch瓢a (ch峄?膽峄?hi峄僴 th峄?th么ng tin)
+                    // Hàm kiểm tra học sinh đã có điểm chưa (chỉ để hiển thị thông tin)
                     const studentHasScore = (studentId) => {
                       if (!subjectId) return false;
                       const existingScores = examScores.filter(score =>
@@ -1313,19 +1313,19 @@ const ExamScoreManagement = () => {
                       <>
                         <h4 style={{ marginBottom: '15px', color: '#333' }}>
                           {isEditMode ? (
-                            <>Danh s谩ch h峄峜 sinh ({studentsToShow.length}/{classStudents.length} h峄峜 sinh)</>
+                            <>Danh sách học sinh ({studentsToShow.length}/{classStudents.length} học sinh)</>
                           ) : (
-                            <>Danh s谩ch h峄峜 sinh c岷 nh岷璸 膽i峄僲 ({studentsToShow.length}/{classStudents.length} h峄峜 sinh)</>
+                            <>Danh sách học sinh cần nhập điểm ({studentsToShow.length}/{classStudents.length} học sinh)</>
                           )}
                         </h4>
                         {!isEditMode && studentsToShow.length < classStudents.length && (
                           <p style={{ color: '#28a745', marginBottom: '15px', fontSize: '14px', fontWeight: '500' }}>
-                            鉁?{classStudents.length - studentsToShow.length} h峄峜 sinh 膽茫 c贸 膽i峄僲 v脿 膽茫 膽瓢峄 岷﹏
+                            ✅ {classStudents.length - studentsToShow.length} học sinh đã có điểm và đã được ẩn
                           </p>
                         )}
                         {!selectedSubjectForScore && (
                           <p style={{ color: '#666', marginBottom: '15px', fontSize: '14px' }}>
-                            鈿狅笍 Vui l貌ng ch峄峮 m么n h峄峜 膽峄?nh岷璸 膽i峄僲
+                            ⚠️ Vui lòng chọn môn học để nhập điểm
                           </p>
                         )}
                         <div style={{ overflowX: 'auto', maxHeight: '500px', overflowY: 'auto' }}>
@@ -1333,10 +1333,10 @@ const ExamScoreManagement = () => {
                             <thead style={{ position: 'sticky', top: 0, backgroundColor: '#f8f9fa', zIndex: 1 }}>
                               <tr>
                                 <th style={{ padding: '10px', border: '1px solid #ddd', textAlign: 'left', backgroundColor: '#f8f9fa' }}>STT</th>
-                                <th style={{ padding: '10px', border: '1px solid #ddd', textAlign: 'left', backgroundColor: '#f8f9fa' }}>H峄峜 sinh</th>
-                                <th style={{ padding: '10px', border: '1px solid #ddd', textAlign: 'center', backgroundColor: '#f8f9fa' }}>膼i峄僲 15p</th>
-                                <th style={{ padding: '10px', border: '1px solid #ddd', textAlign: 'center', backgroundColor: '#f8f9fa' }}>膼i峄僲 1 ti岷縯</th>
-                                <th style={{ padding: '10px', border: '1px solid #ddd', textAlign: 'center', backgroundColor: '#f8f9fa' }}>膼i峄僲 cu峄慽 k峄?</th>
+                                <th style={{ padding: '10px', border: '1px solid #ddd', textAlign: 'left', backgroundColor: '#f8f9fa' }}>Học sinh</th>
+                                <th style={{ padding: '10px', border: '1px solid #ddd', textAlign: 'center', backgroundColor: '#f8f9fa' }}>Điểm 15p</th>
+                                <th style={{ padding: '10px', border: '1px solid #ddd', textAlign: 'center', backgroundColor: '#f8f9fa' }}>Điểm 1 tiết</th>
+                                <th style={{ padding: '10px', border: '1px solid #ddd', textAlign: 'center', backgroundColor: '#f8f9fa' }}>Điểm cuối kỳ</th>
                               </tr>
                             </thead>
                             <tbody>
@@ -1350,7 +1350,7 @@ const ExamScoreManagement = () => {
                                       <div>
                                         <div style={{ fontWeight: '500' }}>
                                           {student.fullName}
-                                          {hasScore && <span style={{ color: '#28a745', marginLeft: '8px', fontSize: '12px' }}>(膼茫 c贸 膽i峄僲)</span>}
+                                          {hasScore && <span style={{ color: '#28a745', marginLeft: '8px', fontSize: '12px' }}>(Đã có điểm)</span>}
                                         </div>
                                         <div style={{ fontSize: '12px', color: '#666' }}>{student.email}</div>
                                       </div>
@@ -1440,18 +1440,18 @@ const ExamScoreManagement = () => {
                           classStudents.length > 0 ? (
                             <div>
                               <p style={{ fontSize: '16px', fontWeight: '500', color: '#28a745', marginBottom: '10px' }}>
-                                鉁?T岷 c岷?h峄峜 sinh 膽茫 c贸 膽i峄僲 cho m么n h峄峜 n脿y
+                                ✅ Tất cả học sinh đã có điểm cho môn học này
                               </p>
                               <p style={{ fontSize: '14px', color: '#666' }}>
-                                T岷 c岷?{classStudents.length} h峄峜 sinh trong l峄沺 膽茫 膽瓢峄 nh岷璸 膽i峄僲.
-                                Kh么ng c貌n h峄峜 sinh n脿o c岷 nh岷璸 膽i峄僲.
+                                Tất cả {classStudents.length} học sinh trong lớp đã được nhập điểm.
+                                Không còn học sinh nào cần nhập điểm.
                               </p>
                             </div>
                           ) : (
-                            <p>Kh么ng c贸 h峄峜 sinh n脿o trong l峄沺 n脿y</p>
+                            <p>Không có học sinh nào trong lớp này</p>
                           )
                         ) : (
-                          <p>Vui l貌ng ch峄峮 m么n h峄峜 膽峄?hi峄僴 th峄?danh s谩ch h峄峜 sinh</p>
+                          <p>Vui lòng chọn môn học để hiển thị danh sách học sinh</p>
                         )}
                       </div>
                     );
@@ -1461,7 +1461,7 @@ const ExamScoreManagement = () => {
 
               {!selectedClassForScore && (
                 <div style={{ padding: '40px', textAlign: 'center', color: '#666' }}>
-                  Vui l貌ng ch峄峮 l峄沺 膽峄?hi峄僴 th峄?danh s谩ch h峄峜 sinh
+                  Vui lòng chọn lớp để hiển thị danh sách học sinh
                 </div>
               )}
 
@@ -1478,19 +1478,19 @@ const ExamScoreManagement = () => {
                     setFilteredSubjectsForClass([]);
                   }}
                 >
-                  H峄
+                  Hủy
                 </button>
                 <button
                   type="submit"
                   className="btn btn-primary"
                   disabled={(() => {
-                    // N岷縰 kh么ng c贸 l峄沺 ho岷穋 m么n h峄峜 膽瓢峄 ch峄峮 鈫?disable
+                    // Nếu không có lớp hoặc môn học được chọn → disable
                     if (!selectedClassForScore || !selectedSubjectForScore) return true;
 
-                    // 峄?ch岷?膽峄?s峄璦, lu么n enable (v矛 m峄 膽铆ch l脿 s峄璦 膽i峄僲 膽茫 c贸)
+                    // Ở chế độ sửa, luôn enable (vì mục đích là sửa điểm đã có)
                     if (isEditMode) return false;
 
-                    // 峄?ch岷?膽峄?nh岷璸 m峄沬, disable n岷縰 t岷 c岷?h峄峜 sinh 膽茫 c贸 膽i峄僲
+                    // Ở chế độ nhập mới, disable nếu tất cả học sinh đã có điểm
                     const subjectId = parseInt(selectedSubjectForScore);
                     const studentsWithoutScores = classStudents.filter(student => {
                       const existingScores = examScores.filter(score =>
@@ -1502,7 +1502,7 @@ const ExamScoreManagement = () => {
                     return studentsWithoutScores.length === 0;
                   })()}
                 >
-                  L瓢u 膽i峄僲
+                  Lưu điểm
                 </button>
               </div>
             </form>
@@ -1514,16 +1514,4 @@ const ExamScoreManagement = () => {
 };
 
 export default ExamScoreManagement;
-
-
-
-
-
-
-
-
-
-
-
-
 

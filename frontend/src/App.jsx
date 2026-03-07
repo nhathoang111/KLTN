@@ -22,8 +22,16 @@ function App() {
               </ProtectedRoute>
             }>
               <Route index element={<Navigate to="/dashboard" replace />} />
-              {protectedRoutes.map(({ path, Component }) => (
-                <Route key={path} path={path} element={<Component />} />
+              {protectedRoutes.map(({ path, Component, roles }) => (
+                <Route
+                  key={path}
+                  path={path}
+                  element={
+                    <ProtectedRoute allowedRoles={roles}>
+                      <Component />
+                    </ProtectedRoute>
+                  }
+                />
               ))}
             </Route>
           </Routes>

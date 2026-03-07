@@ -2,7 +2,16 @@ import React from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
-const ProtectedRoute = ({ children }) => {
+const normalizeRole = (roleName) => {
+  const role = roleName?.toUpperCase();
+  if (role === 'SUPER_ADMIN') return 'SUPER_ADMIN';
+  if (role === 'ADMIN') return 'ADMIN';
+  if (role === 'TEACHER') return 'TEACHER';
+  if (role === 'STUDENT') return 'STUDENT';
+  return 'GUEST';
+};
+
+const ProtectedRoute = ({ children, allowedRoles }) => {
   const { user, loading } = useAuth();
 
   if (loading) {
@@ -15,6 +24,13 @@ const ProtectedRoute = ({ children }) => {
 
   if (!user) {
     return <Navigate to="/login" replace />;
+  }
+
+  if (Array.isArray(allowedRoles) && allowedRoles.length > 0) {
+    const userRole = normalizeRole(user.role?.name);
+    if (!allowedRoles.includes(userRole)) {
+      return <Navigate to="/dashboard" replace />;
+    }
   }
 
   return children;

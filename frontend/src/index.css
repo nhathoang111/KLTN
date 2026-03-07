@@ -37,13 +37,6 @@
     min-height: 100vh;
   }
 
-  input:focus,
-  textarea:focus,
-  select:focus {
-    outline: none;
-    border: none;
-    border-color: red;
-  }
 }
 
 /* Scrollbar (optional) */

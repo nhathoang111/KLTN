@@ -13,7 +13,7 @@ const AnnouncementListPage = () => {
   const [showModal, setShowModal] = useState(false);
   const [editingAnnouncement, setEditingAnnouncement] = useState(null);
   const [selectedSchoolId, setSelectedSchoolId] = useState(null); // Filter by school
-  const [studentClassId, setStudentClassId] = useState(null); // Class ID c峄 h峄峜 sinh
+  const [studentClassId, setStudentClassId] = useState(null); // Class ID của học sinh
   const [formData, setFormData] = useState({
     title: '',
     content: '',
@@ -22,7 +22,7 @@ const AnnouncementListPage = () => {
     createdById: ''
   });
 
-  // Fetch enrollment c峄 h峄峜 sinh 膽峄?l岷 classId
+  // Fetch enrollment của học sinh để lấy classId
   const fetchStudentEnrollment = async () => {
     if (!user?.id) return null;
 
@@ -30,7 +30,7 @@ const AnnouncementListPage = () => {
       const enrollmentRes = await api.get(`/users/${user.id}/enrollment`);
       console.log('Student enrollment response:', enrollmentRes.data);
 
-      // API tr岷?v峄?format: { enrollment: {...}, enrollments: [...] }
+      // API trả về format: { enrollment: {...}, enrollments: [...] }
       const enrollment = enrollmentRes.data.enrollment || enrollmentRes.data;
 
       if (enrollment?.classId) {
@@ -62,7 +62,7 @@ const AnnouncementListPage = () => {
       } else if (userRole === 'STUDENT' && userSchoolId) {
         // STUDENT: Auto filter by their school and fetch their class
         setSelectedSchoolId(userSchoolId);
-        // Fetch enrollment 膽峄?l岷 classId c峄 h峄峜 sinh
+        // Fetch enrollment để lấy classId của học sinh
         fetchStudentEnrollment();
       } else if (userRole === 'TEACHER' && userSchoolId) {
         // TEACHER: Auto filter by their school
@@ -77,22 +77,22 @@ const AnnouncementListPage = () => {
   const fetchData = async () => {
     try {
       setLoading(true);
-      // X谩c 膽峄媙h role v脿 schoolId c峄 user hi峄噉 t岷
+      // Xác định role và schoolId của user hiện tại
       const userRole = user?.role?.name?.toUpperCase();
       const schoolId = user?.school?.id;
 
-      // X芒y d峄眓g URL cho announcements API v峄沬 filter theo school
+      // Xây dựng URL cho announcements API với filter theo school
       let announcementsUrl = '/announcements';
 
-      // 膼峄慽 v峄沬 h峄峜 sinh, l岷 t岷 c岷?th么ng b谩o c峄 tr瓢峄漬g, sau 膽贸 filter theo l峄沺 峄?frontend
-      // V矛 h峄峜 sinh c岷 th岷: th么ng b谩o c峄 l峄沺 h峄?+ th么ng b谩o chung (classId = null)
+      // Đối với học sinh, lấy tất cả thông báo của trường, sau đó filter theo lớp ở frontend
+      // Vì học sinh cần thấy: thông báo của lớp họ + thông báo chung (classId = null)
       if (userRole === 'STUDENT' && selectedSchoolId) {
         announcementsUrl += `?schoolId=${selectedSchoolId}`;
       } else if (selectedSchoolId) {
         announcementsUrl += `?schoolId=${selectedSchoolId}`;
       }
 
-      // X芒y d峄眓g URL cho users API d峄盿 tr锚n role
+      // Xây dựng URL cho users API dựa trên role
       let usersUrl = '/users';
       if (userRole === 'SUPER_ADMIN') {
         usersUrl += '?userRole=SUPER_ADMIN';
@@ -101,7 +101,7 @@ const AnnouncementListPage = () => {
       } else if (userRole === 'TEACHER' && schoolId) {
         usersUrl += `?userRole=TEACHER&schoolId=${schoolId}`;
       } else {
-        // N岷縰 kh么ng c贸 quy峄乶, v岷玭 th峄?fetch nh瓢ng s岷?b峄?403
+        // Nếu không có quyền, vẫn thử fetch nhưng sẽ bị 403
         usersUrl += `?userRole=${userRole || 'ADMIN'}`;
         if (schoolId) {
           usersUrl += `&schoolId=${schoolId}`;
@@ -120,18 +120,18 @@ const AnnouncementListPage = () => {
 
       let allAnnouncements = announcementsRes.data.announcements || [];
 
-      // 膼峄慽 v峄沬 h峄峜 sinh, filter th么ng b谩o:
-      // - Ch峄?hi峄僴 th峄?th么ng b谩o c峄 l峄沺 h峄峜 sinh (classId = studentClassId)
-      // - Ho岷穋 th么ng b谩o chung (classId = null) c峄 c霉ng tr瓢峄漬g
+      // Đối với học sinh, filter thông báo:
+      // - Chỉ hiển thị thông báo của lớp học sinh (classId = studentClassId)
+      // - Hoặc thông báo chung (classId = null) của cùng trường
       if (userRole === 'STUDENT' && studentClassId) {
         allAnnouncements = allAnnouncements.filter(announcement => {
           const announcementClassId = announcement.classEntity?.id || announcement.class_id;
-          // Hi峄僴 th峄?th么ng b谩o c峄 l峄沺 h峄峜 sinh ho岷穋 th么ng b谩o chung (null)
+          // Hiển thị thông báo của lớp học sinh hoặc thông báo chung (null)
           return announcementClassId === studentClassId || announcementClassId === null;
         });
         console.log('Filtered announcements for student class:', studentClassId, 'Count:', allAnnouncements.length);
       } else if (userRole === 'STUDENT' && !studentClassId) {
-        // N岷縰 h峄峜 sinh ch瓢a c贸 l峄沺, ch峄?hi峄僴 th峄?th么ng b谩o chung
+        // Nếu học sinh chưa có lớp, chỉ hiển thị thông báo chung
         allAnnouncements = allAnnouncements.filter(announcement => {
           const announcementClassId = announcement.classEntity?.id || announcement.class_id;
           return announcementClassId === null;
@@ -168,7 +168,7 @@ const AnnouncementListPage = () => {
 
       // Validate required fields
       if (!formData.title || !formData.content || !formData.schoolId || !creatorId) {
-        alert('Vui l貌ng 膽i峄乶 膽岷 膽峄?c谩c tr瓢峄漬g b岷痶 bu峄檆');
+        alert('Vui lòng điền đầy đủ các trường bắt buộc');
         return;
       }
 
@@ -210,7 +210,7 @@ const AnnouncementListPage = () => {
       const errorMessage = error.response?.data?.error ||
         error.response?.data?.message ||
         error.message ||
-        'Kh么ng th峄?l瓢u th么ng b谩o. Vui l貌ng th峄?l岷.';
+        'Không thể lưu thông báo. Vui lòng thử lại.';
       alert(errorMessage);
     }
   };
@@ -241,14 +241,14 @@ const AnnouncementListPage = () => {
 
       // If created by ADMIN, prevent editing - BLOCK IMMEDIATELY
       if (creatorRole === 'ADMIN') {
-        alert('B岷 kh么ng th峄?ch峄塶h s峄璦 th么ng b谩o t峄?Admin');
+        alert('Bạn không thể chỉnh sửa thông báo từ Admin');
         return; // DO NOT OPEN MODAL
       }
 
       // If we cannot determine the role, be safe and block (for security)
       if (creatorRole === null && announcement.createdBy?.id) {
         console.warn('Cannot determine creator role, blocking edit for safety');
-        alert('Kh么ng th峄?x谩c 膽峄媙h quy峄乶 c峄 ng瓢峄漣 t岷. Vui l貌ng th峄?l岷 sau.');
+        alert('Không thể xác định quyền của người tạo. Vui lòng thử lại sau.');
         return; // DO NOT OPEN MODAL
       }
     }
@@ -294,19 +294,19 @@ const AnnouncementListPage = () => {
 
       // If created by ADMIN, prevent deletion - BLOCK IMMEDIATELY
       if (creatorRole === 'ADMIN') {
-        alert('B岷 kh么ng th峄?x贸a th么ng b谩o t峄?Admin');
+        alert('Bạn không thể xóa thông báo từ Admin');
         return; // DO NOT PROCEED
       }
 
       // If we cannot determine the role, be safe and block (for security)
       if (creatorRole === null && announcement.createdBy?.id) {
         console.warn('Cannot determine creator role, blocking delete for safety');
-        alert('Kh么ng th峄?x谩c 膽峄媙h quy峄乶 c峄 ng瓢峄漣 t岷. Vui l貌ng th峄?l岷 sau.');
+        alert('Không thể xác định quyền của người tạo. Vui lòng thử lại sau.');
         return; // DO NOT PROCEED
       }
     }
 
-    if (window.confirm('B岷 c贸 ch岷痗 ch岷痭 mu峄憂 x贸a th么ng b谩o n脿y?')) {
+    if (window.confirm('Bạn có chắc chắn muốn xóa thông báo này?')) {
       try {
         // Send user role in header for backend validation
         await api.delete(`/announcements/${id}`, {
@@ -321,7 +321,7 @@ const AnnouncementListPage = () => {
         const errorMessage = error.response?.data?.error ||
           error.response?.data?.message ||
           error.message ||
-          'Kh么ng th峄?x贸a th么ng b谩o. Vui l貌ng th峄?l岷.';
+          'Không thể xóa thông báo. Vui lòng thử lại.';
         alert(errorMessage);
       }
     }
@@ -341,17 +341,17 @@ const AnnouncementListPage = () => {
 
   const getSchoolName = (schoolId) => {
     const school = schools.find(s => s.id === schoolId);
-    return school ? school.name : 'Không có';
+    return school ? school.name : 'N/A';
   };
 
   const getClassName = (classId) => {
     const classItem = classes.find(c => c.id === classId);
-    return classItem ? classItem.name : 'Không có';
+    return classItem ? classItem.name : 'N/A';
   };
 
   const getUserName = (userId) => {
     const user = users.find(u => u.id === userId);
-    return user ? user.fullName : 'Không có';
+    return user ? user.fullName : 'N/A';
   };
 
   // Helper function to get creator role - tries multiple methods
@@ -392,14 +392,14 @@ const AnnouncementListPage = () => {
   };
 
   const formatDate = (dateString) => {
-    if (!dateString) return 'Không có';
+    if (!dateString) return 'N/A';
     return new Date(dateString).toLocaleDateString('vi-VN');
   };
 
   if (loading) {
     return (
       <div className="announcement-list-page">
-        <div className="loading">膼ang t岷...</div>
+        <div className="loading">Đang tải...</div>
       </div>
     );
   }
@@ -410,7 +410,7 @@ const AnnouncementListPage = () => {
   return (
     <div className="announcement-list-page">
       <div className="common-page-header">
-        <h1>Qu岷 l媒 th么ng b谩o</h1>
+        <h1>Quản lý thông báo</h1>
         <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
           {/* School filter - only show for SUPER_ADMIN */}
           {userRole === 'SUPER_ADMIN' && (
@@ -427,7 +427,7 @@ const AnnouncementListPage = () => {
                 fontSize: '14px'
               }}
             >
-              <option value="">T岷 c岷?tr瓢峄漬g</option>
+              <option value="">Tất cả trường</option>
               {schools.map(school => (
                 <option key={school.id} value={school.id}>
                   {school.name}
@@ -443,7 +443,7 @@ const AnnouncementListPage = () => {
               borderRadius: '4px',
               fontSize: '14px'
             }}>
-              Tr瓢峄漬g: {schools.find(s => s.id === userSchoolId)?.name || 'Không có'}
+              Trường: {schools.find(s => s.id === userSchoolId)?.name || 'N/A'}
             </span>
           )}
           {/* Show student's class */}
@@ -455,7 +455,7 @@ const AnnouncementListPage = () => {
               fontSize: '14px',
               marginLeft: '10px'
             }}>
-              L峄沺: {classes.find(c => c.id === studentClassId)?.name || 'Không có'}
+              Lớp: {classes.find(c => c.id === studentClassId)?.name || 'N/A'}
             </span>
           )}
           {userRole === 'STUDENT' && !studentClassId && (
@@ -467,10 +467,10 @@ const AnnouncementListPage = () => {
               marginLeft: '10px',
               color: '#856404'
             }}>
-              鈿狅笍 Ch瓢a 膽瓢峄 g谩n v脿o l峄沺
+              ⚠️ Chưa được gán vào lớp
             </span>
           )}
-          {/* Show "Th锚m th么ng b谩o" button for ADMIN, SUPER_ADMIN, and TEACHER */}
+          {/* Show "Thêm thông báo" button for ADMIN, SUPER_ADMIN, and TEACHER */}
           {(userRole === 'ADMIN' || userRole === 'SUPER_ADMIN' || userRole === 'TEACHER') && (
             <button
               className="btn btn-primary"
@@ -509,7 +509,7 @@ const AnnouncementListPage = () => {
                 setShowModal(true);
               }}
             >
-              Th锚m th么ng b谩o
+              Thêm thông báo
             </button>
           )}
         </div>
@@ -522,19 +522,19 @@ const AnnouncementListPage = () => {
               <h3>{announcement.title}</h3>
               <div className="announcement-meta">
                 <span className="meta-item">
-                  <strong>Tr瓢峄漬g:</strong> {getSchoolName(announcement.school?.id)}
+                  <strong>Trường:</strong> {getSchoolName(announcement.school?.id)}
                 </span>
                 <span className="meta-item">
-                  <strong>L峄沺:</strong> {getClassName(announcement.classEntity?.id)}
+                  <strong>Lớp:</strong> {getClassName(announcement.classEntity?.id)}
                 </span>
-                {/* Only show "Ng瓢峄漣 t岷" for ADMIN, SUPER_ADMIN, and TEACHER - hide for STUDENT */}
+                {/* Only show "Người tạo" for ADMIN, SUPER_ADMIN, and TEACHER - hide for STUDENT */}
                 {userRole !== 'STUDENT' && (
                   <span className="meta-item">
-                    <strong>Ng瓢峄漣 t岷:</strong> {getUserName(announcement.createdBy?.id)}
+                    <strong>Người tạo:</strong> {getUserName(announcement.createdBy?.id)}
                   </span>
                 )}
                 <span className="meta-item">
-                  <strong>Ng脿y t岷:</strong> {formatDate(announcement.createdAt)}
+                  <strong>Ngày tạo:</strong> {formatDate(announcement.createdAt)}
                 </span>
               </div>
             </div>
@@ -582,13 +582,13 @@ const AnnouncementListPage = () => {
                       className="btn btn-sm btn-secondary"
                       onClick={() => handleEdit(announcement)}
                     >
-                      S峄璦
+                      Sửa
                     </button>
                     <button
                       className="btn btn-sm btn-danger"
                       onClick={() => handleDelete(announcement.id)}
                     >
-                      X贸a
+                      Xóa
                     </button>
                   </div>
                 );
@@ -603,13 +603,13 @@ const AnnouncementListPage = () => {
                       className="btn btn-sm btn-secondary"
                       onClick={() => handleEdit(announcement)}
                     >
-                      S峄璦
+                      Sửa
                     </button>
                     <button
                       className="btn btn-sm btn-danger"
                       onClick={() => handleDelete(announcement.id)}
                     >
-                      X贸a
+                      Xóa
                     </button>
                   </div>
                 );
@@ -626,12 +626,12 @@ const AnnouncementListPage = () => {
         <div className="common-modal-overlay">
           <div className="common-modal">
             <div className="common-modal-header">
-              <h2>{editingAnnouncement ? 'S峄璦 th么ng b谩o' : 'Th锚m th么ng b谩o'}</h2>
-              <button className="common-close-btn" onClick={handleCloseModal}>脳</button>
+              <h2>{editingAnnouncement ? 'Sửa thông báo' : 'Thêm thông báo'}</h2>
+              <button className="common-close-btn" onClick={handleCloseModal}>×</button>
             </div>
             <form onSubmit={handleSubmit} className="common-modal-form">
               <div className="common-form-group">
-                <label>Ti锚u 膽峄?*</label>
+                <label>Tiêu đề *</label>
                 <input
                   type="text"
                   value={formData.title}
@@ -640,7 +640,7 @@ const AnnouncementListPage = () => {
                 />
               </div>
               <div className="common-form-group">
-                <label>N峄檌 dung *</label>
+                <label>Nội dung *</label>
                 <textarea
                   value={formData.content}
                   onChange={(e) => setFormData({ ...formData, content: e.target.value })}
@@ -649,9 +649,9 @@ const AnnouncementListPage = () => {
                 />
               </div>
               <div className="common-form-group">
-                <label>Tr瓢峄漬g *</label>
+                <label>Trường *</label>
                 {(userRole === 'ADMIN' || userRole === 'TEACHER') && userSchoolId ? (
-                  // ADMIN and TEACHER: Hi峄僴 th峄?tr瓢峄漬g c峄?膽峄媙h (kh么ng cho ch峄峮)
+                  // ADMIN and TEACHER: Hiển thị trường cố định (không cho chọn)
                   <div style={{
                     padding: '10px',
                     backgroundColor: '#f5f5f5',
@@ -659,10 +659,10 @@ const AnnouncementListPage = () => {
                     border: '1px solid #ddd',
                     fontSize: '14px'
                   }}>
-                    <strong>{schools.find(s => s.id === userSchoolId)?.name || 'Không có'}</strong>
+                    <strong>{schools.find(s => s.id === userSchoolId)?.name || 'N/A'}</strong>
                   </div>
                 ) : (
-                  // SUPER_ADMIN: C贸 th峄?ch峄峮 tr瓢峄漬g
+                  // SUPER_ADMIN: Có thể chọn trường
                   <select
                     value={formData.schoolId}
                     onChange={async (e) => {
@@ -696,7 +696,7 @@ const AnnouncementListPage = () => {
                     }}
                     required
                   >
-                    <option value="">Ch峄峮 tr瓢峄漬g</option>
+                    <option value="">Chọn trường</option>
                     {schools.map(school => (
                       <option key={school.id} value={school.id}>
                         {school.name}
@@ -704,7 +704,7 @@ const AnnouncementListPage = () => {
                     ))}
                   </select>
                 )}
-                {/* Hidden input 膽峄?膽岷 b岷 schoolId 膽瓢峄 g峄璱 膽i */}
+                {/* Hidden input để đảm bảo schoolId được gửi đi */}
                 {(userRole === 'ADMIN' || userRole === 'TEACHER') && userSchoolId && (
                   <input
                     type="hidden"
@@ -713,16 +713,16 @@ const AnnouncementListPage = () => {
                 )}
               </div>
               <div className="common-form-group">
-                <label>L峄沺</label>
+                <label>Lớp</label>
                 <select
                   value={formData.classId}
                   onChange={(e) => setFormData({ ...formData, classId: e.target.value })}
                   disabled={!formData.schoolId}
                 >
-                  <option value="">Ch峄峮 l峄沺 (t霉y ch峄峮)</option>
+                  <option value="">Chọn lớp (tùy chọn)</option>
                   {classes
                     .filter(classItem => {
-                      // Ch峄?hi峄僴 th峄?l峄沺 c峄 tr瓢峄漬g 膽茫 ch峄峮
+                      // Chỉ hiển thị lớp của trường đã chọn
                       if (!formData.schoolId) return false;
                       return classItem.school?.id === parseInt(formData.schoolId);
                     })
@@ -734,12 +734,12 @@ const AnnouncementListPage = () => {
                 </select>
                 {formData.schoolId && classes.filter(c => c.school?.id === parseInt(formData.schoolId)).length === 0 && (
                   <small style={{ color: '#666', display: 'block', marginTop: '4px' }}>
-                    Tr瓢峄漬g n脿y ch瓢a c贸 l峄沺 h峄峜
+                    Trường này chưa có lớp học
                   </small>
                 )}
               </div>
               <div className="common-form-group">
-                <label>Ng瓢峄漣 t岷 *</label>
+                <label>Người tạo *</label>
                 {editingAnnouncement ? (
                   // When editing, show original creator
                   editingAnnouncement.createdBy ? (
@@ -751,7 +751,7 @@ const AnnouncementListPage = () => {
                       fontSize: '14px'
                     }}>
                       <strong>{editingAnnouncement.createdBy.fullName || getUserName(editingAnnouncement.createdBy?.id)}</strong>
-                      <span style={{ color: '#666' }}> ({editingAnnouncement.createdBy.role?.name || 'Không có'})</span>
+                      <span style={{ color: '#666' }}> ({editingAnnouncement.createdBy.role?.name || 'N/A'})</span>
                     </div>
                   ) : (
                     user && (
@@ -762,7 +762,7 @@ const AnnouncementListPage = () => {
                         border: '1px solid #ddd',
                         fontSize: '14px'
                       }}>
-                        <strong>{user.fullName}</strong> <span style={{ color: '#666' }}>({user.role?.name || 'Không có'})</span>
+                        <strong>{user.fullName}</strong> <span style={{ color: '#666' }}>({user.role?.name || 'N/A'})</span>
                       </div>
                     )
                   )
@@ -776,7 +776,7 @@ const AnnouncementListPage = () => {
                       border: '1px solid #ddd',
                       fontSize: '14px'
                     }}>
-                      <strong>{user.fullName}</strong> <span style={{ color: '#666' }}>({user.role?.name || 'Không có'})</span>
+                      <strong>{user.fullName}</strong> <span style={{ color: '#666' }}>({user.role?.name || 'N/A'})</span>
                     </div>
                   )
                 )}
@@ -790,10 +790,10 @@ const AnnouncementListPage = () => {
               </div>
               <div className="common-modal-actions">
                 <button type="button" className="btn btn-secondary" onClick={handleCloseModal}>
-                  H峄
+                  Hủy
                 </button>
                 <button type="submit" className="btn btn-primary">
-                  {editingAnnouncement ? 'C岷璸 nh岷璽' : 'T岷 m峄沬'}
+                  {editingAnnouncement ? 'Cập nhật' : 'Tạo mới'}
                 </button>
               </div>
             </form>
@@ -805,5 +805,4 @@ const AnnouncementListPage = () => {
 };
 
 export default AnnouncementListPage;
-
 

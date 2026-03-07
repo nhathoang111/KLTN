@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+﻿import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../../../../shared/lib/api';
 
@@ -37,7 +37,7 @@ const SchoolCreatePage = () => {
       const errorMessage = err.response?.data?.error ||
         err.response?.data?.message ||
         err.message ||
-        'Không th�?tạo trường học. Vui lòng th�?lại.';
+        'Kh么ng th峄?t岷 tr瓢峄漬g h峄峜. Vui l貌ng th峄?l岷.';
       setError(errorMessage);
       // Scroll to error message
       setTimeout(() => {
@@ -187,6 +187,7 @@ const SchoolCreatePage = () => {
 };
 
 export default SchoolCreatePage;
+
 
 
 

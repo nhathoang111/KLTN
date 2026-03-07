@@ -25,7 +25,7 @@ const UserCreatePage = () => {
     phone: '',
     department: '',
     subjectId: '',
-    subjectIds: [], // gi谩o vi锚n: nhi峄乽 m么n
+    subjectIds: [], // giáo viên: nhiều môn
     relationship: '',
     status: 'ACTIVE'
   });
@@ -57,7 +57,7 @@ const UserCreatePage = () => {
     }
   }, []);
 
-  // Fetch roles, classes, subjects, students khi school thay 膽峄昳
+  // Fetch roles, classes, subjects, students khi school thay đổi
   useEffect(() => {
     if (formData.schoolId) {
       fetchRolesForSchool(formData.schoolId);
@@ -87,11 +87,11 @@ const UserCreatePage = () => {
 
   const fetchInitialRoles = async () => {
     try {
-      // X谩c 膽峄媙h ph芒n quy峄乶 t峄?user context
+      // Xác định phân quyền từ user context
       const userRole = user?.role?.name?.toUpperCase();
       const schoolId = user?.school?.id;
 
-      // Fetch roles v峄沬 ph芒n quy峄乶
+      // Fetch roles với phân quyền
       let rolesUrl = '/roles';
       if (userRole === 'SUPER_ADMIN') {
         // Super Admin fetch all roles
@@ -99,7 +99,7 @@ const UserCreatePage = () => {
       } else if (userRole === 'ADMIN' && schoolId) {
         rolesUrl += `?userRole=ADMIN&schoolId=${schoolId}`;
       } else {
-        setError('Không có quyền truy cập.');
+        setError('Access denied');
         return;
       }
 
@@ -265,7 +265,7 @@ const UserCreatePage = () => {
   const validateForm = () => {
     // Prevent form submission if currently creating new role
     if (showRoleModal) {
-      setError('Vui l貌ng ho脿n t岷 vi峄嘽 t岷 role m峄沬 tr瓢峄沜 khi t岷 user');
+      setError('Vui lòng hoàn tất việc tạo role mới trước khi tạo user');
       return false;
     }
 
@@ -290,7 +290,7 @@ const UserCreatePage = () => {
       setError('Role is required');
       return false;
     }
-    // Super Admin c贸 th峄?t岷 user kh么ng thu峄檆 tr瓢峄漬g n脿o
+    // Super Admin có thể tạo user không thuộc trường nào
     const userRole = user?.role?.name;
     if (!formData.schoolId && userRole !== 'SUPER_ADMIN') {
       setError('School is required');
@@ -301,7 +301,7 @@ const UserCreatePage = () => {
     const selectedRole = roles.find(r => r.id === parseInt(formData.roleId));
     const isStudent = selectedRole && (selectedRole.name?.toUpperCase() === 'STUDENT' || selectedRole.name?.toUpperCase().startsWith('STUDENT'));
     if (isStudent && !formData.classId) {
-      setError('L峄沺 l脿 b岷痶 bu峄檆 khi t岷 h峄峜 sinh');
+      setError('Lớp là bắt buộc khi tạo học sinh');
       return false;
     }
 
@@ -317,24 +317,24 @@ const UserCreatePage = () => {
       setLoading(true);
       setError('');
 
-      // L岷 th么ng tin ph芒n quy峄乶 t峄?user context
+      // Lấy thông tin phân quyền từ user context
       const userRole = user?.role?.name?.toUpperCase();
       const schoolId = user?.school?.id;
 
       const roleIdNum = formData.roleId !== '' && formData.roleId != null ? parseInt(formData.roleId, 10) : NaN;
       const schoolIdNum = formData.schoolId !== '' && formData.schoolId != null ? parseInt(formData.schoolId, 10) : NaN;
       if (!Number.isInteger(roleIdNum)) {
-        setError('Vui l貌ng ch峄峮 vai tr貌');
+        setError('Vui lòng chọn vai trò');
         setLoading(false);
         return;
       }
       if (userRole === 'ADMIN' && !Number.isInteger(schoolIdNum) && !schoolId) {
-        setError('Vui l貌ng ch峄峮 tr瓢峄漬g');
+        setError('Vui lòng chọn trường');
         setLoading(false);
         return;
       }
 
-      // ADMIN b岷痶 bu峄檆 ph岷 c贸 schoolId trong body; d霉ng t峄?form ho岷穋 t峄?context
+      // ADMIN bắt buộc phải có schoolId trong body; dùng từ form hoặc từ context
       const effectiveSchoolId = Number.isInteger(schoolIdNum) ? schoolIdNum : (userRole === 'ADMIN' && schoolId ? schoolId : null);
       const userData = {
         email: formData.email?.trim() || '',
@@ -347,13 +347,13 @@ const UserCreatePage = () => {
         userData.schoolId = effectiveSchoolId;
       }
 
-      // Th锚m classId (b岷痶 bu峄檆 cho h峄峜 sinh)
+      // Thêm classId (bắt buộc cho học sinh)
       const selectedRole = roles.find(r => r.id === roleIdNum || r.id === formData.roleId);
       const isStudent = selectedRole && (selectedRole.name?.toUpperCase() === 'STUDENT' || selectedRole.name?.toUpperCase().startsWith('STUDENT'));
 
       if (isStudent) {
         if (!formData.classId) {
-          setError('L峄沺 l脿 b岷痶 bu峄檆 khi t岷 h峄峜 sinh');
+          setError('Lớp là bắt buộc khi tạo học sinh');
           setLoading(false);
           return;
         }
@@ -375,14 +375,14 @@ const UserCreatePage = () => {
 
       console.log('Creating user with data:', userData);
 
-      // Th锚m th么ng tin ph芒n quy峄乶 v脿o request
+      // Thêm thông tin phân quyền vào request
       let url = '/users';
       if (userRole === 'SUPER_ADMIN') {
         url += '?currentUserRole=SUPER_ADMIN';
       } else if (userRole === 'ADMIN' && schoolId) {
         url += `?currentUserRole=ADMIN&currentUserSchoolId=${schoolId}`;
       } else {
-        setError('Không có quyền truy cập.');
+        setError('Access denied');
         return;
       }
 
@@ -399,7 +399,7 @@ const UserCreatePage = () => {
       console.error('Error creating user:', err);
       const res = err.response?.data;
       if (res) console.warn('Server 400 response:', res);
-      const errorMessage = res?.message || res?.error || 'T岷 ng瓢峄漣 d霉ng th岷 b岷';
+      const errorMessage = res?.message || res?.error || 'Tạo người dùng thất bại';
       setError(errorMessage);
       alert(errorMessage);
     } finally {
@@ -409,12 +409,12 @@ const UserCreatePage = () => {
 
   const handleCreateRole = async () => {
     if (!formData.schoolId) {
-      alert('Vui l貌ng ch峄峮 tr瓢峄漬g tr瓢峄沜');
+      alert('Vui lòng chọn trường trước');
       return;
     }
 
     if (!newRoleData.name) {
-      alert('Vui l貌ng nh岷璸 t锚n role');
+      alert('Vui lòng nhập tên role');
       return;
     }
 
@@ -438,7 +438,7 @@ const UserCreatePage = () => {
       console.log('Created role:', createdRole);
 
       if (!createdRole || !createdRole.id) {
-        alert('T岷 role th脿nh c么ng nh瓢ng kh么ng th峄?l岷 ID c峄 role. Vui l貌ng t岷 l岷 trang.');
+        alert('Tạo role thành công nhưng không thể lấy ID của role. Vui lòng tải lại trang.');
         setShowRoleModal(false);
         setNewRoleData({ name: '', description: '' });
         // Refresh the page
@@ -466,7 +466,7 @@ const UserCreatePage = () => {
       setShowRoleModal(false);
       setNewRoleData({ name: '', description: '' });
 
-      alert('T岷 role th脿nh c么ng v脿 膽茫 t峄?膽峄檔g ch峄峮!');
+      alert('Tạo role thành công và đã tự động chọn!');
     } catch (err) {
       console.error('Error creating role:', err);
 
@@ -508,16 +508,16 @@ const UserCreatePage = () => {
             setShowRoleModal(false);
             setNewRoleData({ name: '', description: '' });
 
-            alert(`Role "${newRoleData.name}" 膽茫 t峄搉 t岷 v脿 膽茫 膽瓢峄 t峄?膽峄檔g ch峄峮!`);
+            alert(`Role "${newRoleData.name}" đã tồn tại và đã được tự động chọn!`);
           } else {
-            alert(`Role "${newRoleData.name}" 膽茫 t峄搉 t岷 trong h峄?th峄憂g.`);
+            alert(`Role "${newRoleData.name}" đã tồn tại trong hệ thống.`);
           }
         } catch (fetchErr) {
           console.error('Error fetching existing role:', fetchErr);
-          alert(`Role "${newRoleData.name}" 膽茫 t峄搉 t岷 trong h峄?th峄憂g.`);
+          alert(`Role "${newRoleData.name}" đã tồn tại trong hệ thống.`);
         }
       } else {
-        alert(errorMessage || 'Kh么ng th峄?t岷 role');
+        alert(errorMessage || 'Không thể tạo role');
       }
     } finally {
       setCreatingRole(false);
@@ -574,10 +574,10 @@ const UserCreatePage = () => {
               />
             </div>
 
-            {/* H峄?t锚n */}
+            {/* Họ tên */}
             <div>
               <label htmlFor="fullName" className="block text-sm font-medium text-gray-700">
-                H峄?t锚n *
+                Họ tên *
               </label>
               <input
                 type="text"
@@ -591,10 +591,10 @@ const UserCreatePage = () => {
               />
             </div>
 
-            {/* M岷璽 kh岷﹗ */}
+            {/* Mật khẩu */}
             <div>
               <label htmlFor="password" className="block text-sm font-medium text-gray-700">
-                M岷璽 kh岷﹗ *
+                Mật khẩu *
               </label>
               <input
                 type="password"
@@ -608,10 +608,10 @@ const UserCreatePage = () => {
               />
             </div>
 
-            {/* X谩c nh岷璶 m岷璽 kh岷﹗ */}
+            {/* Xác nhận mật khẩu */}
             <div>
               <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700">
-                X谩c nh岷璶 m岷璽 kh岷﹗ *
+                Xác nhận mật khẩu *
               </label>
               <input
                 type="password"
@@ -625,10 +625,10 @@ const UserCreatePage = () => {
               />
             </div>
 
-            {/* Tr瓢峄漬g */}
+            {/* Trường */}
             <div>
               <label htmlFor="schoolId" className="block text-sm font-medium text-gray-700">
-                Tr瓢峄漬g *
+                Trường *
               </label>
               <select
                 name="schoolId"
@@ -648,11 +648,11 @@ const UserCreatePage = () => {
               </select>
             </div>
 
-            {/* Vai tr貌 */}
+            {/* Vai trò */}
             <div>
               <div className="flex items-center justify-between mb-2">
                 <label htmlFor="roleId" className="block text-sm font-medium text-gray-700">
-                  Vai tr貌 *
+                  Vai trò *
                 </label>
                 {formData.schoolId && user?.role?.name?.toUpperCase() === 'SUPER_ADMIN' && (
                   <button
@@ -660,7 +660,7 @@ const UserCreatePage = () => {
                     onClick={() => setShowRoleModal(true)}
                     className="text-xs bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded font-medium shadow-sm"
                   >
-                    + Th锚m role
+                    + Thêm role
                   </button>
                 )}
               </div>
@@ -670,12 +670,12 @@ const UserCreatePage = () => {
                   {roles.length === 0 ? (
                     <div className="mt-1 block w-full border-2 border-yellow-400 rounded-md p-4 bg-yellow-50">
                       <p className="text-sm text-yellow-800">
-                        鈿狅笍 Kh么ng c贸 role ph霉 h峄 cho tr瓢峄漬g n脿y.
+                        ⚠️ Không có role phù hợp cho trường này.
                       </p>
                       <p className="text-xs text-yellow-600 mt-1">
                         {user?.role?.name?.toUpperCase() === 'SUPER_ADMIN'
-                          ? 'Vui l貌ng click n煤t "+ Th锚m role" b锚n tr锚n 膽峄?t岷 role ADMIN'
-                          : 'Vui l貌ng click n煤t "+ Th锚m role" b锚n tr锚n 膽峄?t岷 role STUDENT, TEACHER'
+                          ? 'Vui lòng click nút "+ Thêm role" bên trên để tạo role ADMIN'
+                          : 'Vui lòng click nút "+ Thêm role" bên trên để tạo role STUDENT, TEACHER'
                         }
                       </p>
                     </div>
@@ -690,7 +690,7 @@ const UserCreatePage = () => {
                         required
                         disabled={loadingRoles}
                       >
-                        <option value="">{loadingRoles ? '膼ang t岷...' : 'Ch峄峮 vai tr貌'}</option>
+                        <option value="">{loadingRoles ? 'Đang tải...' : 'Chọn vai trò'}</option>
                         {roles.map(role => (
                           <option key={role.id} value={String(role.id)}>
                             {role.name || ''} {role.description ? `- ${role.description}` : ''}
@@ -711,7 +711,7 @@ const UserCreatePage = () => {
               {showRoleModal && formData.schoolId && user?.role?.name?.toUpperCase() === 'SUPER_ADMIN' && (
                 <div className="mt-4 border border-gray-300 rounded-md p-4 bg-gray-50">
                   <div className="flex items-center justify-between mb-3">
-                    <h4 className="text-sm font-bold text-gray-900">Th锚m role m峄沬</h4>
+                    <h4 className="text-sm font-bold text-gray-900">Thêm role mới</h4>
                     <button
                       type="button"
                       onClick={() => {
@@ -720,13 +720,13 @@ const UserCreatePage = () => {
                       }}
                       className="text-gray-500 hover:text-gray-700 text-xl"
                     >
-                      脳
+                      ×
                     </button>
                   </div>
                   <div className="grid grid-cols-1 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
-                        T锚n role *
+                        Tên role *
                       </label>
                       <input
                         type="text"
@@ -739,14 +739,14 @@ const UserCreatePage = () => {
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
-                        M么 t岷?
+                        Mô tả
                       </label>
                       <textarea
                         value={newRoleData.description}
                         onChange={(e) => setNewRoleData({ ...newRoleData, description: e.target.value })}
                         className="block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
                         rows="2"
-                        placeholder="M么 t岷?role"
+                        placeholder="Mô tả role"
                       />
                     </div>
                     <div className="flex justify-end space-x-2">
@@ -756,7 +756,7 @@ const UserCreatePage = () => {
                         disabled={creatingRole}
                         className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium py-2 px-4 rounded disabled:opacity-50 disabled:cursor-not-allowed"
                       >
-                        {creatingRole ? '膼ang t岷...' : 'T岷 role'}
+                        {creatingRole ? 'Đang tạo...' : 'Tạo role'}
                       </button>
                     </div>
                   </div>
@@ -764,10 +764,10 @@ const UserCreatePage = () => {
               )}
             </div>
 
-            {/* Tr岷g th谩i */}
+            {/* Trạng thái */}
             <div>
               <label htmlFor="status" className="block text-sm font-medium text-gray-700">
-                Tr岷g th谩i
+                Trạng thái
               </label>
               <select
                 name="status"
@@ -776,24 +776,24 @@ const UserCreatePage = () => {
                 onChange={handleChange}
                 className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
               >
-                <option value="ACTIVE">膼ang ho岷 膽峄檔g</option>
-                <option value="INACTIVE">Ng瓢ng ho岷 膽峄檔g</option>
-                <option value="SUSPENDED">B峄?kh贸a</option>
+                <option value="ACTIVE">Đang hoạt động</option>
+                <option value="INACTIVE">Ngưng hoạt động</option>
+                <option value="SUSPENDED">Bị khóa</option>
               </select>
             </div>
 
-            {/* ========== Field ri锚ng theo role ========== */}
-            {/* 馃鈥嶐煄?STUDENT: M茫 l峄沺, Ng脿y sinh, Gi峄沬 t铆nh */}
+            {/* ========== Field riêng theo role ========== */}
+            {/* 🧑‍🎓 STUDENT: Mã lớp, Ngày sinh, Giới tính */}
             {(() => {
               const selectedRole = roles.find(r => r.id === parseInt(formData.roleId));
               const isStudent = selectedRole && (selectedRole.name?.toUpperCase() === 'STUDENT' || selectedRole.name?.toUpperCase().startsWith('STUDENT'));
               if (!isStudent || !formData.schoolId) return null;
               return (
                 <div className="border-t pt-4 mt-4">
-                  <h4 className="text-sm font-semibold text-gray-800 mb-3">馃鈥嶐煄?H峄峜 sinh</h4>
+                  <h4 className="text-sm font-semibold text-gray-800 mb-3">🧑‍🎓 Học sinh</h4>
                   <div className="space-y-4">
                     <div>
-                      <label htmlFor="classId" className="block text-sm font-medium text-gray-700">M茫 l峄沺 *</label>
+                      <label htmlFor="classId" className="block text-sm font-medium text-gray-700">Mã lớp *</label>
                       <select
                         name="classId"
                         id="classId"
@@ -802,7 +802,7 @@ const UserCreatePage = () => {
                         className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
                         required
                       >
-                        <option value="">Ch峄峮 l峄沺</option>
+                        <option value="">Chọn lớp</option>
                         {classes.map(cls => (
                           <option key={cls.id} value={cls.id}>
                             {cls.name} - {typeof cls.schoolYear === 'string' ? cls.schoolYear : (cls.schoolYear?.name ?? '')}
@@ -811,7 +811,7 @@ const UserCreatePage = () => {
                       </select>
                     </div>
                     <div>
-                      <label htmlFor="dateOfBirth" className="block text-sm font-medium text-gray-700">Ng脿y sinh (t霉y ch峄峮)</label>
+                      <label htmlFor="dateOfBirth" className="block text-sm font-medium text-gray-700">Ngày sinh (tùy chọn)</label>
                       <input
                         type="date"
                         name="dateOfBirth"
@@ -822,12 +822,12 @@ const UserCreatePage = () => {
                       />
                     </div>
                     <div>
-                      <label htmlFor="gender" className="block text-sm font-medium text-gray-700">Gi峄沬 t铆nh (t霉y ch峄峮)</label>
+                      <label htmlFor="gender" className="block text-sm font-medium text-gray-700">Giới tính (tùy chọn)</label>
                       <select name="gender" id="gender" value={formData.gender} onChange={handleChange} className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
-                        <option value="">-- Ch峄峮 --</option>
+                        <option value="">-- Chọn --</option>
                         <option value="MALE">Nam</option>
-                        <option value="FEMALE">N峄?</option>
-                        <option value="OTHER">Kh谩c</option>
+                        <option value="FEMALE">Nữ</option>
+                        <option value="OTHER">Khác</option>
                       </select>
                     </div>
                   </div>
@@ -835,20 +835,20 @@ const UserCreatePage = () => {
               );
             })()}
 
-            {/* 馃懇鈥嶐煆?TEACHER: B峄?m么n (nhi峄乽 m么n), S膼T, Ph貌ng ban */}
+            {/* 👩‍🏫 TEACHER: Bộ môn (nhiều môn), SĐT, Phòng ban */}
             {(() => {
               const selectedRole = roles.find(r => r.id === parseInt(formData.roleId));
               const isTeacher = selectedRole && (selectedRole.name?.toUpperCase() === 'TEACHER' || selectedRole.name?.toUpperCase().startsWith('TEACHER'));
               if (!isTeacher || !formData.schoolId) return null;
               return (
                 <div className="border-t pt-4 mt-4">
-                  <h4 className="text-sm font-semibold text-gray-800 mb-3">馃懇鈥嶐煆?Gi谩o vi锚n</h4>
+                  <h4 className="text-sm font-semibold text-gray-800 mb-3">👩‍🏫 Giáo viên</h4>
                   <div className="space-y-4">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">B峄?m么n 鈥?膽谩nh d岷 tick ch峄峮 nhi峄乽 m么n</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Bộ môn — đánh dấu tick chọn nhiều môn</label>
                       <div className="mt-1 border border-gray-200 rounded-md p-3 max-h-48 overflow-y-auto bg-gray-50">
                         {subjects.length === 0 ? (
-                          <p className="text-sm text-gray-500">Ch瓢a c贸 m么n h峄峜 n脿o trong tr瓢峄漬g.</p>
+                          <p className="text-sm text-gray-500">Chưa có môn học nào trong trường.</p>
                         ) : (
                           subjects.map(s => (
                             <label key={s.id} className="flex items-center gap-2 py-1.5 cursor-pointer hover:bg-gray-100 rounded px-2 -mx-2">
@@ -863,35 +863,35 @@ const UserCreatePage = () => {
                           ))
                         )}
                       </div>
-                      {(formData.subjectIds || []).length > 0 && <p className="text-xs text-green-600 mt-1">膼茫 ch峄峮 {(formData.subjectIds || []).length} m么n</p>}
+                      {(formData.subjectIds || []).length > 0 && <p className="text-xs text-green-600 mt-1">Đã chọn {(formData.subjectIds || []).length} môn</p>}
                     </div>
                     <div>
-                      <label htmlFor="phone" className="block text-sm font-medium text-gray-700">S峄?膽i峄噉 tho岷 (t霉y ch峄峮)</label>
+                      <label htmlFor="phone" className="block text-sm font-medium text-gray-700">Số điện thoại (tùy chọn)</label>
                       <input type="text" name="phone" id="phone" value={formData.phone} onChange={handleChange} placeholder="0912345678" className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm" />
                     </div>
                     <div>
-                      <label htmlFor="department" className="block text-sm font-medium text-gray-700">Ph貌ng ban (t霉y ch峄峮)</label>
-                      <input type="text" name="department" id="department" value={formData.department} onChange={handleChange} placeholder="VD: T峄?To谩n" className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm" />
+                      <label htmlFor="department" className="block text-sm font-medium text-gray-700">Phòng ban (tùy chọn)</label>
+                      <input type="text" name="department" id="department" value={formData.department} onChange={handleChange} placeholder="VD: Tổ Toán" className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm" />
                     </div>
                   </div>
                 </div>
               );
             })()}
 
-            {/* 馃懆鈥嶐煈┾€嶐煈?PARENT: Danh s谩ch h峄峜 sinh, S膼T, Quan h峄?*/}
+            {/* 👨‍👩‍👧 PARENT: Danh sách học sinh, SĐT, Quan hệ */}
             {(() => {
               const selectedRole = roles.find(r => r.id === parseInt(formData.roleId));
               const isParent = selectedRole && (selectedRole.name?.toUpperCase() === 'PARENT' || selectedRole.name?.toUpperCase().startsWith('PARENT'));
               if (!isParent || !formData.schoolId) return null;
               return (
                 <div className="border-t pt-4 mt-4">
-                  <h4 className="text-sm font-semibold text-gray-800 mb-3">馃懆鈥嶐煈┾€嶐煈?Ph峄?huynh</h4>
+                  <h4 className="text-sm font-semibold text-gray-800 mb-3">👨‍👩‍👧 Phụ huynh</h4>
                   <div className="space-y-4">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Danh s谩ch h峄峜 sinh (con) 鈥?膽谩nh d岷 tick ch峄峮 nhi峄乽 con</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Danh sách học sinh (con) — đánh dấu tick chọn nhiều con</label>
                       <div className="mt-1 border border-gray-200 rounded-md p-3 max-h-48 overflow-y-auto bg-gray-50">
                         {schoolStudents.length === 0 ? (
-                          <p className="text-sm text-gray-500">Ch瓢a c贸 h峄峜 sinh n脿o trong tr瓢峄漬g.</p>
+                          <p className="text-sm text-gray-500">Chưa có học sinh nào trong trường.</p>
                         ) : (
                           schoolStudents.map(s => (
                             <label key={s.id} className="flex items-center gap-2 py-1.5 cursor-pointer hover:bg-gray-100 rounded px-2 -mx-2">
@@ -906,19 +906,19 @@ const UserCreatePage = () => {
                           ))
                         )}
                       </div>
-                      {(formData.studentIds || []).length > 0 && <p className="text-xs text-green-600 mt-1">膼茫 ch峄峮 {(formData.studentIds || []).length} con</p>}
+                      {(formData.studentIds || []).length > 0 && <p className="text-xs text-green-600 mt-1">Đã chọn {(formData.studentIds || []).length} con</p>}
                     </div>
                     <div>
-                      <label htmlFor="parentPhone" className="block text-sm font-medium text-gray-700">S峄?膽i峄噉 tho岷 (t霉y ch峄峮)</label>
+                      <label htmlFor="parentPhone" className="block text-sm font-medium text-gray-700">Số điện thoại (tùy chọn)</label>
                       <input type="text" name="phone" id="parentPhone" value={formData.phone} onChange={handleChange} placeholder="0912345678" className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm" />
                     </div>
                     <div>
-                      <label htmlFor="relationship" className="block text-sm font-medium text-gray-700">Quan h峄?(t霉y ch峄峮)</label>
+                      <label htmlFor="relationship" className="block text-sm font-medium text-gray-700">Quan hệ (tùy chọn)</label>
                       <select name="relationship" id="relationship" value={formData.relationship} onChange={handleChange} className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
-                        <option value="">-- Ch峄峮 --</option>
+                        <option value="">-- Chọn --</option>
                         <option value="CHA">Cha</option>
-                        <option value="ME">M岷?</option>
-                        <option value="KHAC">Kh谩c</option>
+                        <option value="ME">Mẹ</option>
+                        <option value="KHAC">Khác</option>
                       </select>
                     </div>
                   </div>
@@ -962,8 +962,6 @@ const UserCreatePage = () => {
 };
 
 export default UserCreatePage;
-
-
 
 
 

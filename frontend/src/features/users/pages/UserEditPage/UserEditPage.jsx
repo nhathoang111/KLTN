@@ -63,7 +63,7 @@ const UserEditPage = () => {
       const response = await api.get(`/users/${id}`);
       const user = response?.data;
       if (!user) {
-        setError('Kh么ng t岷 膽瓢峄 th么ng tin ng瓢峄漣 d霉ng');
+        setError('Không tải được thông tin người dùng');
         setLoadingData(false);
         return;
       }
@@ -77,7 +77,9 @@ const UserEditPage = () => {
             allRoles = (allRoles || []).filter(r => isAllowedRoleForSchoolAdmin(r?.name));
           }
           setRoles(allRoles);
-        } catch (_) { }
+        } catch (error) {
+          console.error(error);
+        }
       }
 
       let classId = '';
@@ -86,7 +88,9 @@ const UserEditPage = () => {
           const enrollmentResponse = await api.get(`/users/${id}/enrollment`);
           const enrollment = enrollmentResponse?.data?.enrollment ?? enrollmentResponse?.data?.enrollments?.[0];
           if (enrollment?.classId) classId = String(enrollment.classId);
-        } catch (_) { }
+        } catch (error) {
+          console.error(error);
+        }
       }
 
       let studentIds = [];
@@ -94,7 +98,9 @@ const UserEditPage = () => {
         try {
           const res = await api.get(`/users/${id}/parent-students`);
           studentIds = (res.data.studentIds || []).map(String);
-        } catch (_) { }
+        } catch (error) {
+          console.error(error);
+        }
       }
 
       let subjectIds = [];
@@ -102,7 +108,9 @@ const UserEditPage = () => {
         try {
           const res = await api.get(`/users/${id}/teacher-subjects`);
           subjectIds = (res.data.subjectIds || []).map(String);
-        } catch (_) { }
+        } catch (error) {
+          console.error(error);
+        }
       }
 
       setFormData({
@@ -123,7 +131,7 @@ const UserEditPage = () => {
         status: user.status || 'ACTIVE'
       });
     } catch (err) {
-      setError('Kh么ng t岷 膽瓢峄 th么ng tin ng瓢峄漣 d霉ng');
+      setError('Không tải được thông tin người dùng');
       console.error(err);
     } finally {
       setLoadingData(false);
@@ -132,15 +140,15 @@ const UserEditPage = () => {
 
   const isRoleTeacher = (name) => {
     const u = (name || '').toUpperCase();
-    return u.includes('TEACHER') || u.includes('GI脕O VI脢N') || u.includes('GIAO VIEN') || u.includes('GV');
+    return u.includes('TEACHER') || u.includes('GIÁO VIÊN') || u.includes('GIAO VIEN') || u.includes('GV');
   };
   const isRoleStudent = (name) => {
     const u = (name || '').toUpperCase();
-    return u.startsWith('STUDENT') || u.includes('H峄孋 SINH') || u.includes('HOC SINH');
+    return u.startsWith('STUDENT') || u.includes('HỌC SINH') || u.includes('HOC SINH');
   };
   const isRoleParent = (name) => {
     const u = (name || '').toUpperCase();
-    return u.includes('PARENT') || u.includes('PH峄?HUYNH') || u.includes('PHU HUYNH');
+    return u.includes('PARENT') || u.includes('PHỤ HUYNH') || u.includes('PHU HUYNH');
   };
   const isAllowedRoleForSchoolAdmin = (roleName) => {
     return isRoleStudent(roleName) || isRoleTeacher(roleName) || isRoleParent(roleName);
@@ -197,7 +205,7 @@ const UserEditPage = () => {
       const res = await api.get('/schools');
       setSchools(res.data.schools || []);
     } catch (err) {
-      setError('Kh么ng t岷 膽瓢峄 danh s谩ch tr瓢峄漬g');
+      setError('Không tải được danh sách trường');
     }
   };
 
@@ -240,20 +248,20 @@ const UserEditPage = () => {
   };
 
   const validateForm = () => {
-    if (!formData.email) { setError('Email l脿 b岷痶 bu峄檆'); return false; }
-    if (!formData.fullName) { setError('H峄?t锚n l脿 b岷痶 bu峄檆'); return false; }
+    if (!formData.email) { setError('Email là bắt buộc'); return false; }
+    if (!formData.fullName) { setError('Họ tên là bắt buộc'); return false; }
     if (formData.password && formData.password !== formData.confirmPassword) {
-      setError('M岷璽 kh岷﹗ x谩c nh岷璶 kh么ng kh峄沺'); return false;
+      setError('Mật khẩu xác nhận không khớp'); return false;
     }
-    if (!formData.roleId) { setError('Vai tr貌 l脿 b岷痶 bu峄檆'); return false; }
-    if (!formData.schoolId) { setError('Tr瓢峄漬g l脿 b岷痶 bu峄檆'); return false; }
+    if (!formData.roleId) { setError('Vai trò là bắt buộc'); return false; }
+    if (!formData.schoolId) { setError('Trường là bắt buộc'); return false; }
     const selectedRole = roles.find(r => r.id === parseInt(formData.roleId, 10) || r.id === formData.roleId);
     if (isSchoolAdmin && !isAllowedRoleForSchoolAdmin(selectedRole?.name)) {
-      setError('Admin ch峄?膽瓢峄 g谩n vai tr貌: Ph峄?huynh / H峄峜 sinh / Gi谩o vi锚n');
+      setError('Admin chỉ được gán vai trò: Phụ huynh / Học sinh / Giáo viên');
       return false;
     }
     if (isRoleStudent(selectedRole?.name) && !formData.classId) {
-      setError('H峄峜 sinh b岷痶 bu峄檆 ph岷 ch峄峮 l峄沺'); return false;
+      setError('Học sinh bắt buộc phải chọn lớp'); return false;
     }
     return true;
   };
@@ -267,7 +275,7 @@ const UserEditPage = () => {
       const roleIdNum = parseInt(formData.roleId, 10);
       const schoolIdNum = parseInt(formData.schoolId, 10);
       if (Number.isNaN(roleIdNum) || Number.isNaN(schoolIdNum)) {
-        setError('Vai trò và tr??ng kh?ng h?p l?');
+        setError('Vai trò và trường không hợp lệ');
         setLoading(false);
         return;
       }
@@ -300,10 +308,10 @@ const UserEditPage = () => {
       }
 
       await api.put(`/users/${id}`, userData);
-      setSuccess('C岷璸 nh岷璽 ng瓢峄漣 d霉ng th脿nh c么ng!');
+      setSuccess('Cập nhật người dùng thành công!');
       setTimeout(() => navigate('/users'), 1500);
     } catch (err) {
-      setError(err.response?.data?.error || 'C岷璸 nh岷璽 th岷 b岷');
+      setError(err.response?.data?.error || 'Cập nhật thất bại');
       console.error(err);
     } finally {
       setLoading(false);
@@ -326,8 +334,8 @@ const UserEditPage = () => {
   return (
     <div className="max-w-2xl mx-auto">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Ch峄塶h s峄璦 ng瓢峄漣 d霉ng</h1>
-        <p className="mt-1 text-sm text-gray-500">C岷璸 nh岷璽 th么ng tin theo t峄玭g vai tr貌 (h峄峜 sinh / ph峄?huynh / gi谩o vi锚n).</p>
+        <h1 className="text-2xl font-bold text-gray-900">Chỉnh sửa người dùng</h1>
+        <p className="mt-1 text-sm text-gray-500">Cập nhật thông tin theo từng vai trò (học sinh / phụ huynh / giáo viên).</p>
       </div>
 
       {error && (
@@ -339,11 +347,11 @@ const UserEditPage = () => {
 
       {showRoleChangeConfirm && (
         <div className="mb-4 p-4 bg-amber-50 border border-amber-200 rounded">
-          <p className="text-amber-800 font-medium">膼峄昳 vai tr貌?</p>
-          <p className="text-amber-700 text-sm mt-1">Khi l瓢u form: d峄?li峄噓 c农 (l峄沺 h峄峜, danh s谩ch con, b峄?m么n) s岷?膽瓢峄 x峄?l媒 t峄?膽峄檔g theo vai tr貌 m峄沬.</p>
+          <p className="text-amber-800 font-medium">Đổi vai trò?</p>
+          <p className="text-amber-700 text-sm mt-1">Khi lưu form: dữ liệu cũ (lớp học, danh sách con, bộ môn) sẽ được xử lý tự động theo vai trò mới.</p>
           <div className="mt-3 flex gap-2">
-            <button type="button" onClick={confirmRoleChange} className="px-3 py-1.5 bg-amber-600 text-white rounded text-sm font-medium">X谩c nh岷璶 膽峄昳 vai tr貌</button>
-            <button type="button" onClick={() => { setPendingRoleId(null); setShowRoleChangeConfirm(false); }} className="px-3 py-1.5 border border-gray-300 rounded text-sm">H峄 (gi峄?vai tr貌 c农)</button>
+            <button type="button" onClick={confirmRoleChange} className="px-3 py-1.5 bg-amber-600 text-white rounded text-sm font-medium">Xác nhận đổi vai trò</button>
+            <button type="button" onClick={() => { setPendingRoleId(null); setShowRoleChangeConfirm(false); }} className="px-3 py-1.5 border border-gray-300 rounded text-sm">Hủy (giữ vai trò cũ)</button>
           </div>
         </div>
       )}
@@ -355,26 +363,26 @@ const UserEditPage = () => {
             <input type="email" name="email" value={formData.email} onChange={handleChange} className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm sm:text-sm" required />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700">H峄?t锚n *</label>
+            <label className="block text-sm font-medium text-gray-700">Họ tên *</label>
             <input type="text" name="fullName" value={formData.fullName} onChange={handleChange} className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm sm:text-sm" required />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700">M岷璽 kh岷﹗ m峄沬 (膽峄?tr峄憂g n岷縰 gi峄?nguy锚n)</label>
+            <label className="block text-sm font-medium text-gray-700">Mật khẩu mới (để trống nếu giữ nguyên)</label>
             <input type="password" name="password" value={formData.password} onChange={handleChange} className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm sm:text-sm" />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700">X谩c nh岷璶 m岷璽 kh岷﹗ m峄沬</label>
+            <label className="block text-sm font-medium text-gray-700">Xác nhận mật khẩu mới</label>
             <input type="password" name="confirmPassword" value={formData.confirmPassword} onChange={handleChange} className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm sm:text-sm" />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700">Tr瓢峄漬g</label>
-            <input type="text" value={schools.find(s => s.id === parseInt(formData.schoolId))?.name || 'Không có'} disabled className="mt-1 block w-full border border-gray-300 rounded-md bg-gray-100 sm:text-sm" readOnly />
+            <label className="block text-sm font-medium text-gray-700">Trường</label>
+            <input type="text" value={schools.find(s => s.id === parseInt(formData.schoolId))?.name || 'N/A'} disabled className="mt-1 block w-full border border-gray-300 rounded-md bg-gray-100 sm:text-sm" readOnly />
             <input type="hidden" name="schoolId" value={formData.schoolId} />
           </div>
 
-          {/* Vai tr貌 鈥?Admin c贸 th峄?膽峄昳 (popup x谩c nh岷璶 khi 膽峄昳) */}
+          {/* Vai trò — Admin có thể đổi (popup xác nhận khi đổi) */}
           <div>
-            <label className="block text-sm font-medium text-gray-700">Vai tr貌 *</label>
+            <label className="block text-sm font-medium text-gray-700">Vai trò *</label>
             {isAdmin ? (
               <>
                 <select
@@ -385,27 +393,27 @@ const UserEditPage = () => {
                   className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm sm:text-sm"
                   required
                 >
-                  <option value="">{loadingRoles ? '膼ang t岷...' : 'Ch峄峮 vai tr貌'}</option>
+                  <option value="">{loadingRoles ? 'Đang tải...' : 'Chọn vai trò'}</option>
                   {roles.map(r => (
                     <option key={r.id} value={String(r.id)}>{r.name} - {r.description}</option>
                   ))}
                 </select>
-                <p className="text-xs text-gray-500 mt-1">B岷 c贸 th峄?膽峄昳 vai tr貌 (H峄峜 sinh / Gi谩o vi锚n / Ph峄?huynh). Khi l瓢u, d峄?li峄噓 c农 s岷?膽瓢峄 x峄?l媒 t峄?膽峄檔g.</p>
+                <p className="text-xs text-gray-500 mt-1">Bạn có thể đổi vai trò (Học sinh / Giáo viên / Phụ huynh). Khi lưu, dữ liệu cũ sẽ được xử lý tự động.</p>
               </>
             ) : (
               <>
-                <input type="text" value={selectedRole ? `${selectedRole.name} - ${selectedRole.description}` : 'Không có'} disabled className="mt-1 block w-full border border-gray-300 rounded-md bg-gray-100 sm:text-sm" />
-                <p className="text-xs text-gray-500 mt-1">Ch峄?Admin m峄沬 c贸 th峄?膽峄昳 vai tr貌.</p>
+                <input type="text" value={selectedRole ? `${selectedRole.name} - ${selectedRole.description}` : 'N/A'} disabled className="mt-1 block w-full border border-gray-300 rounded-md bg-gray-100 sm:text-sm" />
+                <p className="text-xs text-gray-500 mt-1">Chỉ Admin mới có thể đổi vai trò.</p>
               </>
             )}
           </div>
 
-          {/* STUDENT: L峄沺 b岷痶 bu峄檆 */}
+          {/* STUDENT: Lớp bắt buộc */}
           {isStudent && formData.schoolId && (
             <div>
-              <label className="block text-sm font-medium text-gray-700">L峄沺 *</label>
+              <label className="block text-sm font-medium text-gray-700">Lớp *</label>
               <select name="classId" value={formData.classId} onChange={handleChange} className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm sm:text-sm" required>
-                <option value="">Ch峄峮 l峄沺</option>
+                <option value="">Chọn lớp</option>
                 {classes.map(cls => (
                   <option key={cls.id} value={cls.id}>
                     {cls.name} - {typeof cls.schoolYear === 'object' && cls.schoolYear != null ? (cls.schoolYear?.name ?? '') : (cls.schoolYear ?? '')}
@@ -415,13 +423,13 @@ const UserEditPage = () => {
             </div>
           )}
 
-          {/* PARENT: Danh s谩ch h峄峜 sinh (multi-select) */}
+          {/* PARENT: Danh sách học sinh (multi-select) */}
           {isParent && formData.schoolId && (
             <div>
-              <label className="block text-sm font-medium text-gray-700">Danh s谩ch con (h峄峜 sinh)</label>
+              <label className="block text-sm font-medium text-gray-700">Danh sách con (học sinh)</label>
               <div className="mt-1 border border-gray-300 rounded-md p-2 max-h-48 overflow-y-auto">
                 {schoolStudents.length === 0 ? (
-                  <p className="text-sm text-gray-500">Ch瓢a c贸 h峄峜 sinh n脿o trong tr瓢峄漬g.</p>
+                  <p className="text-sm text-gray-500">Chưa có học sinh nào trong trường.</p>
                 ) : (
                   schoolStudents.map(s => (
                     <label key={s.id} className="flex items-center gap-2 py-1.5 cursor-pointer hover:bg-gray-100 rounded px-2 -mx-2">
@@ -434,13 +442,13 @@ const UserEditPage = () => {
             </div>
           )}
 
-          {/* TEACHER: B峄?m么n (multi-select) */}
+          {/* TEACHER: Bộ môn (multi-select) */}
           {isTeacher && formData.schoolId && (
             <div>
-              <label className="block text-sm font-medium text-gray-700">B峄?m么n</label>
+              <label className="block text-sm font-medium text-gray-700">Bộ môn</label>
               <div className="mt-1 border border-gray-300 rounded-md p-2 max-h-48 overflow-y-auto">
                 {subjects.length === 0 ? (
-                  <p className="text-sm text-gray-500">Ch瓢a c贸 m么n n脿o trong tr瓢峄漬g.</p>
+                  <p className="text-sm text-gray-500">Chưa có môn nào trong trường.</p>
                 ) : (
                   subjects.map(sub => (
                     <label key={sub.id} className="flex items-center gap-2 py-1.5 cursor-pointer hover:bg-gray-100 rounded px-2 -mx-2">
@@ -453,50 +461,50 @@ const UserEditPage = () => {
             </div>
           )}
 
-          {/* Th么ng tin c谩 nh芒n chung */}
+          {/* Thông tin cá nhân chung */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700">Ng脿y sinh</label>
+              <label className="block text-sm font-medium text-gray-700">Ngày sinh</label>
               <input type="date" name="dateOfBirth" value={formData.dateOfBirth} onChange={handleChange} className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm sm:text-sm" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700">Gi峄沬 t铆nh</label>
-              <input type="text" name="gender" value={formData.gender} onChange={handleChange} placeholder="Nam/N峄?kh谩c" className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm sm:text-sm" />
+              <label className="block text-sm font-medium text-gray-700">Giới tính</label>
+              <input type="text" name="gender" value={formData.gender} onChange={handleChange} placeholder="Nam/Nữ/khác" className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm sm:text-sm" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700">S膼T</label>
+              <label className="block text-sm font-medium text-gray-700">SĐT</label>
               <input type="text" name="phone" value={formData.phone} onChange={handleChange} className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm sm:text-sm" />
             </div>
             {isTeacher && (
               <div>
-                <label className="block text-sm font-medium text-gray-700">Ph貌ng ban</label>
+                <label className="block text-sm font-medium text-gray-700">Phòng ban</label>
                 <input type="text" name="department" value={formData.department} onChange={handleChange} className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm sm:text-sm" />
               </div>
             )}
             {isParent && (
               <div>
-                <label className="block text-sm font-medium text-gray-700">Quan h峄?v峄沬 con</label>
-                <input type="text" name="relationship" value={formData.relationship} onChange={handleChange} placeholder="Cha/M岷?..." className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm sm:text-sm" />
+                <label className="block text-sm font-medium text-gray-700">Quan hệ với con</label>
+                <input type="text" name="relationship" value={formData.relationship} onChange={handleChange} placeholder="Cha/Mẹ/..." className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm sm:text-sm" />
               </div>
             )}
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700">Tr岷g th谩i</label>
+            <label className="block text-sm font-medium text-gray-700">Trạng thái</label>
             <select name="status" value={formData.status} onChange={handleChange} className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm sm:text-sm">
-              <option value="ACTIVE">Ho岷 膽峄檔g</option>
-              <option value="INACTIVE">Kh么ng ho岷 膽峄檔g</option>
-              <option value="SUSPENDED">T岷 kh贸a</option>
+              <option value="ACTIVE">Hoạt động</option>
+              <option value="INACTIVE">Không hoạt động</option>
+              <option value="SUSPENDED">Tạm khóa</option>
             </select>
           </div>
         </div>
 
         <div className="flex justify-end gap-3">
           <button type="button" onClick={() => navigate('/users')} className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50">
-            H峄
+            Hủy
           </button>
           <button type="submit" disabled={loading} className="px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
-            {loading ? '膼ang l瓢u...' : 'C岷璸 nh岷璽'}
+            {loading ? 'Đang lưu...' : 'Cập nhật'}
           </button>
         </div>
       </form>
@@ -505,6 +513,4 @@ const UserEditPage = () => {
 };
 
 export default UserEditPage;
-
-
 

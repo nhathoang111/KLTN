@@ -31,7 +31,7 @@ const TeacherDashboard = () => {
     { title: 'Gửi thông báo', icon: '📢', path: '/announcements', color: '#f5576c', description: 'Gửi thông báo cho học sinh/lớp' },
     { title: 'Giao & Chấm bài tập', icon: '📋', path: '/assignments', color: '#4facfe', description: 'Giao & chấm bài tập' },
     //{ title: 'Theo dõi chuyên cần', icon: '✅', path: '/attendance', color: '#00f2fe', description: 'Theo dõi chuyên cần học sinh' },
-    { title: 'Giao tiếp học sinh', icon: '💬', path: '/messages', color: '#ff6b6b', description: 'Giao tiếp với học sinh' }
+    { title: 'Giao tiếp học sinh', icon: '💬', path: '/announcements', color: '#ff6b6b', description: 'Giao tiếp với học sinh' }
   ];
 
   if (loading) {

@@ -35,15 +35,15 @@ const AssignmentListPage = () => {
     subjectId: '',
     createdById: ''
   });
-  const [teacherSchedules, setTeacherSchedules] = useState([]); // Schedules c峄 gi谩o vi锚n
-  const [filteredClasses, setFilteredClasses] = useState([]); // Classes m脿 gi谩o vi锚n d岷
-  const [filteredSubjects, setFilteredSubjects] = useState([]); // Subjects m脿 gi谩o vi锚n d岷
+  const [teacherSchedules, setTeacherSchedules] = useState([]); // Schedules của giáo viên
+  const [filteredClasses, setFilteredClasses] = useState([]); // Classes mà giáo viên dạy
+  const [filteredSubjects, setFilteredSubjects] = useState([]); // Subjects mà giáo viên dạy
   const [selectedFile, setSelectedFile] = useState(null);
-  const [studentClassId, setStudentClassId] = useState(null); // Class ID c峄 h峄峜 sinh
-  const [studentSubmissions, setStudentSubmissions] = useState({}); // Map assignmentId -> submission c峄 h峄峜 sinh
-  const [editingSubmission, setEditingSubmission] = useState(null); // Submission 膽ang 膽瓢峄 s峄璦
+  const [studentClassId, setStudentClassId] = useState(null); // Class ID của học sinh
+  const [studentSubmissions, setStudentSubmissions] = useState({}); // Map assignmentId -> submission của học sinh
+  const [editingSubmission, setEditingSubmission] = useState(null); // Submission đang được sửa
 
-  // Fetch enrollment c峄 h峄峜 sinh 膽峄?l岷 classId tr瓢峄沜
+  // Fetch enrollment của học sinh để lấy classId trước
   useEffect(() => {
     const fetchStudentEnrollment = async () => {
       const userRole = user?.role?.name?.toUpperCase();
@@ -73,7 +73,7 @@ const AssignmentListPage = () => {
     fetchData();
   }, [user, studentClassId]);
 
-  // Fetch schedules c峄 gi谩o vi锚n 膽峄?filter classes v脿 subjects
+  // Fetch schedules của giáo viên để filter classes và subjects
   useEffect(() => {
     const userRole = user?.role?.name?.toUpperCase();
     if (userRole === 'TEACHER' && user?.id) {
@@ -81,19 +81,19 @@ const AssignmentListPage = () => {
     }
   }, [user]);
 
-  // Filter classes v脿 subjects khi teacherSchedules thay 膽峄昳
+  // Filter classes và subjects khi teacherSchedules thay đổi
   useEffect(() => {
     const userRole = user?.role?.name?.toUpperCase();
     if (userRole === 'TEACHER') {
       if (teacherSchedules.length > 0) {
         filterTeacherClassesAndSubjects();
       } else {
-        // N岷縰 ch瓢a c贸 schedules, set empty arrays
+        // Nếu chưa có schedules, set empty arrays
         setFilteredClasses([]);
         setFilteredSubjects([]);
       }
     } else {
-      // N岷縰 kh么ng ph岷 gi谩o vi锚n, s峄?d峄g t岷 c岷?classes v脿 subjects
+      // Nếu không phải giáo viên, sử dụng tất cả classes và subjects
       setFilteredClasses(classes);
       setFilteredSubjects(subjects);
     }
@@ -151,7 +151,7 @@ const AssignmentListPage = () => {
       return;
     }
 
-    // L岷 danh s谩ch class IDs v脿 subject IDs t峄?schedules
+    // Lấy danh sách class IDs và subject IDs từ schedules
     const assignedClassIds = new Set();
     const assignedSubjectIds = new Set();
 
@@ -236,8 +236,8 @@ const AssignmentListPage = () => {
           });
           console.log('Filtered assignments for student class:', studentClassId, allAssignments.length);
         } else {
-          // N岷縰 h峄峜 sinh ch瓢a c贸 classId (ch瓢a fetch xong ho岷穋 kh么ng c贸 enrollment), kh么ng hi峄僴 th峄?b脿i t岷璸 n脿o
-          // 膼峄 膽岷縩 khi studentClassId 膽瓢峄 set (c贸 th峄?l脿 null n岷縰 kh么ng c贸 enrollment)
+          // Nếu học sinh chưa có classId (chưa fetch xong hoặc không có enrollment), không hiển thị bài tập nào
+          // Đợi đến khi studentClassId được set (có thể là null nếu không có enrollment)
           allAssignments = [];
         }
       }
@@ -290,7 +290,7 @@ const AssignmentListPage = () => {
         const allUsers = usersRes.data.users || [];
         teacherUsers = allUsers.filter(userItem => {
           const roleName = userItem.role?.name?.toUpperCase();
-          const isTeacherRole = roleName === 'TEACHER' || roleName?.startsWith('TEACHER') || roleName === 'GI脕O VI脢N';
+          const isTeacherRole = roleName === 'TEACHER' || roleName?.startsWith('TEACHER') || roleName === 'GIÁO VIÊN';
 
           if (!isTeacherRole) return false;
 
@@ -374,7 +374,7 @@ const AssignmentListPage = () => {
       fetchData();
     } catch (error) {
       console.error('Error saving assignment:', error);
-      alert(error.response?.data?.error || 'C贸 l峄梚 x岷 ra khi l瓢u b脿i t岷璸');
+      alert(error.response?.data?.error || 'Có lỗi xảy ra khi lưu bài tập');
     }
   };
 
@@ -412,7 +412,7 @@ const AssignmentListPage = () => {
       window.URL.revokeObjectURL(url);
     } catch (error) {
       console.error('Error downloading file:', error);
-      alert('Kh么ng th峄?t岷 file');
+      alert('Không thể tải file');
     }
   };
 
@@ -433,12 +433,12 @@ const AssignmentListPage = () => {
       window.URL.revokeObjectURL(url);
     } catch (error) {
       console.error('Error downloading submission file:', error);
-      alert('Kh么ng th峄?t岷 file');
+      alert('Không thể tải file');
     }
   };
 
   const handleDelete = async (id) => {
-    if (window.confirm('B岷 c贸 ch岷痗 ch岷痭 mu峄憂 x贸a b脿i t岷璸 n脿y?')) {
+    if (window.confirm('Bạn có chắc chắn muốn xóa bài tập này?')) {
       try {
         await api.delete(`/assignments/${id}`);
         fetchData();
@@ -525,7 +525,7 @@ const AssignmentListPage = () => {
   const handleSubmitAssignment = (assignment) => {
     // Check if assignment is active
     if (assignment.status !== 'ACTIVE') {
-      alert('B脿i t岷璸 n脿y kh么ng c貌n ho岷 膽峄檔g. B岷 kh么ng th峄?n峄檖 b脿i.');
+      alert('Bài tập này không còn hoạt động. Bạn không thể nộp bài.');
       return;
     }
 
@@ -551,7 +551,7 @@ const AssignmentListPage = () => {
 
     // Double check status before submitting
     if (submittingAssignment.status !== 'ACTIVE') {
-      alert('B脿i t岷璸 n脿y kh么ng c貌n ho岷 膽峄檔g. B岷 kh么ng th峄?n峄檖 b脿i.');
+      alert('Bài tập này không còn hoạt động. Bạn không thể nộp bài.');
       setSubmittingAssignment(null);
       setSubmissionContent('');
       setSubmissionFile(null);
@@ -586,10 +586,10 @@ const AssignmentListPage = () => {
       // Refresh assignments and submissions
       fetchData();
 
-      alert(editingSubmission ? 'C岷璸 nh岷璽 b脿i n峄檖 th脿nh c么ng!' : 'N峄檖 b脿i th脿nh c么ng!');
+      alert(editingSubmission ? 'Cập nhật bài nộp thành công!' : 'Nộp bài thành công!');
     } catch (error) {
       console.error('Error submitting assignment:', error);
-      const errorMessage = error.response?.data?.error || 'C贸 l峄梚 x岷 ra khi n峄檖 b脿i';
+      const errorMessage = error.response?.data?.error || 'Có lỗi xảy ra khi nộp bài';
       alert(errorMessage);
     }
   };
@@ -606,17 +606,17 @@ const AssignmentListPage = () => {
 
   const getSchoolName = (schoolId) => {
     const school = schools.find(s => s.id === schoolId);
-    return school ? school.name : 'Không có';
+    return school ? school.name : 'N/A';
   };
 
   const getClassName = (classId) => {
     const classItem = classes.find(c => c.id === classId);
-    return classItem ? classItem.name : 'Không có';
+    return classItem ? classItem.name : 'N/A';
   };
 
   const getSubjectName = (subjectId) => {
     const subject = subjects.find(s => s.id === subjectId);
-    return subject ? subject.name : 'Không có';
+    return subject ? subject.name : 'N/A';
   };
 
   const getTeacherName = (teacherId, assignment = null) => {
@@ -627,20 +627,20 @@ const AssignmentListPage = () => {
     // Fallback to teachers array
     if (teacherId) {
       const teacher = teachers.find(t => t.id === teacherId);
-      return teacher ? teacher.fullName : 'Không có';
+      return teacher ? teacher.fullName : 'N/A';
     }
-    return 'Không có';
+    return 'N/A';
   };
 
   const formatDate = (dateString) => {
-    if (!dateString) return 'Không có';
+    if (!dateString) return 'N/A';
     return new Date(dateString).toLocaleDateString('vi-VN');
   };
 
   if (loading) {
     return (
       <div className="assignment-list-page">
-        <div className="loading">膼ang t岷...</div>
+        <div className="loading">Đang tải...</div>
       </div>
     );
   }
@@ -648,7 +648,7 @@ const AssignmentListPage = () => {
   return (
     <div className="assignment-list-page">
       <div className="common-page-header">
-        <h1>{isStudent ? 'B脿i t岷璸' : 'Qu岷 l媒 b脿i t岷璸'}</h1>
+        <h1>{isStudent ? 'Bài tập' : 'Quản lý bài tập'}</h1>
         {!isStudent && (
           <button
             className="btn btn-primary"
@@ -672,7 +672,7 @@ const AssignmentListPage = () => {
               setShowModal(true);
             }}
           >
-            Th锚m b脿i t岷璸
+            Thêm bài tập
           </button>
         )}
       </div>
@@ -681,13 +681,13 @@ const AssignmentListPage = () => {
         <table className="common-table assignments-table">
           <thead>
             <tr>
-              <th>Ti锚u 膽峄?</th>
-              <th>L峄沺</th>
-              <th>M么n h峄峜</th>
-              <th>Gi谩o vi锚n</th>
-              <th>膼i峄僲 t峄慽 膽a</th>
-              <th>Tr岷g th谩i</th>
-              <th>Thao t谩c</th>
+              <th>Tiêu đề</th>
+              <th>Lớp</th>
+              <th>Môn học</th>
+              <th>Giáo viên</th>
+              <th>Điểm tối đa</th>
+              <th>Trạng thái</th>
+              <th>Thao tác</th>
             </tr>
           </thead>
           <tbody>
@@ -718,13 +718,13 @@ const AssignmentListPage = () => {
                                 marginRight: '0.5rem'
                               }}
                             >
-                              膼茫 n峄檖 b脿i
+                              Đã nộp bài
                             </span>
                             <button
                               className="btn btn-sm btn-secondary"
                               onClick={() => handleSubmitAssignment(assignment)}
                             >
-                              S峄璦
+                              Sửa
                             </button>
                           </>
                         ) : (
@@ -732,7 +732,7 @@ const AssignmentListPage = () => {
                             className="btn btn-sm btn-primary"
                             onClick={() => handleSubmitAssignment(assignment)}
                           >
-                            N峄檖 b脿i
+                            Nộp bài
                           </button>
                         )
                       ) : (
@@ -746,7 +746,7 @@ const AssignmentListPage = () => {
                             color: '#6b7280'
                           }}
                         >
-                          {assignment.status === 'INACTIVE' ? 'Kh么ng ho岷 膽峄檔g' : '膼茫 膽贸ng'}
+                          {assignment.status === 'INACTIVE' ? 'Không hoạt động' : 'Đã đóng'}
                         </span>
                       )
                     ) : (
@@ -755,19 +755,19 @@ const AssignmentListPage = () => {
                           className="btn btn-sm btn-info"
                           onClick={() => handleViewSubmissions(assignment.id)}
                         >
-                          Xem n峄檖 b脿i
+                          Xem nộp bài
                         </button>
                         <button
                           className="btn btn-sm btn-secondary"
                           onClick={() => handleEdit(assignment)}
                         >
-                          S峄璦
+                          Sửa
                         </button>
                         <button
                           className="btn btn-sm btn-danger"
                           onClick={() => handleDelete(assignment.id)}
                         >
-                          X贸a
+                          Xóa
                         </button>
                       </>
                     )}
@@ -784,29 +784,29 @@ const AssignmentListPage = () => {
         <div className="common-modal-overlay" onClick={handleCloseSubmissionModal}>
           <div className="common-modal" onClick={(e) => e.stopPropagation()}>
             <div className="common-modal-header">
-              <h2>{editingSubmission ? 'S峄璦 b脿i n峄檖' : 'N峄檖 b脿i t岷璸'}</h2>
-              <button className="common-close-btn" onClick={handleCloseSubmissionModal}>脳</button>
+              <h2>{editingSubmission ? 'Sửa bài nộp' : 'Nộp bài tập'}</h2>
+              <button className="common-close-btn" onClick={handleCloseSubmissionModal}>×</button>
             </div>
             <div className="common-modal-form">
               <div className="submission-assignment-info" style={{ marginBottom: '1.5rem', padding: '1rem', background: 'rgba(102, 126, 234, 0.05)', borderRadius: '8px', borderLeft: '4px solid #667eea' }}>
                 <h3 style={{ margin: '0 0 0.75rem 0', color: '#667eea', fontSize: '1.2rem' }}>{submittingAssignment.title}</h3>
-                <p style={{ margin: '0.5rem 0', fontSize: '0.9rem', color: '#666' }}><strong>M么 t岷?</strong> {submittingAssignment.description || 'Không có'}</p>
-                <p style={{ margin: '0.5rem 0', fontSize: '0.9rem', color: '#666' }}><strong>H瓢峄沶g d岷玭:</strong> {submittingAssignment.instructions || 'Không có'}</p>
-                <p style={{ margin: '0.5rem 0', fontSize: '0.9rem', color: '#666' }}><strong>膼i峄僲 t峄慽 膽a:</strong> {submittingAssignment.maxScore}</p>
-                <p style={{ margin: '0.5rem 0', fontSize: '0.9rem', color: '#666' }}><strong>H岷 n峄檖:</strong> {formatDate(submittingAssignment.dueDate)}</p>
+                <p style={{ margin: '0.5rem 0', fontSize: '0.9rem', color: '#666' }}><strong>Mô tả:</strong> {submittingAssignment.description || 'N/A'}</p>
+                <p style={{ margin: '0.5rem 0', fontSize: '0.9rem', color: '#666' }}><strong>Hướng dẫn:</strong> {submittingAssignment.instructions || 'N/A'}</p>
+                <p style={{ margin: '0.5rem 0', fontSize: '0.9rem', color: '#666' }}><strong>Điểm tối đa:</strong> {submittingAssignment.maxScore}</p>
+                <p style={{ margin: '0.5rem 0', fontSize: '0.9rem', color: '#666' }}><strong>Hạn nộp:</strong> {formatDate(submittingAssignment.dueDate)}</p>
               </div>
               <form onSubmit={(e) => { e.preventDefault(); handleSubmitAssignmentForm(); }}>
                 <div className="common-form-group">
-                  <label>N峄檌 dung b脿i l脿m</label>
+                  <label>Nội dung bài làm</label>
                   <textarea
                     value={submissionContent}
                     onChange={(e) => setSubmissionContent(e.target.value)}
                     rows="8"
-                    placeholder="Nh岷璸 n峄檌 dung b脿i l脿m c峄 b岷 (t霉y ch峄峮)..."
+                    placeholder="Nhập nội dung bài làm của bạn (tùy chọn)..."
                   />
                 </div>
                 <div className="common-form-group">
-                  <label>膼铆nh k猫m file Word (.doc, .docx)</label>
+                  <label>Đính kèm file Word (.doc, .docx)</label>
                   {editingSubmission && editingSubmission.attachmentName && !submissionFile && (
                     <div style={{
                       padding: '10px',
@@ -819,7 +819,7 @@ const AssignmentListPage = () => {
                       marginBottom: '0.5rem'
                     }}>
                       <div>
-                        <span style={{ fontWeight: '500' }}>馃搫 {editingSubmission.attachmentName}</span>
+                        <span style={{ fontWeight: '500' }}>📄 {editingSubmission.attachmentName}</span>
                         {editingSubmission.attachmentSize && (
                           <span style={{ marginLeft: '10px', color: '#666', fontSize: '0.9em' }}>
                             ({(editingSubmission.attachmentSize / 1024).toFixed(2)} KB)
@@ -832,7 +832,7 @@ const AssignmentListPage = () => {
                         onClick={() => handleDownloadSubmissionFile(editingSubmission.id, editingSubmission.attachmentName)}
                         style={{ marginLeft: '10px' }}
                       >
-                        T岷 xu峄憂g
+                        Tải xuống
                       </button>
                     </div>
                   )}
@@ -847,13 +847,13 @@ const AssignmentListPage = () => {
                           // Validate file type
                           const fileName = file.name.toLowerCase();
                           if (!fileName.endsWith('.doc') && !fileName.endsWith('.docx')) {
-                            alert('Ch峄?ch岷 nh岷璶 file Word (.doc, .docx)');
+                            alert('Chỉ chấp nhận file Word (.doc, .docx)');
                             e.target.value = '';
                             return;
                           }
                           // Validate file size (max 10MB)
                           if (file.size > 10 * 1024 * 1024) {
-                            alert('File kh么ng 膽瓢峄 v瓢峄 qu谩 10MB');
+                            alert('File không được vượt quá 10MB');
                             e.target.value = '';
                             return;
                           }
@@ -884,31 +884,31 @@ const AssignmentListPage = () => {
                         e.target.style.boxShadow = 'none';
                       }}
                     >
-                      {editingSubmission && editingSubmission.attachmentName ? 'Thay 膽峄昳 file' : 'Ch峄峮 t峄噋'}
+                      {editingSubmission && editingSubmission.attachmentName ? 'Thay đổi file' : 'Chọn tệp'}
                     </label>
                     <span style={{ color: '#666', fontSize: '0.9rem', fontStyle: 'italic' }}>
-                      {submissionFile ? submissionFile.name : (editingSubmission && editingSubmission.attachmentName ? 'Gi峄?nguy锚n file c农' : 'Kh么ng c贸 t峄噋 n脿o 膽瓢峄 ch峄峮')}
+                      {submissionFile ? submissionFile.name : (editingSubmission && editingSubmission.attachmentName ? 'Giữ nguyên file cũ' : 'Không có tệp nào được chọn')}
                     </span>
                   </div>
                   {submissionFile && (
                     <p style={{ marginTop: '5px', fontSize: '0.9em', color: '#666' }}>
-                      膼茫 ch峄峮: {submissionFile.name} ({(submissionFile.size / 1024).toFixed(2)} KB)
+                      Đã chọn: {submissionFile.name} ({(submissionFile.size / 1024).toFixed(2)} KB)
                     </p>
                   )}
                   <p style={{ marginTop: '5px', fontSize: '0.85em', color: '#999' }}>
-                    B岷 c贸 th峄?n峄檖 b脿i b岷眓g n峄檌 dung text ho岷穋 file Word, ho岷穋 c岷?hai
+                    Bạn có thể nộp bài bằng nội dung text hoặc file Word, hoặc cả hai
                   </p>
                 </div>
                 <div className="common-modal-actions">
                   <button type="button" className="btn btn-secondary" onClick={handleCloseSubmissionModal}>
-                    H峄
+                    Hủy
                   </button>
                   <button
                     type="submit"
                     className="btn btn-primary"
                     disabled={!submissionContent && !submissionFile && (!editingSubmission || !editingSubmission.attachmentName)}
                   >
-                    {editingSubmission ? 'C岷璸 nh岷璽' : 'N峄檖 b脿i'}
+                    {editingSubmission ? 'Cập nhật' : 'Nộp bài'}
                   </button>
                 </div>
               </form>
@@ -921,12 +921,12 @@ const AssignmentListPage = () => {
         <div className="common-modal-overlay">
           <div className="common-modal">
             <div className="common-modal-header">
-              <h2>{editingAssignment ? 'S峄璦 b脿i t岷璸' : 'Th锚m b脿i t岷璸'}</h2>
-              <button className="common-close-btn" onClick={handleCloseModal}>脳</button>
+              <h2>{editingAssignment ? 'Sửa bài tập' : 'Thêm bài tập'}</h2>
+              <button className="common-close-btn" onClick={handleCloseModal}>×</button>
             </div>
             <form onSubmit={handleSubmit} className="common-modal-form modal-form">
               <div className="common-form-group form-group">
-                <label>Ti锚u 膽峄?*</label>
+                <label>Tiêu đề *</label>
                 <input
                   type="text"
                   value={formData.title}
@@ -935,7 +935,7 @@ const AssignmentListPage = () => {
                 />
               </div>
               <div className="common-form-group form-group">
-                <label>M么 t岷?</label>
+                <label>Mô tả</label>
                 <textarea
                   value={formData.description}
                   onChange={(e) => setFormData({ ...formData, description: e.target.value })}
@@ -943,7 +943,7 @@ const AssignmentListPage = () => {
                 />
               </div>
               <div className="common-form-group form-group">
-                <label>H瓢峄沶g d岷玭</label>
+                <label>Hướng dẫn</label>
                 <textarea
                   value={formData.instructions}
                   onChange={(e) => setFormData({ ...formData, instructions: e.target.value })}
@@ -952,7 +952,7 @@ const AssignmentListPage = () => {
               </div>
               {!editingAssignment && (
                 <div className="common-form-group form-group">
-                  <label>膼铆nh k猫m file Word (.doc, .docx)</label>
+                  <label>Đính kèm file Word (.doc, .docx)</label>
                   <input
                     type="file"
                     accept=".doc,.docx"
@@ -962,13 +962,13 @@ const AssignmentListPage = () => {
                         // Validate file type
                         const fileName = file.name.toLowerCase();
                         if (!fileName.endsWith('.doc') && !fileName.endsWith('.docx')) {
-                          alert('Ch峄?ch岷 nh岷璶 file Word (.doc, .docx)');
+                          alert('Chỉ chấp nhận file Word (.doc, .docx)');
                           e.target.value = '';
                           return;
                         }
                         // Validate file size (max 10MB)
                         if (file.size > 10 * 1024 * 1024) {
-                          alert('File kh么ng 膽瓢峄 v瓢峄 qu谩 10MB');
+                          alert('File không được vượt quá 10MB');
                           e.target.value = '';
                           return;
                         }
@@ -978,14 +978,14 @@ const AssignmentListPage = () => {
                   />
                   {selectedFile && (
                     <p style={{ marginTop: '5px', fontSize: '0.9em', color: '#666' }}>
-                      膼茫 ch峄峮: {selectedFile.name} ({(selectedFile.size / 1024).toFixed(2)} KB)
+                      Đã chọn: {selectedFile.name} ({(selectedFile.size / 1024).toFixed(2)} KB)
                     </p>
                   )}
                 </div>
               )}
               {editingAssignment && editingAssignment.attachmentName && (
                 <div className="common-form-group form-group">
-                  <label>File 膽茫 膽铆nh k猫m</label>
+                  <label>File đã đính kèm</label>
                   <div style={{
                     padding: '10px',
                     backgroundColor: '#f5f5f5',
@@ -996,7 +996,7 @@ const AssignmentListPage = () => {
                     justifyContent: 'space-between'
                   }}>
                     <div>
-                      <span style={{ fontWeight: '500' }}>馃搫 {editingAssignment.attachmentName}</span>
+                      <span style={{ fontWeight: '500' }}>📄 {editingAssignment.attachmentName}</span>
                       {editingAssignment.attachmentSize && (
                         <span style={{ marginLeft: '10px', color: '#666', fontSize: '0.9em' }}>
                           ({(editingAssignment.attachmentSize / 1024).toFixed(2)} KB)
@@ -1009,16 +1009,16 @@ const AssignmentListPage = () => {
                       onClick={() => handleDownloadFile(editingAssignment.id, editingAssignment.attachmentName)}
                       style={{ marginLeft: '10px' }}
                     >
-                      T岷 xu峄憂g
+                      Tải xuống
                     </button>
                   </div>
                   <p style={{ marginTop: '5px', fontSize: '0.85em', color: '#999' }}>
-                    膼峄?thay 膽峄昳 file, vui l貌ng x贸a b脿i t岷璸 v脿 t岷 l岷 v峄沬 file m峄沬
+                    Để thay đổi file, vui lòng xóa bài tập và tạo lại với file mới
                   </p>
                 </div>
               )}
               <div className="common-form-group form-group">
-                <label>膼i峄僲 t峄慽 膽a *</label>
+                <label>Điểm tối đa *</label>
                 <input
                   type="number"
                   value={formData.maxScore}
@@ -1029,7 +1029,7 @@ const AssignmentListPage = () => {
                 />
               </div>
               <div className="common-form-group form-group">
-                <label>Tr瓢峄漬g *</label>
+                <label>Trường *</label>
                 <select
                   value={formData.schoolId}
                   onChange={(e) => setFormData({ ...formData, schoolId: e.target.value })}
@@ -1037,7 +1037,7 @@ const AssignmentListPage = () => {
                   required
                   style={(user?.role?.name?.toUpperCase() === 'ADMIN' || user?.role?.name?.toUpperCase() === 'TEACHER') && user?.school?.id ? { backgroundColor: '#f3f4f6', cursor: 'not-allowed' } : {}}
                 >
-                  <option value="">Ch峄峮 tr瓢峄漬g</option>
+                  <option value="">Chọn trường</option>
                   {schools.map(school => (
                     <option key={school.id} value={school.id}>
                       {school.name}
@@ -1046,7 +1046,7 @@ const AssignmentListPage = () => {
                 </select>
               </div>
               <div className="common-form-group form-group">
-                <label>L峄沺 *</label>
+                <label>Lớp *</label>
                 <select
                   value={formData.classId}
                   onChange={(e) => {
@@ -1054,7 +1054,7 @@ const AssignmentListPage = () => {
                   }}
                   required
                 >
-                  <option value="">Ch峄峮 l峄沺</option>
+                  <option value="">Chọn lớp</option>
                   {(user?.role?.name?.toUpperCase() === 'TEACHER' ? filteredClasses : classes).map(classItem => (
                     <option key={classItem.id} value={classItem.id}>
                       {classItem.name}
@@ -1063,12 +1063,12 @@ const AssignmentListPage = () => {
                 </select>
                 {user?.role?.name?.toUpperCase() === 'TEACHER' && filteredClasses.length === 0 && (
                   <p style={{ fontSize: '12px', color: '#999', marginTop: '5px' }}>
-                    B岷 ch瓢a 膽瓢峄 ph芒n c么ng d岷 l峄沺 n脿o
+                    Bạn chưa được phân công dạy lớp nào
                   </p>
                 )}
               </div>
               <div className="common-form-group form-group">
-                <label>M么n h峄峜 *</label>
+                <label>Môn học *</label>
                 <select
                   value={formData.subjectId}
                   onChange={(e) => setFormData({ ...formData, subjectId: e.target.value })}
@@ -1076,17 +1076,17 @@ const AssignmentListPage = () => {
                   disabled={!formData.classId}
                 >
                   <option value="">
-                    {formData.classId ? 'Ch峄峮 m么n h峄峜' : 'Ch峄峮 l峄沺 tr瓢峄沜'}
+                    {formData.classId ? 'Chọn môn học' : 'Chọn lớp trước'}
                   </option>
                   {(() => {
                     const userRole = user?.role?.name?.toUpperCase();
                     let subjectsToShow = userRole === 'TEACHER' ? filteredSubjects : subjects;
 
-                    // N岷縰 gi谩o vi锚n 膽茫 ch峄峮 l峄沺, filter subjects d峄盿 tr锚n c岷?l峄沺 v脿 gi谩o vi锚n
+                    // Nếu giáo viên đã chọn lớp, filter subjects dựa trên cả lớp và giáo viên
                     if (userRole === 'TEACHER' && formData.classId && teacherSchedules.length > 0) {
                       const selectedClassId = parseInt(formData.classId);
                       subjectsToShow = filteredSubjects.filter(subject => {
-                        // Ki峄僲 tra xem c贸 schedule n脿o m脿 gi谩o vi锚n d岷 m么n n脿y cho l峄沺 膽茫 ch峄峮 kh么ng
+                        // Kiểm tra xem có schedule nào mà giáo viên dạy môn này cho lớp đã chọn không
                         return teacherSchedules.some(schedule => {
                           const scheduleClassId = schedule.classEntity?.id || schedule.class_id;
                           const scheduleSubjectId = schedule.subject?.id || schedule.subject_id;
@@ -1115,7 +1115,7 @@ const AssignmentListPage = () => {
                     if (availableSubjects.length === 0) {
                       return (
                         <p style={{ fontSize: '12px', color: '#999', marginTop: '5px' }}>
-                          B岷 kh么ng d岷 m么n n脿o cho l峄沺 n脿y
+                          Bạn không dạy môn nào cho lớp này
                         </p>
                       );
                     }
@@ -1124,7 +1124,7 @@ const AssignmentListPage = () => {
                 )}
               </div>
               <div className="common-form-group form-group">
-                <label>Gi谩o vi锚n t岷 *</label>
+                <label>Giáo viên tạo *</label>
                 <select
                   value={formData.createdById}
                   onChange={(e) => setFormData({ ...formData, createdById: e.target.value })}
@@ -1132,7 +1132,7 @@ const AssignmentListPage = () => {
                   required
                   style={isTeacherOrAdmin ? { backgroundColor: '#f3f4f6', cursor: 'not-allowed' } : {}}
                 >
-                  <option value="">Ch峄峮 gi谩o vi锚n</option>
+                  <option value="">Chọn giáo viên</option>
                   {teachers.map(teacher => (
                     <option key={teacher.id} value={teacher.id}>
                       {teacher.fullName}
@@ -1141,22 +1141,22 @@ const AssignmentListPage = () => {
                 </select>
               </div>
               <div className="common-form-group form-group">
-                <label>Tr岷g th谩i</label>
+                <label>Trạng thái</label>
                 <select
                   value={formData.status}
                   onChange={(e) => setFormData({ ...formData, status: e.target.value })}
                 >
-                  <option value="ACTIVE">Ho岷 膽峄檔g</option>
-                  <option value="INACTIVE">Kh么ng ho岷 膽峄檔g</option>
-                  <option value="CLOSED">膼茫 膽贸ng</option>
+                  <option value="ACTIVE">Hoạt động</option>
+                  <option value="INACTIVE">Không hoạt động</option>
+                  <option value="CLOSED">Đã đóng</option>
                 </select>
               </div>
               <div className="common-modal-actions modal-actions">
                 <button type="button" className="btn btn-secondary" onClick={handleCloseModal}>
-                  H峄
+                  Hủy
                 </button>
                 <button type="submit" className="btn btn-primary">
-                  {editingAssignment ? 'C岷璸 nh岷璽' : 'T岷 m峄沬'}
+                  {editingAssignment ? 'Cập nhật' : 'Tạo mới'}
                 </button>
               </div>
             </form>
@@ -1169,37 +1169,37 @@ const AssignmentListPage = () => {
         <div className="common-modal-overlay" onClick={handleCloseSubmissionsModal}>
           <div className="common-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '900px', width: '90%' }}>
             <div className="common-modal-header">
-              <h2>Danh s谩ch n峄檖 b脿i</h2>
-              <button className="common-close-btn" onClick={handleCloseSubmissionsModal}>脳</button>
+              <h2>Danh sách nộp bài</h2>
+              <button className="common-close-btn" onClick={handleCloseSubmissionsModal}>×</button>
             </div>
             <div className="common-modal-form" style={{ padding: '2rem', overflowX: 'auto' }}>
               <table className="common-table">
                 <thead>
                   <tr>
-                    <th>H峄峜 sinh</th>
-                    <th>N峄檌 dung</th>
-                    <th>File 膽铆nh k猫m</th>
-                    <th>Ng脿y n峄檖</th>
-                    <th>Tr岷g th谩i</th>
+                    <th>Học sinh</th>
+                    <th>Nội dung</th>
+                    <th>File đính kèm</th>
+                    <th>Ngày nộp</th>
+                    <th>Trạng thái</th>
                   </tr>
                 </thead>
                 <tbody>
                   {submissions.map((submission) => (
                     <tr key={submission.id}>
-                      <td>{submission.student?.fullName || 'Không có'}</td>
+                      <td>{submission.student?.fullName || 'N/A'}</td>
                       <td>
                         {submission.content ? (
                           <div style={{ maxWidth: '200px', wordBreak: 'break-word' }}>
                             {submission.content}
                           </div>
                         ) : (
-                          <span style={{ color: '#999', fontStyle: 'italic' }}>Kh么ng c贸</span>
+                          <span style={{ color: '#999', fontStyle: 'italic' }}>Không có</span>
                         )}
                       </td>
                       <td>
                         {submission.attachmentName ? (
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                            <span style={{ fontSize: '0.9em' }}>馃搫 {submission.attachmentName}</span>
+                            <span style={{ fontSize: '0.9em' }}>📄 {submission.attachmentName}</span>
                             {submission.attachmentSize && (
                               <span style={{ fontSize: '0.8em', color: '#666' }}>
                                 ({(submission.attachmentSize / 1024).toFixed(2)} KB)
@@ -1210,11 +1210,11 @@ const AssignmentListPage = () => {
                               onClick={() => handleDownloadSubmissionFile(submission.id, submission.attachmentName)}
                               style={{ padding: '2px 8px', fontSize: '0.8em' }}
                             >
-                              T岷 xu峄憂g
+                              Tải xuống
                             </button>
                           </div>
                         ) : (
-                          <span style={{ color: '#999', fontStyle: 'italic' }}>Kh么ng c贸</span>
+                          <span style={{ color: '#999', fontStyle: 'italic' }}>Không có</span>
                         )}
                       </td>
                       <td>{formatDate(submission.submittedAt)}</td>
@@ -1228,7 +1228,7 @@ const AssignmentListPage = () => {
                   {submissions.length === 0 && (
                     <tr>
                       <td colSpan="5" style={{ textAlign: 'center', padding: '2rem' }}>
-                        <span style={{ color: '#999', fontStyle: 'italic' }}>Ch瓢a c贸 h峄峜 sinh n脿o n峄檖 b脿i</span>
+                        <span style={{ color: '#999', fontStyle: 'italic' }}>Chưa có học sinh nào nộp bài</span>
                       </td>
                     </tr>
                   )}
@@ -1244,12 +1244,12 @@ const AssignmentListPage = () => {
         <div className="modal-overlay">
           <div className="modal">
             <div className="modal-header">
-              <h2>Ch岷 膽i峄僲</h2>
-              <button className="close-btn" onClick={handleCloseGradingModal}>脳</button>
+              <h2>Chấm điểm</h2>
+              <button className="close-btn" onClick={handleCloseGradingModal}>×</button>
             </div>
             <form onSubmit={(e) => { e.preventDefault(); handleSubmitGrade(); }}>
               <div className="form-group">
-                <label>膼i峄僲 *</label>
+                <label>Điểm *</label>
                 <input
                   type="number"
                   value={gradeData.score}
@@ -1260,7 +1260,7 @@ const AssignmentListPage = () => {
                 />
               </div>
               <div className="form-group">
-                <label>Nh岷璶 x茅t</label>
+                <label>Nhận xét</label>
                 <textarea
                   value={gradeData.feedback}
                   onChange={(e) => setGradeData({ ...gradeData, feedback: e.target.value })}
@@ -1269,10 +1269,10 @@ const AssignmentListPage = () => {
               </div>
               <div className="modal-actions">
                 <button type="button" className="btn btn-secondary" onClick={handleCloseGradingModal}>
-                  H峄
+                  Hủy
                 </button>
                 <button type="submit" className="btn btn-primary">
-                  L瓢u 膽i峄僲
+                  Lưu điểm
                 </button>
               </div>
             </form>
@@ -1285,6 +1285,4 @@ const AssignmentListPage = () => {
 };
 
 export default AssignmentListPage;
-
-
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import api from '../../../../shared/lib/api';
 import './AttendanceManagement.css';
 import { useAuth } from '../../../auth/context/AuthContext';
@@ -112,7 +112,7 @@ const AttendanceManagement = () => {
       resetForm();
     } catch (error) {
       console.error('Error saving attendance:', error);
-      alert('Có lỗi xảy ra khi lưu chuyên cần');
+      alert('C贸 l峄梚 x岷 ra khi l瓢u chuy锚n c岷');
     }
   };
 
@@ -137,13 +137,13 @@ const AttendanceManagement = () => {
   };
 
   const handleDelete = async (attendanceId) => {
-    if (window.confirm('Bạn có chắc chắn muốn xóa bản ghi chuyên cần này?')) {
+    if (window.confirm('B岷 c贸 ch岷痗 ch岷痭 mu峄憂 x贸a b岷 ghi chuy锚n c岷 n脿y?')) {
       try {
         await api.delete(`/attendance/${attendanceId}`);
         fetchAttendance();
       } catch (error) {
         console.error('Error deleting attendance:', error);
-        alert('Có lỗi xảy ra khi xóa chuyên cần');
+        alert('C贸 l峄梚 x岷 ra khi x贸a chuy锚n c岷');
       }
     }
   };
@@ -170,9 +170,9 @@ const AttendanceManagement = () => {
 
   const getStatusText = (status) => {
     switch (status) {
-      case 'PRESENT': return 'Có mặt';
-      case 'ABSENT': return 'Vắng mặt';
-      case 'LATE': return 'Đi muộn';
+      case 'PRESENT': return 'C贸 m岷穞';
+      case 'ABSENT': return 'V岷痭g m岷穞';
+      case 'LATE': return '膼i mu峄檔';
       default: return status;
     }
   };
@@ -182,7 +182,7 @@ const AttendanceManagement = () => {
       <div className="attendance-management">
         <div className="loading">
           <div className="spinner"></div>
-          <p>Đang tải d�?liệu...</p>
+          <p>膼ang t岷 d峄?li峄噓...</p>
         </div>
       </div>
     );
@@ -191,12 +191,12 @@ const AttendanceManagement = () => {
   return (
     <div className="attendance-management">
       <div className="common-page-header">
-        <h2>Quản lý chuyên cần</h2>
+        <h2>Qu岷 l媒 chuy锚n c岷</h2>
         <button
           className="btn btn-primary"
           onClick={() => setShowModal(true)}
         >
-          �?Điểm danh
+          鉃?膼i峄僲 danh
         </button>
       </div>
 
@@ -205,12 +205,12 @@ const AttendanceManagement = () => {
           <thead>
             <tr>
               <th>ID</th>
-              <th>Học sinh</th>
-              <th>Lớp</th>
-              <th>Trạng thái</th>
-              <th>Ghi chú</th>
-              <th>Ngày</th>
-              <th>Thao tác</th>
+              <th>H峄峜 sinh</th>
+              <th>L峄沺</th>
+              <th>Tr岷g th谩i</th>
+              <th>Ghi ch煤</th>
+              <th>Ng脿y</th>
+              <th>Thao t谩c</th>
             </tr>
           </thead>
           <tbody>
@@ -240,13 +240,13 @@ const AttendanceManagement = () => {
                       className="btn btn-edit"
                       onClick={() => handleEdit(item)}
                     >
-                      ✏️ Sửa
+                      鉁忥笍 S峄璦
                     </button>
                     <button
                       className="btn btn-delete"
                       onClick={() => handleDelete(item.id)}
                     >
-                      🗑�?Xóa
+                      馃棏锔?X贸a
                     </button>
                   </div>
                 </td>
@@ -261,18 +261,18 @@ const AttendanceManagement = () => {
         <div className="common-modal-overlay" onClick={resetForm}>
           <div className="common-modal" onClick={(e) => e.stopPropagation()}>
             <div className="common-modal-header">
-              <h3>{editingAttendance ? 'Sửa chuyên cần' : 'Điểm danh mới'}</h3>
-              <button className="common-close-btn" onClick={resetForm}>�?</button>
+              <h3>{editingAttendance ? 'S峄璦 chuy锚n c岷' : '膼i峄僲 danh m峄沬'}</h3>
+              <button className="common-close-btn" onClick={resetForm}>鉁?</button>
             </div>
             <form onSubmit={handleSubmit} className="common-modal-form">
               <div className="common-form-group">
-                <label>Học sinh *</label>
+                <label>H峄峜 sinh *</label>
                 <select
                   value={formData.studentId}
                   onChange={(e) => setFormData({ ...formData, studentId: e.target.value })}
                   required
                 >
-                  <option value="">Chọn học sinh</option>
+                  <option value="">Ch峄峮 h峄峜 sinh</option>
                   {students.map((student) => (
                     <option key={student.id} value={student.id}>
                       {student.fullName} - {student.email}
@@ -281,12 +281,12 @@ const AttendanceManagement = () => {
                 </select>
               </div>
               <div className="common-form-group">
-                <label>Lớp</label>
+                <label>L峄沺</label>
                 <select
                   value={formData.classId}
                   onChange={(e) => setFormData({ ...formData, classId: e.target.value })}
                 >
-                  <option value="">Chọn lớp</option>
+                  <option value="">Ch峄峮 l峄沺</option>
                   {classes.map((classItem) => (
                     <option key={classItem.id} value={classItem.id}>
                       {classItem.name}
@@ -295,32 +295,32 @@ const AttendanceManagement = () => {
                 </select>
               </div>
               <div className="common-form-group">
-                <label>Trạng thái *</label>
+                <label>Tr岷g th谩i *</label>
                 <select
                   value={formData.status}
                   onChange={(e) => setFormData({ ...formData, status: e.target.value })}
                   required
                 >
-                  <option value="PRESENT">Có mặt</option>
-                  <option value="ABSENT">Vắng mặt</option>
-                  <option value="LATE">Đi muộn</option>
+                  <option value="PRESENT">C贸 m岷穞</option>
+                  <option value="ABSENT">V岷痭g m岷穞</option>
+                  <option value="LATE">膼i mu峄檔</option>
                 </select>
               </div>
               <div className="common-form-group">
-                <label>Ghi chú</label>
+                <label>Ghi ch煤</label>
                 <textarea
                   value={formData.note}
                   onChange={(e) => setFormData({ ...formData, note: e.target.value })}
-                  placeholder="Nhập ghi chú"
+                  placeholder="Nh岷璸 ghi ch煤"
                   rows="3"
                 />
               </div>
               <div className="common-modal-actions">
                 <button type="button" className="btn btn-secondary" onClick={resetForm}>
-                  Hủy
+                  H峄
                 </button>
                 <button type="submit" className="btn btn-primary">
-                  {editingAttendance ? 'Cập nhật' : 'Lưu điểm danh'}
+                  {editingAttendance ? 'C岷璸 nh岷璽' : 'L瓢u 膽i峄僲 danh'}
                 </button>
               </div>
             </form>
@@ -332,5 +332,6 @@ const AttendanceManagement = () => {
 };
 
 export default AttendanceManagement;
+
 
 

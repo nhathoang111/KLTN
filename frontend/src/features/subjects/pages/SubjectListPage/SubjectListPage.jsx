@@ -89,7 +89,7 @@ const SubjectListPage = () => {
   };
 
   const handleDelete = async (id) => {
-    if (window.confirm('B岷 c贸 ch岷痗 ch岷痭 mu峄憂 x贸a m么n h峄峜 n脿y?')) {
+    if (window.confirm('Bạn có chắc chắn muốn xóa môn học này?')) {
       try {
         await api.delete(`/subjects/${id}`);
         fetchData();
@@ -114,13 +114,13 @@ const SubjectListPage = () => {
 
   const getSchoolName = (schoolId) => {
     const school = schools.find(s => s.id === schoolId);
-    return school ? school.name : 'Không có';
+    return school ? school.name : 'N/A';
   };
 
   if (loading) {
     return (
       <div className="subject-list-page">
-        <div className="loading">膼ang t岷...</div>
+        <div className="loading">Đang tải...</div>
       </div>
     );
   }
@@ -128,7 +128,7 @@ const SubjectListPage = () => {
   return (
     <div className="subject-list-page">
       <div className="common-page-header">
-        <h1>Qu岷 l媒 m么n h峄峜</h1>
+        <h1>Quản lý môn học</h1>
         <button
           className="btn btn-primary"
           onClick={() => {
@@ -143,7 +143,7 @@ const SubjectListPage = () => {
             setShowModal(true);
           }}
         >
-          Th锚m m么n h峄峜
+          Thêm môn học
         </button>
       </div>
 
@@ -151,10 +151,10 @@ const SubjectListPage = () => {
         <table className="common-table subjects-table">
           <thead>
             <tr>
-              <th>T锚n m么n h峄峜</th>
-              <th>M茫 m么n</th>
-              <th>Tr瓢峄漬g</th>
-              <th>Thao t谩c</th>
+              <th>Tên môn học</th>
+              <th>Mã môn</th>
+              <th>Trường</th>
+              <th>Thao tác</th>
             </tr>
           </thead>
           <tbody>
@@ -169,13 +169,13 @@ const SubjectListPage = () => {
                       className="btn btn-sm btn-secondary"
                       onClick={() => handleEdit(subject)}
                     >
-                      S峄璦
+                      Sửa
                     </button>
                     <button
                       className="btn btn-sm btn-danger"
                       onClick={() => handleDelete(subject.id)}
                     >
-                      X贸a
+                      Xóa
                     </button>
                   </div>
                 </td>
@@ -189,12 +189,12 @@ const SubjectListPage = () => {
         <div className="common-modal-overlay">
           <div className="common-modal">
             <div className="common-modal-header">
-              <h2>{editingSubject ? 'S峄璦 m么n h峄峜' : 'Th锚m m么n h峄峜'}</h2>
-              <button className="common-close-btn" onClick={handleCloseModal}>脳</button>
+              <h2>{editingSubject ? 'Sửa môn học' : 'Thêm môn học'}</h2>
+              <button className="common-close-btn" onClick={handleCloseModal}>×</button>
             </div>
             <form onSubmit={handleSubmit} className="common-modal-form">
               <div className="common-form-group">
-                <label>T锚n m么n h峄峜 *</label>
+                <label>Tên môn học *</label>
                 <input
                   type="text"
                   value={formData.name}
@@ -203,7 +203,7 @@ const SubjectListPage = () => {
                 />
               </div>
               <div className="common-form-group">
-                <label>M茫 m么n h峄峜 *</label>
+                <label>Mã môn học *</label>
                 <input
                   type="text"
                   value={formData.code}
@@ -212,7 +212,7 @@ const SubjectListPage = () => {
                 />
               </div>
               <div className="common-form-group">
-                <label>Tr瓢峄漬g *</label>
+                <label>Trường *</label>
                 <select
                   value={formData.schoolId}
                   onChange={(e) => setFormData({ ...formData, schoolId: e.target.value })}
@@ -220,7 +220,7 @@ const SubjectListPage = () => {
                   required
                   style={user?.role?.name?.toUpperCase() === 'ADMIN' && user?.school?.id ? { backgroundColor: '#f3f4f6', cursor: 'not-allowed' } : {}}
                 >
-                  <option value="">Ch峄峮 tr瓢峄漬g</option>
+                  <option value="">Chọn trường</option>
                   {schools.map(school => (
                     <option key={school.id} value={school.id}>
                       {school.name}
@@ -230,10 +230,10 @@ const SubjectListPage = () => {
               </div>
               <div className="common-modal-actions">
                 <button type="button" className="btn btn-secondary" onClick={handleCloseModal}>
-                  H峄
+                  Hủy
                 </button>
                 <button type="submit" className="btn btn-primary">
-                  {editingSubject ? 'C岷璸 nh岷璽' : 'T岷 m峄沬'}
+                  {editingSubject ? 'Cập nhật' : 'Tạo mới'}
                 </button>
               </div>
             </form>

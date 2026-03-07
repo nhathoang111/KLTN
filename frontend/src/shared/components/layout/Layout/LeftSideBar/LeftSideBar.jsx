@@ -97,10 +97,10 @@ const LeftSideBar = ({ user, onLogout }) => {
             { path: "/classes", label: "Quản lý lớp học", roles: ["ADMIN"] },
             { path: "/subjects", label: "Quản lý môn học", roles: ["ADMIN"] },
             { path: "/schedules", label: "Quản lý thời khóa biểu", roles: ["ADMIN"] },
-            { path: "/exam-scores", label: "Qu?n ly ?i?m s?", roles: ["ADMIN"] },
+            { path: "/exam-scores", label: "Quản lý điểm số", roles: ["ADMIN"] },
             { path: "/announcements", label: "Thông báo & Tài liệu", roles: ["ADMIN"] },
 
-            { path: "/classes", label: "Xem lớp ph�?trách", roles: ["TEACHER"] },
+            { path: "/classes", label: "Xem lớp phụ trách", roles: ["TEACHER"] },
             { path: "/exam-scores", label: "Nhập điểm", roles: ["TEACHER"] },
             { path: "/assignments", label: "Bài tập", roles: ["TEACHER"] },
             { path: "/schedules", label: "Xem thời khóa biểu", roles: ["TEACHER"] },
@@ -171,7 +171,7 @@ const LeftSideBar = ({ user, onLogout }) => {
                 hover:!shadow-sm
                 hover:!-translate-y-1
                 ${active
-                                    ? "bg-white text-emerald-600 shadow-sm border border-emerald-100"
+                                    ? "bg-white text-emerald-600 shadow-sm border-emerald-100"
                                     : ""
                                 }
               `}
