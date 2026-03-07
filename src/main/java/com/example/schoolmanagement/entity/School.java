@@ -24,6 +24,15 @@ public class School {
     private String email;
     private String status;
 
+    @Column(length = 2000)
+    private String logo; // base64 or URL
+
+    @Column(name = "establishment_year")
+    private Integer establishmentYear;
+
+    @Column(name = "management_type", length = 20) // PUBLIC (trường công) / PRIVATE (trường tư)
+    private String managementType;
+
     @Column(name = "score_locked", nullable = false)
     private Boolean scoreLocked = false;
 
@@ -63,6 +72,15 @@ public class School {
 
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
+
+    public String getLogo() { return logo; }
+    public void setLogo(String logo) { this.logo = logo; }
+
+    public Integer getEstablishmentYear() { return establishmentYear; }
+    public void setEstablishmentYear(Integer establishmentYear) { this.establishmentYear = establishmentYear; }
+
+    public String getManagementType() { return managementType; }
+    public void setManagementType(String managementType) { this.managementType = managementType; }
 
     public Boolean getScoreLocked() { return scoreLocked; }
     public void setScoreLocked(Boolean scoreLocked) { this.scoreLocked = scoreLocked; }

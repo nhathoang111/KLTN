@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import api from '../../../../shared/lib/api';
 import './SchoolListPage.css';
 
@@ -17,7 +17,10 @@ const SchoolListPage = () => {
     address: '',
     phone: '',
     email: '',
-    status: 'ACTIVE'
+    status: 'ACTIVE',
+    logo: '',
+    establishmentYear: '',
+    managementType: ''
   });
   const [provinces, setProvinces] = useState([]);
   const [districts, setDistricts] = useState([]);
@@ -298,12 +301,12 @@ const SchoolListPage = () => {
     e.preventDefault();
     setError(''); // Clear previous error
 
-    // Chỉ gửi số nhà + tên đường vào trường address
-    // province, district, ward gửi riêng biệt
     const submitData = {
       ...formData,
-      address: formData.address.trim() // Chỉ gửi số nhà + tên đường
-      // province, district, ward đã có trong formData, sẽ được gửi riêng
+      address: formData.address.trim(),
+      logo: formData.logo || null,
+      establishmentYear: formData.establishmentYear ? parseInt(formData.establishmentYear, 10) : null,
+      managementType: formData.managementType || null
     };
 
     try {
@@ -325,7 +328,10 @@ const SchoolListPage = () => {
         address: '',
         phone: '',
         email: '',
-        status: 'ACTIVE'
+        status: 'ACTIVE',
+        logo: '',
+        establishmentYear: '',
+        managementType: ''
       });
       setDistricts([]);
       setWards([]);
@@ -382,7 +388,10 @@ const SchoolListPage = () => {
       address: addressDetail,
       phone: school.phone || '',
       email: school.email || '',
-      status: school.status || 'ACTIVE'
+      status: school.status || 'ACTIVE',
+      logo: school.logo || '',
+      establishmentYear: school.establishmentYear != null ? String(school.establishmentYear) : '',
+      managementType: school.managementType || ''
     });
 
     // Nếu có province, fetch districts
@@ -655,6 +664,21 @@ const SchoolListPage = () => {
     }
   };
 
+  const handleLogoChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      setError('Vui lòng chọn file ảnh (JPG, PNG, ...)');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      setFormData(prev => ({ ...prev, logo: reader.result }));
+      setError('');
+    };
+    reader.readAsDataURL(file);
+  };
+
   const handleCloseModal = () => {
     setShowModal(false);
     setEditingSchool(null);
@@ -668,7 +692,10 @@ const SchoolListPage = () => {
       address: '',
       phone: '',
       email: '',
-      status: 'ACTIVE'
+      status: 'ACTIVE',
+      logo: '',
+      establishmentYear: '',
+      managementType: ''
     });
     setProvinceSuggestions([]);
     setDistrictSuggestions([]);
@@ -1021,6 +1048,42 @@ const SchoolListPage = () => {
                   onChange={(e) => setFormData({ ...formData, code: e.target.value })}
                   required
                 />
+              </div>
+              <div className="common-form-group">
+                <label>Logo trường</label>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                  {formData.logo ? (
+                    <img src={formData.logo} alt="Logo" style={{ width: 64, height: 64, objectFit: 'cover', borderRadius: 8, border: '1px solid #e1e5e9' }} />
+                  ) : (
+                    <div style={{ width: 64, height: 64, borderRadius: 8, border: '2px dashed #d1d5db', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, color: '#9ca3af' }}>
+                      Chưa có
+                    </div>
+                  )}
+                  <input type="file" accept="image/*" onChange={handleLogoChange} style={{ fontSize: 14 }} />
+                </div>
+                <span style={{ fontSize: 12, color: '#6b7280', marginTop: 4, display: 'block' }}>JPG, PNG (tùy chọn)</span>
+              </div>
+              <div className="common-form-group">
+                <label>Năm thành lập</label>
+                <input
+                  type="number"
+                  min="1900"
+                  max={new Date().getFullYear()}
+                  value={formData.establishmentYear}
+                  onChange={(e) => setFormData({ ...formData, establishmentYear: e.target.value })}
+                  placeholder="VD: 1990"
+                />
+              </div>
+              <div className="common-form-group">
+                <label>Cấp quản lý (trường công / tư)</label>
+                <select
+                  value={formData.managementType}
+                  onChange={(e) => setFormData({ ...formData, managementType: e.target.value })}
+                >
+                  <option value="">-- Chọn --</option>
+                  <option value="PUBLIC">Trường công</option>
+                  <option value="PRIVATE">Trường tư</option>
+                </select>
               </div>
               <div className="common-form-group" style={{ position: 'relative' }}>
                 <label>Tỉnh/Thành phố</label>
