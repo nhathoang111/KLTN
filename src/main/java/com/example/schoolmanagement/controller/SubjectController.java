@@ -34,6 +34,11 @@ public class SubjectController {
         return ResponseEntity.ok(subjectService.getSubjectClassCounts());
     }
 
+    @GetMapping("/{id}/classes")
+    public ResponseEntity<?> getClassesBySubject(@PathVariable Integer id) {
+        return ResponseEntity.ok(Map.of("classes", subjectService.getClassesBySubjectId(id)));
+    }
+
     @GetMapping("/{id}")
     public ResponseEntity<?> getSubject(@PathVariable Integer id) {
         Subject subject = subjectService.getSubjectById(id);

@@ -14,6 +14,7 @@ import com.example.schoolmanagement.repository.SubjectRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -37,6 +38,20 @@ public class SubjectService {
             map.put((Integer) row[0], ((Number) row[1]).longValue());
         }
         return map;
+    }
+
+    /** Danh sách lớp đang học môn (id, name) – dùng projection để tránh lazy load khi serialize. */
+    public List<Map<String, Object>> getClassesBySubjectId(Integer subjectId) {
+        getSubjectById(subjectId);
+        List<Object[]> rows = scheduleRepository.findDistinctClassIdAndNameBySubjectId(subjectId);
+        List<Map<String, Object>> list = new ArrayList<>();
+        for (Object[] row : rows) {
+            Map<String, Object> map = new HashMap<>();
+            map.put("id", row[0]);
+            map.put("name", row[1]);
+            list.add(map);
+        }
+        return list;
     }
 
     public List<Subject> getAllSubjects() {

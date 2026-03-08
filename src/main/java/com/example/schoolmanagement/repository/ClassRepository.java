@@ -15,7 +15,9 @@ import java.util.Optional;
 public interface ClassRepository extends JpaRepository<ClassEntity, Integer> {
     @Query("SELECT c FROM ClassEntity c WHERE c.school.id = :schoolId")
     List<ClassEntity> findBySchoolId(@Param("schoolId") Integer schoolId);
-    List<ClassEntity> findByHomeroomTeacherId(Integer teacherId);
+
+    @Query("SELECT c FROM ClassEntity c WHERE c.homeroomTeacher.id = :teacherId")
+    List<ClassEntity> findByHomeroomTeacherId(@Param("teacherId") Integer teacherId);
     @Query("SELECT COUNT(c) FROM ClassEntity c WHERE c.school.id = :schoolId")
     long countBySchoolId(@Param("schoolId") Integer schoolId);
     

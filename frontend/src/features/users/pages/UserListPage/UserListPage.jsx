@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../../auth/context/AuthContext';
 import api from '../../../../shared/lib/api';
@@ -675,7 +675,7 @@ const UserListPage = () => {
                 </th>
                 <th>Người dùng</th>
                 <th>Vai trò</th>
-                <th>Trường</th>
+                <th>GVCN lớp</th>
                 {(() => {
                   const currentUserRole = user?.role?.name?.toUpperCase();
                   if (currentUserRole === 'ADMIN') {
@@ -722,7 +722,28 @@ const UserListPage = () => {
                       );
                     })()}
                   </td>
-                  <td>{userItem.school?.name || 'Không có'}</td>
+                  <td>
+                    {(() => {
+                      const roleName = userItem.role?.name?.toUpperCase() || '';
+                      const isTeacher = roleName.includes('TEACHER') || roleName === 'TEACHER';
+                      const homeroomClasses = userItem.homeroomClasses && Array.isArray(userItem.homeroomClasses) ? userItem.homeroomClasses : [];
+                      if (!isTeacher) return <span className="text-gray-400">-</span>;
+                      if (homeroomClasses.length === 0) return <span className="link-cell-empty">Không</span>;
+                      if (homeroomClasses.length === 1) {
+                        const cls = homeroomClasses[0];
+                        return <span className="link-cell-badge link-cell-badge--student">{cls.name}</span>;
+                      }
+                      return (
+                        <button
+                          type="button"
+                          className="link-cell-btn"
+                          onClick={() => setLinkModal({ type: 'classes', title: `GVCN lớp: ${userItem.fullName || 'giáo viên'}`, items: homeroomClasses, userName: userItem.fullName })}
+                        >
+                          {homeroomClasses.length} lớp
+                        </button>
+                      );
+                    })()}
+                  </td>
                   {(() => {
                     const currentUserRole = user?.role?.name?.toUpperCase();
                     if (currentUserRole === 'ADMIN') {
@@ -736,10 +757,9 @@ const UserListPage = () => {
 
                             if (isStudent) {
                               if (userItem.class && userItem.class.name) {
-                                const text = `${userItem.class.name}${userItem.class.schoolYear ? ` (${userItem.class.schoolYear})` : ''}`;
                                 return (
                                   <span className="link-cell-badge link-cell-badge--student">
-                                    {text}
+                                    {userItem.class.name}
                                   </span>
                                 );
                               }

@@ -30,5 +30,9 @@ public interface ScheduleRepository extends JpaRepository<Schedule, Integer> {
     /** Số lớp (distinct class_id) có ít nhất một tiết trong TKB cho từng môn. */
     @Query("SELECT s.subject.id, COUNT(DISTINCT s.classEntity.id) FROM Schedule s WHERE s.subject.id IS NOT NULL GROUP BY s.subject.id")
     List<Object[]> countDistinctClassesBySubjectIdFromSchedules();
+
+    /** Danh sách lớp (distinct) đang học môn: [classId, className]. */
+    @Query("SELECT DISTINCT s.classEntity.id, s.classEntity.name FROM Schedule s WHERE s.subject.id = :subjectId AND s.classEntity.id IS NOT NULL")
+    List<Object[]> findDistinctClassIdAndNameBySubjectId(@Param("subjectId") Integer subjectId);
 }
 
