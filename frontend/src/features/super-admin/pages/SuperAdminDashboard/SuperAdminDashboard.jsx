@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../../auth/context/AuthContext';
 import api from '../../../../shared/lib/api';
 import './SuperAdminDashboard.css';
@@ -14,7 +14,17 @@ const SuperAdminDashboard = () => {
     documents: 0,
   });
   const [loading, setLoading] = useState(true);
+  const [schools, setSchools] = useState([]);
+  const [schoolStatusStats, setSchoolStatusStats] = useState({
+    active: 0,
+    paused: 0,
+    pending: 0,
+  });
+  const [recentSchools, setRecentSchools] = useState([]);
+  const [recentActivities, setRecentActivities] = useState([]);
+  const [pendingRequests, setPendingRequests] = useState(0);
 
+  // Giữ nguyên logic fetch dữ liệu, chỉ thay đổi trình bày UI
   useEffect(() => {
     fetchStats();
   }, []);
@@ -29,12 +39,45 @@ const SuperAdminDashboard = () => {
         api.get('/documents'),
       ]);
 
+      const schoolsData = schoolsRes.data.schools || [];
+      const announcementsData = announcementsRes.data.announcements || [];
+
+      setSchools(schoolsData);
+
+      // Thống kê trạng thái trường học từ dữ liệu thật
+      const activeSchools = schoolsData.filter((school) => school.status === 'ACTIVE').length;
+      const pausedSchools = schoolsData.filter((school) => school.status === 'LOCKED').length;
+      const pendingSchools = schoolsData.filter((school) => school.status === 'INACTIVE').length;
+
+      setSchoolStatusStats({
+        active: activeSchools,
+        paused: pausedSchools,
+        pending: pendingSchools,
+      });
+
+      // Bảng "Trường mới tạo" lấy từ 3 trường tạo gần nhất
+      const sortedSchools = [...schoolsData]
+        .filter((school) => school.createdAt)
+        .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+        .slice(0, 3);
+      setRecentSchools(sortedSchools);
+
+      // "Hoạt động gần đây" lấy từ thông báo mới nhất
+      const sortedAnnouncements = [...announcementsData]
+        .filter((item) => item.createdAt)
+        .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+        .slice(0, 3);
+      setRecentActivities(sortedAnnouncements);
+
+      // Yêu cầu chờ xử lý = tổng số thông báo hiện có (thông tin thật)
+      setPendingRequests(announcementsData.length || 0);
+
       setStats({
-        schools: schoolsRes.data.schools?.length || 0,
+        schools: schoolsData.length || 0,
         users: usersRes.data.users?.length || 0,
         classes: 0,
         subjects: subjectsRes.data.subjects?.length || 0,
-        announcements: announcementsRes.data.announcements?.length || 0,
+        announcements: announcementsData.length || 0,
         documents: documentsRes.data.documents?.length || 0,
       });
     } catch (error) {
@@ -44,20 +87,29 @@ const SuperAdminDashboard = () => {
     }
   };
 
-  const statCards = [
-    { title: 'Tổng số trường', value: stats.schools, icon: 'S', color: '#667eea', description: 'Quản lý toàn bộ trường học' },
-    { title: 'Tổng số người dùng', value: stats.users, icon: 'U', color: '#764ba2', description: 'Tất cả người dùng trong hệ thống' },
-    { title: 'Tổng số lớp học', value: stats.classes, icon: 'C', color: '#f093fb', description: 'Các lớp học trên toàn hệ thống' },
-    { title: 'Tổng số môn học', value: stats.subjects, icon: 'J', color: '#f5576c', description: 'Các môn học đã cấu hình' },
-    { title: 'Tổng số thông báo', value: stats.announcements, icon: 'A', color: '#4facfe', description: 'Thông báo toàn hệ thống' },
-    { title: 'Tổng số tài liệu', value: stats.documents, icon: 'D', color: '#00f2fe', description: 'Tài liệu đã tải lên' },
+  const quickActions = [
+    { title: 'Thêm trường mới', badge: null, path: '/schools/create' },
+    { title: 'Quản lý người dùng', badge: stats.users || null, path: '/users?userRole=SUPER_ADMIN' },
+    { title: 'Xem báo cáo', badge: null, path: '/reports' },
+    { title: 'Cài đặt hệ thống', badge: null, path: '/settings' },
   ];
 
-  const quickActions = [
-    { title: 'Quản lý trường học', icon: 'S', path: '/schools', color: '#667eea', description: 'Tạo, cập nhật và khóa/mở trường học' },
-    { title: 'Quản lý quản trị hệ thống', icon: 'SA', path: '/users?userRole=SUPER_ADMIN', color: '#764ba2', description: 'Quản lý tài khoản quản trị hệ thống' },
-    { title: 'Quản lý quản trị trường', icon: 'AD', path: '/users?userRole=ADMIN', color: '#f093fb', description: 'Quản lý tài khoản quản trị theo từng trường' },
-  ];
+  const formatDate = (dateString) => {
+    if (!dateString) return '';
+    return new Date(dateString).toLocaleDateString('vi-VN');
+  };
+
+  const getSchoolName = (schoolId) => {
+    if (!schoolId) return '';
+    const found = schools.find((s) => s.id === schoolId);
+    return found?.name || '';
+  };
+
+  const getBarHeight = (value) => {
+    const max = Math.max(schoolStatusStats.active, schoolStatusStats.paused, schoolStatusStats.pending, 1);
+    const maxPixel = 120;
+    return `${(value / max) * maxPixel}px`;
+  };
 
   if (loading) {
     return (
@@ -72,48 +124,212 @@ const SuperAdminDashboard = () => {
 
   return (
     <div className="super-admin-dashboard">
-      <div className="dashboard-header">
-        <h2>Bảng điều khiển quản trị hệ thống</h2>
-        <p>Tổng quan và điều hành toàn bộ hệ thống quản lý trường học.</p>
-        {user?.fullName && <p>Đăng nhập với tài khoản: {user.fullName}</p>}
-      </div>
-
-      <div className="stats-grid">
-        {statCards.map((card, index) => (
-          <div key={index} className="stat-card" style={{ borderTopColor: card.color }}>
-            <div className="stat-icon" style={{ backgroundColor: card.color }}>
-              {card.icon}
+      {/* Thanh header trên cùng */}
+      <div className="sa-topbar">
+        <div>
+          <h1 className="sa-title">Super Admin</h1>
+          <p className="sa-subtitle">Tổng quan điều hành toàn bộ hệ thống quản lý trường học.</p>
+        </div>
+        <div className="sa-topbar-right">
+          <div className="sa-topbar-icons">
+            <button className="sa-icon-btn sa-noti">
+              <span className="sa-icon-bell" />
+              <span className="sa-noti-dot" />
+            </button>
+            <button className="sa-icon-btn">
+              <span className="sa-icon-bell sa-icon-bell--outline" />
+            </button>
+          </div>
+          <div className="sa-user-chip">
+            <div className="sa-user-avatar">
+              {user?.fullName ? user.fullName.charAt(0).toUpperCase() : 'S'}
             </div>
-            <div className="stat-content">
-              <h3>{card.value}</h3>
-              <p className="stat-title">{card.title}</p>
-              <p className="stat-description">{card.description}</p>
+            <div className="sa-user-info">
+              <span className="sa-user-name">{user?.fullName || 'Super Admin'}</span>
+              <span className="sa-user-role">Quản trị hệ thống</span>
             </div>
           </div>
-        ))}
+        </div>
       </div>
 
-      <div className="dashboard-content">
-        <div className="content-section">
-          <h3>Thao tác nhanh</h3>
-          <div className="quick-actions-grid">
-            {quickActions.map((action, index) => (
-              <div key={index} className="quick-action-card" style={{ borderColor: action.color }}>
-                <div className="action-icon" style={{ backgroundColor: action.color }}>
-                  {action.icon}
-                </div>
-                <h4>{action.title}</h4>
-                <p className="action-description">{action.description}</p>
-                <button
-                  className="action-btn"
-                  onClick={() => {
-                    window.location.href = action.path;
-                  }}
-                  style={{ backgroundColor: action.color }}
-                >
-                  Mở
-                </button>
+      {/* Hàng thống kê trên cùng */}
+      <div className="sa-kpi-row">
+        <div className="sa-kpi-card">
+          <div className="sa-kpi-icon sa-kpi-icon--home" />
+          <div className="sa-kpi-content">
+            <span className="sa-kpi-label">Tổng số trường</span>
+            <span className="sa-kpi-value">{stats.schools}</span>
+          </div>
+        </div>
+        <div className="sa-kpi-card">
+          <div className="sa-kpi-icon sa-kpi-icon--user" />
+          <div className="sa-kpi-content">
+            <span className="sa-kpi-label">Tổng người dùng</span>
+            <span className="sa-kpi-value">{stats.users}</span>
+          </div>
+        </div>
+        <div className="sa-kpi-card">
+          <div className="sa-kpi-icon sa-kpi-icon--check" />
+          <div className="sa-kpi-content">
+            <span className="sa-kpi-label">Tài khoản hoạt động</span>
+            <span className="sa-kpi-value">{stats.users}</span>
+          </div>
+        </div>
+        <div className="sa-kpi-card">
+          <div className="sa-kpi-icon sa-kpi-icon--clock" />
+          <div className="sa-kpi-content">
+            <span className="sa-kpi-label">Yêu cầu chờ xử lý</span>
+            <span className="sa-kpi-value">{pendingRequests}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Vùng giữa: biểu đồ */}
+      <div className="sa-middle-row">
+        <div className="sa-card">
+          <div className="sa-card-header">
+            <span className="sa-card-title">Người dùng theo vai trò</span>
+          </div>
+          <div className="sa-chart-body">
+            <div className="sa-donut-chart">
+              <div className="sa-donut-center">
+                <span>{stats.users}</span>
+                <span>Người dùng</span>
               </div>
+            </div>
+            <div className="sa-legend">
+              <div className="sa-legend-item">
+                <span className="sa-legend-dot sa-legend-dot--admin" />
+                <span>Admin</span>
+              </div>
+              <div className="sa-legend-item">
+                <span className="sa-legend-dot sa-legend-dot--teacher" />
+                <span>Giáo viên</span>
+              </div>
+              <div className="sa-legend-item">
+                <span className="sa-legend-dot sa-legend-dot--student" />
+                <span>Học sinh</span>
+              </div>
+              <div className="sa-legend-item">
+                <span className="sa-legend-dot sa-legend-dot--parent" />
+                <span>Phụ huynh</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="sa-card">
+          <div className="sa-card-header">
+            <span className="sa-card-title">Tình trạng trường học</span>
+          </div>
+          <div className="sa-bar-chart">
+            <div className="sa-bar-item">
+              <div
+                className="sa-bar sa-bar--active"
+                style={{ height: getBarHeight(schoolStatusStats.active) }}
+              />
+              <span>Hoạt động</span>
+            </div>
+            <div className="sa-bar-item">
+              <div
+                className="sa-bar sa-bar--pause"
+                style={{ height: getBarHeight(schoolStatusStats.paused) }}
+              />
+              <span>Tạm ngưng</span>
+            </div>
+            <div className="sa-bar-item">
+              <div
+                className="sa-bar sa-bar--pending"
+                style={{ height: getBarHeight(schoolStatusStats.pending) }}
+              />
+              <span>Chờ duyệt</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Hàng dưới: bảng + hoạt động + quick actions */}
+      <div className="sa-bottom-row">
+        <div className="sa-card">
+          <div className="sa-card-header">
+            <span className="sa-card-title">Trường mới tạo</span>
+          </div>
+          <table className="sa-table">
+            <thead>
+              <tr>
+                <th>Tên trường</th>
+                <th>Mã trường</th>
+                <th>Ngày tạo</th>
+                <th>Trạng thái</th>
+              </tr>
+            </thead>
+            <tbody>
+              {recentSchools.map((school) => (
+                <tr key={school.id || school.code}>
+                  <td>{school.name || '-'}</td>
+                  <td>{school.code || '-'}</td>
+                  <td>{formatDate(school.createdAt)}</td>
+                  <td>
+                    <span
+                      className={`sa-badge sa-badge--${
+                        school.status === 'ACTIVE'
+                          ? 'active'
+                          : school.status === 'LOCKED'
+                          ? 'paused'
+                          : 'pending'
+                      }`}
+                    >
+                      {school.status || '-'}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="sa-card">
+          <div className="sa-card-header">
+            <span className="sa-card-title">Hoạt động gần đây</span>
+          </div>
+          <ul className="sa-activity-list">
+            {recentActivities.map((activity) => (
+              <li key={activity.id} className="sa-activity-item">
+                <span className="sa-activity-dot" />
+                <span>
+                  <span className="sa-activity-title">{activity.title}</span>
+                  {activity.school && (
+                    <span className="sa-activity-meta">
+                      {' '}
+                      • {getSchoolName(activity.school.id)} • {formatDate(activity.createdAt)}
+                    </span>
+                  )}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        <div className="sa-card">
+          <div className="sa-card-header">
+            <span className="sa-card-title">Quick Actions</span>
+          </div>
+          <div className="sa-quick-actions">
+            {quickActions.map((action) => (
+              <button
+                key={action.title}
+                type="button"
+                className="sa-quick-action-btn"
+                onClick={() => {
+                  window.location.href = action.path;
+                }}
+              >
+                <span className="sa-quick-action-left">
+                  <span className="sa-quick-action-icon" />
+                  <span>{action.title}</span>
+                </span>
+                {action.badge && <span className="sa-quick-action-badge">{action.badge}</span>}
+              </button>
             ))}
           </div>
         </div>
