@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../../../auth/context/AuthContext';
 import api from '../../../../shared/lib/api';
@@ -416,7 +416,7 @@ const UserEditPage = () => {
                 <option value="">Chọn lớp</option>
                 {classes.map(cls => (
                   <option key={cls.id} value={cls.id}>
-                    {cls.name} - {typeof cls.schoolYear === 'object' && cls.schoolYear != null ? (cls.schoolYear?.name ?? '') : (cls.schoolYear ?? '')}
+                    {cls.name}
                   </option>
                 ))}
               </select>

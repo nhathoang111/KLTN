@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../auth/context/AuthContext';
 import api from '../../../../shared/lib/api';
@@ -347,9 +347,10 @@ const UserCreatePage = () => {
         userData.schoolId = effectiveSchoolId;
       }
 
-      // Thêm classId (bắt buộc cho học sinh)
+      // Thêm classId (bắt buộc cho học sinh) - bất kỳ role nào chứa STUDENT hoặc Học sinh
       const selectedRole = roles.find(r => r.id === roleIdNum || r.id === formData.roleId);
-      const isStudent = selectedRole && (selectedRole.name?.toUpperCase() === 'STUDENT' || selectedRole.name?.toUpperCase().startsWith('STUDENT'));
+      const roleNameUpper = (selectedRole?.name || '').toUpperCase();
+      const isStudent = selectedRole && (roleNameUpper.includes('STUDENT') || roleNameUpper.includes('HỌC SINH') || roleNameUpper.includes('HOC SINH'));
 
       if (isStudent) {
         if (!formData.classId) {
@@ -782,6 +783,58 @@ const UserCreatePage = () => {
               </select>
             </div>
 
+            {/* Quản trị viên (ADMIN): Số điện thoại, Giới tính, Ngày sinh */}
+            {(() => {
+              const selectedRole = roles.find(r => r.id === parseInt(formData.roleId));
+              const isAdmin = selectedRole && (selectedRole.name?.toUpperCase() === 'ADMIN' || selectedRole.name?.toUpperCase().startsWith('ADMIN'));
+              if (!isAdmin) return null;
+              return (
+                <div className="border-t pt-4 mt-4">
+                  <h4 className="text-sm font-semibold text-gray-800 mb-3">Thông tin quản trị viên</h4>
+                  <div className="space-y-4">
+                    <div>
+                      <label htmlFor="adminPhone" className="block text-sm font-medium text-gray-700">Số điện thoại</label>
+                      <input
+                        type="tel"
+                        name="phone"
+                        id="adminPhone"
+                        value={formData.phone}
+                        onChange={handleChange}
+                        placeholder="0912345678"
+                        className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label htmlFor="adminGender" className="block text-sm font-medium text-gray-700">Giới tính</label>
+                      <select
+                        name="gender"
+                        id="adminGender"
+                        value={formData.gender}
+                        onChange={handleChange}
+                        className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                      >
+                        <option value="">-- Chọn --</option>
+                        <option value="MALE">Nam</option>
+                        <option value="FEMALE">Nữ</option>
+                        <option value="OTHER">Khác</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label htmlFor="adminDateOfBirth" className="block text-sm font-medium text-gray-700">Ngày tháng năm sinh</label>
+                      <input
+                        type="date"
+                        name="dateOfBirth"
+                        id="adminDateOfBirth"
+                        value={formData.dateOfBirth}
+                        onChange={handleChange}
+                        className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                      />
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+
             {/* ========== Field riêng theo role ========== */}
             {/* 🧑‍🎓 STUDENT: Mã lớp, Ngày sinh, Giới tính */}
             {(() => {
@@ -805,7 +858,7 @@ const UserCreatePage = () => {
                         <option value="">Chọn lớp</option>
                         {classes.map(cls => (
                           <option key={cls.id} value={cls.id}>
-                            {cls.name} - {typeof cls.schoolYear === 'string' ? cls.schoolYear : (cls.schoolYear?.name ?? '')}
+                            {cls.name}
                           </option>
                         ))}
                       </select>

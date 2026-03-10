@@ -1,4 +1,4 @@
-﻿import React, { useState } from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../../../../shared/lib/api';
 
@@ -9,7 +9,10 @@ const SchoolCreatePage = () => {
     address: '',
     phone: '',
     email: '',
-    status: 'ACTIVE'
+    status: 'ACTIVE',
+    logo: '',
+    establishmentYear: '',
+    managementType: ''
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -23,13 +26,34 @@ const SchoolCreatePage = () => {
     });
   };
 
+  const handleLogoChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      setError('Vui l�ng ch?n file ?nh (JPG, PNG, ...)');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      setFormData(prev => ({ ...prev, logo: reader.result }));
+      setError('');
+    };
+    reader.readAsDataURL(file);
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
     setLoading(true);
 
     try {
-      await api.post('/schools', formData);
+      const payload = {
+        ...formData,
+        logo: formData.logo || null,
+        establishmentYear: formData.establishmentYear ? parseInt(formData.establishmentYear, 10) : null,
+        managementType: formData.managementType || null
+      };
+      await api.post('/schools', payload);
       navigate('/schools');
     } catch (err) {
       console.error('Error creating school:', err);
@@ -37,7 +61,7 @@ const SchoolCreatePage = () => {
       const errorMessage = err.response?.data?.error ||
         err.response?.data?.message ||
         err.message ||
-        'Kh么ng th峄?t岷 tr瓢峄漬g h峄峜. Vui l貌ng th峄?l岷.';
+        'Kh?ng th??t?? tr???g h??. Vui l?ng th??l??.';
       setError(errorMessage);
       // Scroll to error message
       setTimeout(() => {
@@ -101,6 +125,60 @@ const SchoolCreatePage = () => {
                 onChange={handleChange}
                 className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
               />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Logo tr??ng</label>
+              <div className="flex items-center gap-4 mt-1">
+                {formData.logo ? (
+                  <img src={formData.logo} alt="Logo" className="w-20 h-20 object-cover rounded-lg border border-gray-200" />
+                ) : (
+                  <div className="w-20 h-20 rounded-lg border-2 border-dashed border-gray-300 flex items-center justify-center text-gray-400 text-xs">
+                    Ch?a c�
+                  </div>
+                )}
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleLogoChange}
+                  className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-medium file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                />
+              </div>
+              <p className="text-xs text-gray-500 mt-1">JPG, PNG (t�y ch?n)</p>
+            </div>
+
+            <div>
+              <label htmlFor="establishmentYear" className="block text-sm font-medium text-gray-700">
+                N?m th�nh l?p
+              </label>
+              <input
+                type="number"
+                name="establishmentYear"
+                id="establishmentYear"
+                min="1900"
+                max={new Date().getFullYear()}
+                value={formData.establishmentYear}
+                onChange={handleChange}
+                placeholder="VD: 1990"
+                className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+              />
+            </div>
+
+            <div>
+              <label htmlFor="managementType" className="block text-sm font-medium text-gray-700">
+                C?p qu?n l� (tr??ng c�ng / t?)
+              </label>
+              <select
+                name="managementType"
+                id="managementType"
+                value={formData.managementType}
+                onChange={handleChange}
+                className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+              >
+                <option value="">-- Ch?n --</option>
+                <option value="PUBLIC">Tr??ng c�ng</option>
+                <option value="PRIVATE">Tr??ng t?</option>
+              </select>
             </div>
 
             <div>

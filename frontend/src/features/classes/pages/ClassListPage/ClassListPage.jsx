@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import api from '../../../../shared/lib/api';
 import './ClassListPage.css';
 import { useAuth } from '../../../auth/context/AuthContext';
@@ -12,14 +12,14 @@ const ClassListPage = () => {
   const [showModal, setShowModal] = useState(false);
   const [editingClass, setEditingClass] = useState(null);
   const [formData, setFormData] = useState({
-    name: '',
     gradeLevel: '',
+    classNumber: '',
     schoolYear: '',
     capacity: '',
     status: 'ACTIVE',
     schoolId: '',
     homeroomTeacherId: '',
-    room: '' // Phòng học cố định
+    room: ''
   });
 
   useEffect(() => {
@@ -33,14 +33,26 @@ const ClassListPage = () => {
     }
   }, [user]);
 
+  useEffect(() => {
+    const onFocus = () => fetchData();
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
+  }, []);
+
   const fetchData = async () => {
     try {
-      const [classesRes, schoolsRes] = await Promise.all([
+      const [classesRes, schoolsRes, countsRes] = await Promise.all([
         api.get('/classes'),
-        api.get('/schools')
+        api.get('/schools'),
+        api.get('/classes/counts/students').catch(() => ({ data: {} }))
       ]);
 
       let allClasses = classesRes.data.classes || [];
+      const studentCounts = countsRes.data || {};
+      allClasses = allClasses.map((cls) => ({
+        ...cls,
+        studentCount: studentCounts[String(cls.id)] ?? cls.studentCount ?? 0
+      }));
 
       // Debug: Log class data to check room field
       console.log('📋 Classes data:', allClasses);
@@ -148,13 +160,19 @@ const ClassListPage = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
+      const gradeLevel = parseInt(formData.gradeLevel, 10);
+      const classNumber = parseInt(formData.classNumber, 10);
+      const schoolYearStr = (typeof formData.schoolYear === 'string' ? formData.schoolYear : (formData.schoolYear?.name ?? '')).trim();
+      const name = schoolYearStr ? `${gradeLevel}/${classNumber} (${schoolYearStr})` : `Khối ${gradeLevel} - Lớp ${classNumber}`;
       const submitData = {
         ...formData,
-        gradeLevel: parseInt(formData.gradeLevel),
-        capacity: parseInt(formData.capacity),
-        schoolId: parseInt(formData.schoolId),
-        homeroomTeacherId: formData.homeroomTeacherId ? parseInt(formData.homeroomTeacherId) : null,
-        room: formData.room || null // Đảm bảo gửi room (có thể null)
+        name,
+        gradeLevel,
+        classNumber,
+        capacity: parseInt(formData.capacity, 10),
+        schoolId: parseInt(formData.schoolId, 10),
+        homeroomTeacherId: formData.homeroomTeacherId ? parseInt(formData.homeroomTeacherId, 10) : null,
+        room: formData.room || null
       };
 
       console.log('📤 Submitting class data:', submitData);
@@ -183,8 +201,8 @@ const ClassListPage = () => {
         ? user.school.id.toString()
         : '';
       setFormData({
-        name: '',
         gradeLevel: '',
+        classNumber: '',
         schoolYear: '',
         capacity: '',
         status: 'ACTIVE',
@@ -201,23 +219,57 @@ const ClassListPage = () => {
     }
   };
 
-  const handleEdit = (classItem) => {
-    setEditingClass(classItem);
-    const userRole = user?.role?.name?.toUpperCase();
-    const defaultSchoolId = (userRole === 'ADMIN' || userRole === 'TEACHER') && user?.school?.id
-      ? user.school.id.toString()
-      : classItem.school?.id?.toString() || '';
-    setFormData({
-      name: classItem.name || '',
-      gradeLevel: classItem.gradeLevel?.toString() || '',
-      schoolYear: (classItem.schoolYear && typeof classItem.schoolYear === 'object' ? classItem.schoolYear.name : classItem.schoolYear) || '',
-      capacity: classItem.capacity?.toString() || '',
-      status: classItem.status || 'ACTIVE',
-      schoolId: defaultSchoolId,
-      homeroomTeacherId: classItem.homeroomTeacher?.id?.toString() || '',
-      room: classItem.room || ''
-    });
-    setShowModal(true);
+  const parseClassNumberFromName = (name) => {
+    if (!name || typeof name !== 'string') return '';
+    const match = name.match(/^\d+\/(\d+)\s*\(/);
+    return match ? match[1] : '';
+  };
+
+  const handleEdit = async (classItem) => {
+    try {
+      const res = await api.get(`/classes/${classItem.id}`);
+      const c = res.data;
+      const userRole = user?.role?.name?.toUpperCase();
+      const defaultSchoolId = (userRole === 'ADMIN' || userRole === 'TEACHER') && user?.school?.id
+        ? user.school.id.toString()
+        : (c.school?.id ?? classItem.school?.id)?.toString() || '';
+      const schoolYearStr = (c.schoolYear && typeof c.schoolYear === 'object' ? c.schoolYear.name : c.schoolYear)
+        || (classItem.schoolYear && typeof classItem.schoolYear === 'object' ? classItem.schoolYear.name : classItem.schoolYear)
+        || '';
+      const rawClassNumber = c.classNumber ?? classItem.classNumber;
+      const classNumberStr = rawClassNumber != null ? String(rawClassNumber) : (parseClassNumberFromName(c.name || classItem.name) || '');
+      setEditingClass({ ...classItem, ...c });
+      setFormData({
+        gradeLevel: (c.gradeLevel ?? classItem.gradeLevel)?.toString() || '',
+        classNumber: classNumberStr,
+        schoolYear: schoolYearStr,
+        capacity: (c.capacity ?? classItem.capacity)?.toString() || '',
+        status: c.status || classItem.status || 'ACTIVE',
+        schoolId: (c.school?.id ?? classItem.school?.id)?.toString() || defaultSchoolId,
+        homeroomTeacherId: (c.homeroomTeacher?.id ?? classItem.homeroomTeacher?.id)?.toString() || '',
+        room: (c.room ?? classItem.room) || ''
+      });
+      setShowModal(true);
+    } catch (err) {
+      console.error('Error loading class for edit:', err);
+      setEditingClass(classItem);
+      const userRole = user?.role?.name?.toUpperCase();
+      const defaultSchoolId = (userRole === 'ADMIN' || userRole === 'TEACHER') && user?.school?.id
+        ? user.school.id.toString()
+        : classItem.school?.id?.toString() || '';
+      const classNumberStr = classItem.classNumber != null ? String(classItem.classNumber) : parseClassNumberFromName(classItem.name);
+      setFormData({
+        gradeLevel: classItem.gradeLevel?.toString() || '',
+        classNumber: classNumberStr,
+        schoolYear: (classItem.schoolYear && typeof classItem.schoolYear === 'object' ? classItem.schoolYear.name : classItem.schoolYear) || '',
+        capacity: classItem.capacity?.toString() || '',
+        status: classItem.status || 'ACTIVE',
+        schoolId: defaultSchoolId,
+        homeroomTeacherId: classItem.homeroomTeacher?.id?.toString() || '',
+        room: classItem.room || ''
+      });
+      setShowModal(true);
+    }
   };
 
   const handleDelete = async (id) => {
@@ -245,8 +297,8 @@ const ClassListPage = () => {
       ? user.school.id.toString()
       : '';
     setFormData({
-      name: '',
       gradeLevel: '',
+      classNumber: '',
       schoolYear: '',
       capacity: '',
       status: 'ACTIVE',
@@ -284,7 +336,16 @@ const ClassListPage = () => {
     <div className="class-list-page">
       <div className="common-page-header">
         <h1>Quản lý lớp học</h1>
-        {canManageClasses && (
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={() => fetchData()}
+            style={{ marginRight: canManageClasses ? 0 : undefined }}
+          >
+            Làm mới
+          </button>
+          {canManageClasses && (
           <button
             className="btn btn-primary"
             onClick={() => {
@@ -292,8 +353,8 @@ const ClassListPage = () => {
                 ? user.school.id.toString()
                 : '';
               setFormData({
-                name: '',
                 gradeLevel: '',
+                classNumber: '',
                 schoolYear: '',
                 capacity: '',
                 status: 'ACTIVE',
@@ -306,7 +367,8 @@ const ClassListPage = () => {
           >
             Thêm lớp học
           </button>
-        )}
+          )}
+        </div>
       </div>
 
       <div className="common-table-container classes-table-container">
@@ -314,9 +376,7 @@ const ClassListPage = () => {
           <thead>
             <tr>
               <th>Tên lớp</th>
-              <th>Khối</th>
-              <th>Năm học</th>
-              <th>Sĩ số</th>
+              <th>Sĩ số tối đa</th>
               <th>Phòng học</th>
               <th>Trường</th>
               <th>GVCN</th>
@@ -335,9 +395,7 @@ const ClassListPage = () => {
               return (
                 <tr key={classItem.id}>
                   <td>{classItem.name}</td>
-                  <td>{classItem.gradeLevel}</td>
-                  <td>{classItem.schoolYear && typeof classItem.schoolYear === 'object' ? classItem.schoolYear.name : classItem.schoolYear}</td>
-                  <td>{classItem.capacity}</td>
+                  <td>{(classItem.studentCount ?? 0)}/{(classItem.capacity ?? 0)}</td>
                   <td>
                     <span style={{
                       padding: '4px 8px',
@@ -391,15 +449,6 @@ const ClassListPage = () => {
             </div>
             <form onSubmit={handleSubmit} className="common-modal-form">
               <div className="common-form-group">
-                <label>Tên lớp *</label>
-                <input
-                  type="text"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  required
-                />
-              </div>
-              <div className="common-form-group">
                 <label>Khối *</label>
                 <select
                   value={formData.gradeLevel}
@@ -413,6 +462,17 @@ const ClassListPage = () => {
                 </select>
               </div>
               <div className="common-form-group">
+                <label>Số lớp *</label>
+                <input
+                  type="number"
+                  min="1"
+                  value={formData.classNumber}
+                  onChange={(e) => setFormData({ ...formData, classNumber: e.target.value })}
+                  placeholder="VD: 1, 2, 3"
+                  required
+                />
+              </div>
+              <div className="common-form-group">
                 <label>Năm học *</label>
                 <input
                   type="text"
@@ -422,8 +482,13 @@ const ClassListPage = () => {
                   required
                 />
               </div>
+              {formData.gradeLevel && formData.classNumber && (
+                <div className="common-form-group" style={{ padding: '8px 0', color: '#666', fontSize: '13px' }}>
+                  Tên lớp sẽ là: <strong>{formData.gradeLevel}/{formData.classNumber}{formData.schoolYear ? ` (${(typeof formData.schoolYear === 'string' ? formData.schoolYear : formData.schoolYear?.name || '').trim()})` : ''}</strong>
+                </div>
+              )}
               <div className="common-form-group">
-                <label>Sĩ số *</label>
+                <label>Sĩ số tối đa *</label>
                 <input
                   type="number"
                   value={formData.capacity}

@@ -154,6 +154,9 @@ public class SchoolService {
         if (school.getPhone() != null) existing.setPhone(school.getPhone());
         if (school.getEmail() != null) existing.setEmail(school.getEmail());
         if (school.getStatus() != null) existing.setStatus(school.getStatus());
+        if (school.getLogo() != null) existing.setLogo(school.getLogo());
+        if (school.getEstablishmentYear() != null) existing.setEstablishmentYear(school.getEstablishmentYear());
+        if (school.getManagementType() != null) existing.setManagementType(school.getManagementType());
         return saveSchool(existing);
     }
 

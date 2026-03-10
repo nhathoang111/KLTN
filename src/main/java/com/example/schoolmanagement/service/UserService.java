@@ -508,6 +508,17 @@ public class UserService {
                 }
             }
             if (!classesList.isEmpty()) userMap.put("classes", classesList);
+            // Lớp làm giáo viên chủ nhiệm (GVCN)
+            List<ClassEntity> homeroomClasses = classRepository.findByHomeroomTeacherId(u.getId());
+            List<Map<String, Object>> homeroomList = new ArrayList<>();
+            for (ClassEntity ce : homeroomClasses) {
+                Map<String, Object> classMap = new HashMap<>();
+                classMap.put("id", ce.getId());
+                classMap.put("name", ce.getName());
+                classMap.put("schoolYear", ce.getSchoolYear() != null ? ce.getSchoolYear().getName() : null);
+                homeroomList.add(classMap);
+            }
+            if (!homeroomList.isEmpty()) userMap.put("homeroomClasses", homeroomList);
         }
         boolean isParent = (roleNameUpper != null) && (
                 roleNameUpper.contains("PARENT") || roleNameUpper.contains("HUYNH")
@@ -595,8 +606,8 @@ public class UserService {
 
         Integer classId = parseIntFromMap(userData.get("classId"));
         if (classId != null && savedUser.getRole() != null) {
-            String rn = savedUser.getRole().getName().toUpperCase();
-            if ("STUDENT".equals(rn) || rn.startsWith("STUDENT")) {
+            String rn = savedUser.getRole().getName() != null ? savedUser.getRole().getName().toUpperCase() : "";
+            if (rn.contains("STUDENT")) {
                 Optional<ClassEntity> classOpt = classRepository.findById(classId);
                 if (classOpt.isPresent()) {
                     List<Enrollment> existingEnrollments = enrollmentRepository.findByClassEntityId(classId);
@@ -615,6 +626,7 @@ public class UserService {
                                 .orElse(0);
                         enrollment.setRollno(maxRollno + 1);
                         enrollmentRepository.save(enrollment);
+                        enrollmentRepository.flush();
                     }
                 }
             }
