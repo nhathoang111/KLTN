@@ -23,6 +23,14 @@ public class ClassController {
         return ResponseEntity.ok(Map.of("classes", classes));
     }
 
+    @GetMapping("/counts/students")
+    public ResponseEntity<?> getStudentCounts() {
+        Map<Integer, Integer> counts = classService.getStudentCountByClassId();
+        Map<String, Integer> json = new java.util.HashMap<>();
+        counts.forEach((id, count) -> json.put(String.valueOf(id), count));
+        return ResponseEntity.ok(json);
+    }
+
     @GetMapping("/check-students/{classId}")
     public ResponseEntity<?> checkStudentsInClass(@PathVariable Integer classId) {
         Map<String, Object> result = classService.checkStudentsInClass(classId);

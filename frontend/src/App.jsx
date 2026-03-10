@@ -1,32 +1,10 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { AuthProvider } from './contexts/AuthContext';
-import LoginPage from './pages/LoginPage';
-import Dashboard from './pages/Dashboard';
-import SchoolListPage from './pages/SchoolListPage';
-import SchoolCreatePage from './pages/SchoolCreatePage';
-import SchoolEditPage from './pages/SchoolEditPage';
-import ClassListPage from './pages/ClassListPage';
-import ClassCreatePage from './pages/ClassCreatePage';
-import ClassEditPage from './pages/ClassEditPage';
-import SubjectListPage from './pages/SubjectListPage';
-import SubjectCreatePage from './pages/SubjectCreatePage';
-import SubjectEditPage from './pages/SubjectEditPage';
-import UserListPage from './pages/UserListPage';
-import UserCreatePage from './pages/UserCreatePage';
-import UserEditPage from './pages/UserEditPage';
-import AssignmentListPage from './pages/AssignmentListPage';
-import ReportListPage from './pages/ReportListPage';
-import DocumentListPage from './pages/DocumentListPage';
-import AnnouncementListPage from './pages/AnnouncementListPage';
-import RoleManagement from './pages/RoleManagement';
-import ExamScoreManagement from './pages/ExamScoreManagement';
-import AttendanceManagement from './pages/AttendanceManagement';
-import RecordListPage from './pages/RecordListPage';
-import ScheduleListPage from './pages/ScheduleListPage';
-import ProtectedRoute from './components/ProtectedRoute';
-import Layout from './components/Layout';
-import './App.css';
+import { AuthProvider } from './app/providers/AuthProvider';
+import LoginPage from './features/auth/pages/LoginPage/LoginPage';
+import ProtectedRoute from './features/auth/components/ProtectedRoute';
+import Layout from './shared/components/layout/Layout/Layout';
+import { protectedRoutes } from './app/router/routeConfig';
 
 function App() {
   return (
@@ -36,7 +14,7 @@ function App() {
           <Routes>
             {/* Public routes */}
             <Route path="/login" element={<LoginPage />} />
-            
+
             {/* Protected routes */}
             <Route path="/" element={
               <ProtectedRoute>
@@ -44,55 +22,17 @@ function App() {
               </ProtectedRoute>
             }>
               <Route index element={<Navigate to="/dashboard" replace />} />
-              <Route path="dashboard" element={<Dashboard />} />
-
-              {/* School Management */}
-              <Route path="schools" element={<SchoolListPage />} />
-              <Route path="schools/create" element={<SchoolCreatePage />} />
-              <Route path="schools/:id/edit" element={<SchoolEditPage />} />
-
-              {/* Class Management */}
-              <Route path="classes" element={<ClassListPage />} />
-              <Route path="classes/create" element={<ClassCreatePage />} />
-              <Route path="classes/:id/edit" element={<ClassEditPage />} />
-
-              {/* Subject Management */}
-              <Route path="subjects" element={<SubjectListPage />} />
-              <Route path="subjects/create" element={<SubjectCreatePage />} />
-              <Route path="subjects/:id/edit" element={<SubjectEditPage />} />
-
-              {/* User Management */}
-              <Route path="users" element={<UserListPage />} />
-              <Route path="users/create" element={<UserCreatePage />} />
-              <Route path="users/:id/edit" element={<UserEditPage />} />
-
-              {/* Role Management */}
-              <Route path="roles" element={<RoleManagement />} />
-
-
-              {/* Assignment Management */}
-              <Route path="assignments" element={<AssignmentListPage />} />
-
-              {/* Report Management */}
-              <Route path="reports" element={<ReportListPage />} />
-
-              {/* Document Management */}
-              <Route path="documents" element={<DocumentListPage />} />
-
-              {/* Announcement Management */}
-              <Route path="announcements" element={<AnnouncementListPage />} />
-
-              {/* Exam Score Management */}
-              <Route path="exam-scores" element={<ExamScoreManagement />} />
-
-              {/* Attendance Management */}
-              <Route path="attendance" element={<AttendanceManagement />} />
-
-              {/* Record Management */}
-              <Route path="records" element={<RecordListPage />} />
-
-              {/* Schedule Management */}
-              <Route path="schedules" element={<ScheduleListPage />} />
+              {protectedRoutes.map(({ path, Component, roles }) => (
+                <Route
+                  key={path}
+                  path={path}
+                  element={
+                    <ProtectedRoute allowedRoles={roles}>
+                      <Component />
+                    </ProtectedRoute>
+                  }
+                />
+              ))}
             </Route>
           </Routes>
         </div>
