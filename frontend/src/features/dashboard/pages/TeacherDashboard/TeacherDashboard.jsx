@@ -29,9 +29,30 @@ const TeacherDashboard = () => {
     if (user && teacherId) fetchData();
   }, [user, teacherId]);
 
+  // Chuẩn hóa ngày từ API (string "yyyy-mm-dd" hoặc object Java LocalDate) để so sánh với ngày local
+  const getScheduleDateStr = (s) => {
+    if (s.date == null) return null;
+    if (typeof s.date === 'string') return s.date.slice(0, 10);
+    if (Array.isArray(s.date)) {
+      const [y, m, d] = s.date;
+      if (y != null && m != null && d != null) return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    }
+    if (typeof s.date === 'object' && s.date.year != null) {
+      const m = (s.date.monthValue ?? s.date.month ?? 1);
+      const d = (s.date.dayOfMonth ?? s.date.day ?? 1);
+      return `${s.date.year}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    }
+    return null;
+  };
+
   const fetchData = async () => {
     try {
-      const todayStr = new Date().toISOString().slice(0, 10);
+      const now = new Date();
+      // Dùng ngày LOCAL để khớp với thời khóa biểu (backend lưu LocalDate, không timezone)
+      const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+      // Backend: dayOfWeek 1=Thứ 2, 2=Thứ 3, ..., 6=Thứ 7 (theo Schedule entity)
+      const todayDayOfWeek = now.getDay() === 0 ? 7 : now.getDay(); // JS: 0=CN, 1=T2,...,6=T7
+
       const [classesRes, schedulesRes, assignmentsRes, countsRes] = await Promise.all([
         api.get(`/classes/teacher/${teacherId}`),
         api.get(`/schedules/teacher/${teacherId}`),
@@ -42,7 +63,15 @@ const TeacherDashboard = () => {
       setTeacherClasses(classes);
       const schedules = schedulesRes.data?.schedules || [];
       setAllSchedules(schedules);
-      setTodaySchedules(schedules.filter((s) => s.date === todayStr).sort((a, b) => (a.period || 0) - (b.period || 0)));
+
+      const isToday = (s) => {
+        const dateStr = getScheduleDateStr(s);
+        if (dateStr) return dateStr === todayStr;
+        if (s.dayOfWeek != null && s.dayOfWeek !== undefined) return Number(s.dayOfWeek) === todayDayOfWeek;
+        return false;
+      };
+      const todayList = schedules.filter(isToday).sort((a, b) => (a.period || 0) - (b.period || 0));
+      setTodaySchedules(todayList);
       setAssignments(assignmentsRes.data?.assignments || []);
       const counts = countsRes.data || {};
       setStudentCountByClassId(counts);

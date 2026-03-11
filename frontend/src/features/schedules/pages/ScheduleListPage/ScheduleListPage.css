@@ -201,6 +201,11 @@
   border-radius: 0 12px 0 0;
 }
 
+.timetable-day-header--today {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  box-shadow: inset 0 0 0 3px rgba(255, 255, 255, 0.5);
+}
+
 .day-label {
   font-size: 1rem;
   font-weight: 700;
@@ -269,6 +274,11 @@
 
 .timetable-slot:first-of-type {
   border-left: 2px solid #e9ecef;
+}
+
+.timetable-slot--today {
+  background: #e8eaf6;
+  box-shadow: inset 0 0 0 2px rgba(102, 126, 234, 0.35);
 }
 
 /* Schedule Card */

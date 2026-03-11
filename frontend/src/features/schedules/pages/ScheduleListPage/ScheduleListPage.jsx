@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import api from '../../../../shared/lib/api';
 import './ScheduleListPage.css';
 import { useAuth } from '../../../auth/context/AuthContext';
@@ -524,6 +524,12 @@ const ScheduleListPage = () => {
     return formatDateToYYYYMMDD(targetDate);
   };
 
+  // Cột có phải là ngày hôm nay không (để làm nổi bật)
+  const isTodayColumn = (dayOfWeek) => {
+    const todayStr = formatDateToYYYYMMDD(new Date());
+    return getDateStringForDayOfWeek(dayOfWeek) === todayStr;
+  };
+
   // Nhóm schedules theo ngày và ti?t h?c ?? hi?n th? d?ng timetable
   const getScheduleForDayAndPeriod = (dayOfWeek, period) => {
     const targetDateStr = getDateStringForDayOfWeek(dayOfWeek);
@@ -761,7 +767,10 @@ const ScheduleListPage = () => {
               <div className="timetable-header">
                 <div className="timetable-corner"></div>
                 {[1, 2, 3, 4, 5, 6].map(dayOfWeek => (
-                  <div key={dayOfWeek} className="timetable-day-header">
+                  <div
+                    key={dayOfWeek}
+                    className={`timetable-day-header${isTodayColumn(dayOfWeek) ? ' timetable-day-header--today' : ''}`}
+                  >
                     <div className="day-label">{getDayName(dayOfWeek)}</div>
                     {getDateForDayOfWeek(dayOfWeek) && (
                       <div className="day-date">{getDateForDayOfWeek(dayOfWeek)}</div>
@@ -780,7 +789,10 @@ const ScheduleListPage = () => {
                   {[1, 2, 3, 4, 5, 6].map(dayOfWeek => {
                     const schedule = getScheduleForDayAndPeriod(dayOfWeek, period);
                     return (
-                      <div key={dayOfWeek} className="timetable-slot">
+                      <div
+                        key={dayOfWeek}
+                        className={`timetable-slot${isTodayColumn(dayOfWeek) ? ' timetable-slot--today' : ''}`}
+                      >
                         {schedule ? (
                           <div className="schedule-card">
                             <div className="schedule-card-header">
