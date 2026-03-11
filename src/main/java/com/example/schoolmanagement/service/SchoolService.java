@@ -75,6 +75,34 @@ public class SchoolService {
         return schoolRepository.findById(id)
                 .orElseThrow(() -> new com.example.schoolmanagement.exception.ResourceNotFoundException("School not found with id: " + id));
     }
+
+    /** Trả về trường kèm số liệu thống kê (học sinh, giáo viên, phụ huynh, số lớp) để hiển thị dashboard. */
+    public School getSchoolWithStats(Integer id) {
+        School school = getSchoolById(id);
+        List<User> users = userRepository.findBySchoolId(id);
+        int studentCount = 0, teacherCount = 0, parentCount = 0;
+        for (User u : users) {
+            String roleName = u.getRole() != null ? (u.getRole().getName() != null ? u.getRole().getName().toUpperCase() : "") : "";
+            if (roleName.contains("STUDENT")) studentCount++;
+            else if (roleName.contains("TEACHER")) teacherCount++;
+            else if (roleName.contains("PARENT")) parentCount++;
+        }
+        school.setStudentCount(studentCount);
+        school.setTeacherCount(teacherCount);
+        school.setParentCount(parentCount);
+        school.setClassCount((int) classRepository.countBySchoolId(id));
+        int maleCount = 0, femaleCount = 0;
+        for (User u : users) {
+            String roleName = u.getRole() != null ? (u.getRole().getName() != null ? u.getRole().getName().toUpperCase() : "") : "";
+            if (!roleName.contains("STUDENT")) continue;
+            String g = u.getGender() != null ? u.getGender().trim() : "";
+            if (g.equalsIgnoreCase("Nam") || g.equalsIgnoreCase("Male")) maleCount++;
+            else if (g.equalsIgnoreCase("Nữ") || g.equalsIgnoreCase("Female")) femaleCount++;
+        }
+        school.setStudentMaleCount(maleCount);
+        school.setStudentFemaleCount(femaleCount);
+        return school;
+    }
     
     public School getSchoolByCode(String code) {
         return schoolRepository.findByCode(code)

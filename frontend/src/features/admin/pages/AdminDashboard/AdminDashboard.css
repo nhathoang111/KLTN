@@ -142,11 +142,11 @@
   background: linear-gradient(135deg, #fef3c7, #fee2e2);
 }
 
-.ad-kpi-card--staffs {
+.ad-kpi-card--parents {
   background: linear-gradient(135deg, #e0f2fe, #cffafe);
 }
 
-.ad-kpi-card--awards {
+.ad-kpi-card--classes {
   background: linear-gradient(135deg, #fef9c3, #fee2e2);
 }
 
@@ -324,59 +324,46 @@
   color: #9ca3af;
 }
 
-/* Calendar & agenda */
-.ad-calendar-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-size: 12px;
-  color: #4b5563;
-  margin-bottom: 8px;
+/* Thống kê lớp theo khối */
+.ad-grade-stats {
+  margin-top: 4px;
 }
 
-.ad-calendar-days {
-  display: flex;
-  justify-content: space-between;
-  font-size: 11px;
-  color: #9ca3af;
-  margin-bottom: 10px;
+.ad-grade-stats-empty {
+  font-size: 13px;
+  color: #6b7280;
+  margin: 0;
+  padding: 12px 0;
 }
 
-.ad-agenda-list {
+.ad-grade-stats-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-}
-
-.ad-agenda-item {
-  border-radius: 12px;
-  padding: 8px 10px;
-  display: flex;
   gap: 10px;
 }
 
-.ad-agenda-time {
-  font-size: 11px;
-  font-weight: 600;
-  color: #4b5563;
-  min-width: 60px;
-}
-
-.ad-agenda-content {
+.ad-grade-stats-row {
   display: flex;
-  flex-direction: column;
-  gap: 2px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: #f3f4f6;
 }
 
-.ad-agenda-grade {
-  font-size: 11px;
-  color: #6b7280;
-}
-
-.ad-agenda-title {
-  font-size: 12px;
+.ad-grade-stats-label {
+  font-size: 13px;
   font-weight: 600;
   color: #111827;
+}
+
+.ad-grade-stats-value {
+  font-size: 13px;
+  color: #4f46e5;
+  font-weight: 600;
 }
 
 /* Bottom row */
@@ -432,7 +419,7 @@
   color: #6b7280;
 }
 
-/* Messages */
+/* Thông báo */
 .ad-view-all-btn {
   border: none;
   background: transparent;
@@ -475,6 +462,13 @@
 .ad-message-meta {
   font-size: 11px;
   color: #6b7280;
+}
+
+.ad-notification-empty {
+  font-size: 13px;
+  color: #6b7280;
+  margin: 0;
+  padding: 12px 0;
 }
 
 /* Loading */

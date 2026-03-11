@@ -25,7 +25,7 @@ public class SchoolController {
 
     @GetMapping("/{id}")
     public ResponseEntity<?> getSchool(@PathVariable Integer id) {
-        School school = schoolService.getSchoolById(id);
+        School school = schoolService.getSchoolWithStats(id);
         return ResponseEntity.ok(school);
     }
 

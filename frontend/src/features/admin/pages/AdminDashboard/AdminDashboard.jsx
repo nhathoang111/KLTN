@@ -8,12 +8,12 @@ const AdminDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [schoolInfo, setSchoolInfo] = useState(null);
 
-  // Các số liệu thống kê ưu tiên lấy từ backend nếu có, nếu không dùng giá trị mặc định
+  // Các số liệu thống kê lấy từ backend (học sinh, giáo viên, phụ huynh, số lớp học)
   const [stats, setStats] = useState({
     students: 0,
     teachers: 0,
-    staffs: 0,
-    awards: 0,
+    parents: 0,
+    classes: 0,
   });
 
   const quickActions = [
@@ -31,16 +31,24 @@ const AdminDashboard = () => {
     { day: 'Fri', value: 91 },
   ];
 
-  const agendaItems = [
-    { time: '08:00 am', grade: 'Toàn trường', title: 'Chào cờ & thông báo đầu tuần', color: '#e0e7ff' },
-    { time: '10:00 am', grade: 'Khối 9', title: 'Ôn tập Toán cuối kỳ', color: '#ecfdf3' },
-    { time: '03:00 pm', grade: 'Khối 6 - 7', title: 'Sinh hoạt CLB ngoại khóa', color: '#fef3c7' },
-  ];
+  const [notifications, setNotifications] = useState([]);
+  /** Thống kê số lớp theo khối: [{ gradeLevel: 6, count: 2 }, ...] */
+  const [classStatsByGrade, setClassStatsByGrade] = useState([]);
 
-  const messages = [
-    { sender: 'GV. Nguyễn Văn A', title: 'Đề xuất điều chỉnh thời khóa biểu', time: '10 phút trước' },
-    { sender: 'Phụ huynh lớp 9A1', title: 'Xin phép nghỉ học cho học sinh', time: '1 giờ trước' },
-  ];
+  const formatTimeAgo = (dateStr) => {
+    if (!dateStr) return '';
+    const date = new Date(dateStr);
+    const now = new Date();
+    const diffMs = now - date;
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+    if (diffMins < 1) return 'Vừa xong';
+    if (diffMins < 60) return `${diffMins} phút trước`;
+    if (diffHours < 24) return `${diffHours} giờ trước`;
+    if (diffDays < 7) return `${diffDays} ngày trước`;
+    return date.toLocaleDateString('vi-VN');
+  };
 
   useEffect(() => {
     if (user) fetchSchoolInfo();
@@ -50,27 +58,79 @@ const AdminDashboard = () => {
     try {
       const schoolId = user?.school?.id;
       if (schoolId) {
-        const response = await api.get(`/schools/${schoolId}`);
-        const data = response.data || null;
+        const [schoolRes, announcementsRes, classesRes] = await Promise.all([
+          api.get(`/schools/${schoolId}`),
+          api.get(`/announcements?schoolId=${schoolId}`),
+          api.get(`/classes/school/${schoolId}`),
+        ]);
+        const data = schoolRes.data || null;
         setSchoolInfo(data);
-
-        // Nếu backend có sẵn các trường thống kê thì dùng, nếu không giữ mặc định
         setStats((prev) => ({
           students: data?.studentCount ?? prev.students,
           teachers: data?.teacherCount ?? prev.teachers,
-          staffs: data?.staffCount ?? prev.staffs,
-          awards: data?.awardCount ?? prev.awards,
+          parents: data?.parentCount ?? prev.parents,
+          classes: data?.classCount ?? prev.classes,
         }));
+        const list = announcementsRes.data?.announcements || [];
+        const sorted = [...list].sort(
+          (a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0)
+        );
+        setNotifications(sorted.slice(0, 5));
+        const classes = classesRes.data?.classes || [];
+        const byGrade = classes.reduce((acc, c) => {
+          const g = c.gradeLevel != null ? c.gradeLevel : 0;
+          acc[g] = (acc[g] || 0) + 1;
+          return acc;
+        }, {});
+        const gradeStats = Object.entries(byGrade)
+          .map(([gradeLevel, count]) => ({ gradeLevel: Number(gradeLevel), count }))
+          .sort((a, b) => a.gradeLevel - b.gradeLevel);
+        setClassStatsByGrade(gradeStats);
       } else {
         const response = await api.get('/schools');
         const firstSchool = response.data.schools?.[0] || null;
-        setSchoolInfo(firstSchool);
+        let schoolWithStats = firstSchool;
+        if (firstSchool?.id) {
+          const detailRes = await api.get(`/schools/${firstSchool.id}`);
+          schoolWithStats = detailRes.data || firstSchool;
+        }
+        setSchoolInfo(schoolWithStats || firstSchool);
         setStats((prev) => ({
-          students: firstSchool?.studentCount ?? prev.students,
-          teachers: firstSchool?.teacherCount ?? prev.teachers,
-          staffs: firstSchool?.staffCount ?? prev.staffs,
-          awards: firstSchool?.awardCount ?? prev.awards,
+          students: schoolWithStats?.studentCount ?? prev.students,
+          teachers: schoolWithStats?.teacherCount ?? prev.teachers,
+          parents: schoolWithStats?.parentCount ?? prev.parents,
+          classes: schoolWithStats?.classCount ?? prev.classes,
         }));
+        const schoolIdForAnn = firstSchool?.id;
+        if (schoolIdForAnn) {
+          const [annRes, classesRes] = await Promise.all([
+            api.get(`/announcements?schoolId=${schoolIdForAnn}`),
+            api.get(`/classes/school/${schoolIdForAnn}`),
+          ]);
+          const list = annRes.data?.announcements || [];
+          const sorted = [...list].sort(
+            (a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0)
+          );
+          setNotifications(sorted.slice(0, 5));
+          const classes = classesRes.data?.classes || [];
+          const byGrade = classes.reduce((acc, c) => {
+            const g = c.gradeLevel != null ? c.gradeLevel : 0;
+            acc[g] = (acc[g] || 0) + 1;
+            return acc;
+          }, {});
+          const gradeStats = Object.entries(byGrade)
+            .map(([gradeLevel, count]) => ({ gradeLevel: Number(gradeLevel), count }))
+            .sort((a, b) => a.gradeLevel - b.gradeLevel);
+          setClassStatsByGrade(gradeStats);
+        } else {
+          const annRes = await api.get('/announcements');
+          const list = annRes.data?.announcements || [];
+          const sorted = [...list].sort(
+            (a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0)
+          );
+          setNotifications(sorted.slice(0, 5));
+          setClassStatsByGrade([]);
+        }
       }
     } catch (error) {
       console.error('Error fetching school info:', error);
@@ -79,8 +139,8 @@ const AdminDashboard = () => {
         setStats((prev) => ({
           students: user.school.studentCount ?? prev.students,
           teachers: user.school.teacherCount ?? prev.teachers,
-          staffs: user.school.staffCount ?? prev.staffs,
-          awards: user.school.awardCount ?? prev.awards,
+          parents: user.school.parentCount ?? prev.parents,
+          classes: user.school.classCount ?? prev.classes,
         }));
       }
     } finally {
@@ -147,15 +207,15 @@ const AdminDashboard = () => {
           <span className="ad-kpi-label">Giáo viên</span>
           <span className="ad-kpi-value">{stats.teachers.toLocaleString('vi-VN')}</span>
         </div>
-        <div className="ad-kpi-card ad-kpi-card--staffs">
+        <div className="ad-kpi-card ad-kpi-card--parents">
           <div className="ad-kpi-pill">+1%</div>
-          <span className="ad-kpi-label">Nhân viên</span>
-          <span className="ad-kpi-value">{stats.staffs.toLocaleString('vi-VN')}</span>
+          <span className="ad-kpi-label">Phụ huynh</span>
+          <span className="ad-kpi-value">{stats.parents.toLocaleString('vi-VN')}</span>
         </div>
-        <div className="ad-kpi-card ad-kpi-card--awards">
+        <div className="ad-kpi-card ad-kpi-card--classes">
           <div className="ad-kpi-pill">+5%</div>
-          <span className="ad-kpi-label">Thành tích</span>
-          <span className="ad-kpi-value">{stats.awards.toLocaleString('vi-VN')}</span>
+          <span className="ad-kpi-label">Số lớp học</span>
+          <span className="ad-kpi-value">{stats.classes.toLocaleString('vi-VN')}</span>
         </div>
       </div>
 
@@ -166,7 +226,19 @@ const AdminDashboard = () => {
             <span className="ad-card-title">Students</span>
           </div>
           <div className="ad-student-chart">
-            <div className="ad-student-donut">
+            <div
+              className="ad-student-donut"
+              style={{
+                background: (() => {
+                  const male = schoolInfo?.studentMaleCount ?? 0;
+                  const female = schoolInfo?.studentFemaleCount ?? 0;
+                  const total = male + female;
+                  if (total === 0) return 'conic-gradient(#e5e7eb 0 360deg)';
+                  const maleDeg = (male / total) * 360;
+                  return `conic-gradient(#4f46e5 0 ${maleDeg}deg, #f97316 ${maleDeg}deg 360deg)`;
+                })(),
+              }}
+            >
               <div className="ad-student-donut-inner">
                 <div className="ad-student-icon" />
               </div>
@@ -176,14 +248,30 @@ const AdminDashboard = () => {
                 <span className="ad-student-legend-dot ad-student-legend-dot--boys" />
                 <div>
                   <div className="ad-student-legend-label">Nam</div>
-                  <div className="ad-student-legend-value">45.4%</div>
+                  <div className="ad-student-legend-value">
+                    {(() => {
+                      const male = schoolInfo?.studentMaleCount ?? 0;
+                      const female = schoolInfo?.studentFemaleCount ?? 0;
+                      const total = male + female;
+                      const pct = total ? (male / total) * 100 : 0;
+                      return `${pct.toFixed(1)}%`;
+                    })()}
+                  </div>
                 </div>
               </div>
               <div className="ad-student-legend-row">
                 <span className="ad-student-legend-dot ad-student-legend-dot--girls" />
                 <div>
                   <div className="ad-student-legend-label">Nữ</div>
-                  <div className="ad-student-legend-value">54.6%</div>
+                  <div className="ad-student-legend-value">
+                    {(() => {
+                      const male = schoolInfo?.studentMaleCount ?? 0;
+                      const female = schoolInfo?.studentFemaleCount ?? 0;
+                      const total = male + female;
+                      const pct = total ? (female / total) * 100 : 0;
+                      return `${pct.toFixed(1)}%`;
+                    })()}
+                  </div>
                 </div>
               </div>
             </div>
@@ -214,35 +302,23 @@ const AdminDashboard = () => {
           </div>
         </div>
 
-        <div className="ad-card ad-card--calendar">
+        <div className="ad-card ad-card--grade-stats">
           <div className="ad-card-header">
-            <span className="ad-card-title">Lịch trong tuần</span>
+            <span className="ad-card-title">Thống kê lớp theo khối</span>
           </div>
-          <div className="ad-calendar">
-            <div className="ad-calendar-header">
-              <span>Tháng {new Date().getMonth() + 1}</span>
-              <span>{new Date().getFullYear()}</span>
-            </div>
-            <div className="ad-calendar-days">
-              {['Mon', 'Tue', 'Wed', 'Thu', 'Fri'].map((d) => (
-                <span key={d}>{d}</span>
-              ))}
-            </div>
-            <div className="ad-agenda-list">
-              {agendaItems.map((item) => (
-                <div
-                  key={`${item.time}-${item.title}`}
-                  className="ad-agenda-item"
-                  style={{ backgroundColor: item.color }}
-                >
-                  <div className="ad-agenda-time">{item.time}</div>
-                  <div className="ad-agenda-content">
-                    <div className="ad-agenda-grade">{item.grade}</div>
-                    <div className="ad-agenda-title">{item.title}</div>
-                  </div>
-                </div>
-              ))}
-            </div>
+          <div className="ad-grade-stats">
+            {classStatsByGrade.length === 0 ? (
+              <p className="ad-grade-stats-empty">Chưa có dữ liệu lớp theo khối.</p>
+            ) : (
+              <ul className="ad-grade-stats-list">
+                {classStatsByGrade.map(({ gradeLevel, count }) => (
+                  <li key={gradeLevel} className="ad-grade-stats-row">
+                    <span className="ad-grade-stats-label">Khối {gradeLevel}</span>
+                    <span className="ad-grade-stats-value">{count} lớp</span>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
         </div>
       </div>
@@ -278,7 +354,7 @@ const AdminDashboard = () => {
 
         <div className="ad-card ad-card--messages">
           <div className="ad-card-header">
-            <span className="ad-card-title">Messages</span>
+            <span className="ad-card-title">Thông báo</span>
             <button
               type="button"
               className="ad-view-all-btn"
@@ -290,17 +366,21 @@ const AdminDashboard = () => {
             </button>
           </div>
           <div className="ad-message-list">
-            {messages.map((msg) => (
-              <div key={msg.title} className="ad-message-item">
-                <div className="ad-message-avatar" />
-                <div className="ad-message-content">
-                  <div className="ad-message-title">{msg.title}</div>
-                  <div className="ad-message-meta">
-                    {msg.sender} • {msg.time}
+            {notifications.length === 0 ? (
+              <p className="ad-notification-empty">Chưa có thông báo nào.</p>
+            ) : (
+              notifications.map((msg) => (
+                <div key={msg.id} className="ad-message-item">
+                  <div className="ad-message-avatar" />
+                  <div className="ad-message-content">
+                    <div className="ad-message-title">{msg.title}</div>
+                    <div className="ad-message-meta">
+                      {msg.createdBy?.fullName || 'Hệ thống'} • {formatTimeAgo(msg.createdAt)}
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              ))
+            )}
           </div>
         </div>
       </div>

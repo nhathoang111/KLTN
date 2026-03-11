@@ -42,6 +42,19 @@ public class School {
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 
+    @Transient
+    private Integer studentCount;
+    @Transient
+    private Integer teacherCount;
+    @Transient
+    private Integer parentCount;
+    @Transient
+    private Integer classCount;
+    @Transient
+    private Integer studentMaleCount;
+    @Transient
+    private Integer studentFemaleCount;
+
     // Getters and Setters
     public Integer getId() { return id; }
     public void setId(Integer id) { this.id = id; }
@@ -90,4 +103,17 @@ public class School {
 
     public LocalDateTime getUpdatedAt() { return updatedAt; }
     public void setUpdatedAt(LocalDateTime updatedAt) { this.updatedAt = updatedAt; }
+
+    public Integer getStudentCount() { return studentCount; }
+    public void setStudentCount(Integer studentCount) { this.studentCount = studentCount; }
+    public Integer getTeacherCount() { return teacherCount; }
+    public void setTeacherCount(Integer teacherCount) { this.teacherCount = teacherCount; }
+    public Integer getParentCount() { return parentCount; }
+    public void setParentCount(Integer parentCount) { this.parentCount = parentCount; }
+    public Integer getClassCount() { return classCount; }
+    public void setClassCount(Integer classCount) { this.classCount = classCount; }
+    public Integer getStudentMaleCount() { return studentMaleCount; }
+    public void setStudentMaleCount(Integer studentMaleCount) { this.studentMaleCount = studentMaleCount; }
+    public Integer getStudentFemaleCount() { return studentFemaleCount; }
+    public void setStudentFemaleCount(Integer studentFemaleCount) { this.studentFemaleCount = studentFemaleCount; }
 }
