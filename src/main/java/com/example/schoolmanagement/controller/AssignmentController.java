@@ -170,6 +170,12 @@ public class AssignmentController {
         return ResponseEntity.ok(Map.of("submissions", submissions));
     }
 
+    @GetMapping("/student/{studentId}/submissions")
+    public ResponseEntity<?> getSubmissionsByStudent(@PathVariable Integer studentId) {
+        List<AssignmentSubmission> submissions = assignmentService.getSubmissionsByStudent(studentId);
+        return ResponseEntity.ok(Map.of("submissions", submissions));
+    }
+
     @GetMapping("/submissions/{submissionId}/download")
     public ResponseEntity<?> downloadSubmissionFile(@PathVariable Integer submissionId) {
         AssignmentSubmission submission = assignmentService.getSubmissionById(submissionId);

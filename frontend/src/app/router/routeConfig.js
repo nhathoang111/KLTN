@@ -20,6 +20,7 @@ import ExamScoreManagement from "../../features/exam-scores/pages/ExamScoreManag
 import AttendanceManagement from "../../features/attendance/pages/AttendanceManagement/AttendanceManagement";
 import RecordListPage from "../../features/records/pages/RecordListPage/RecordListPage";
 import ScheduleListPage from "../../features/schedules/pages/ScheduleListPage/ScheduleListPage";
+import StudentProfilePage from "../../features/dashboard/pages/StudentProfilePage/StudentProfilePage";
 
 export const protectedRoutes = [
   { path: "dashboard", Component: Dashboard, roles: ["SUPER_ADMIN", "ADMIN", "TEACHER", "STUDENT"] },
@@ -44,4 +45,5 @@ export const protectedRoutes = [
   { path: "attendance", Component: AttendanceManagement, roles: ["SUPER_ADMIN", "ADMIN", "TEACHER"] },
   { path: "records", Component: RecordListPage, roles: ["SUPER_ADMIN", "ADMIN"] },
   { path: "schedules", Component: ScheduleListPage, roles: ["SUPER_ADMIN", "ADMIN", "TEACHER", "STUDENT"] },
+  { path: "profile", Component: StudentProfilePage, roles: ["STUDENT"] },
 ];

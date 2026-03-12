@@ -413,6 +413,9 @@ public class UserService {
             users = schoolId != null ? getTeachersAndStudentsBySchool(schoolId) : Collections.emptyList();
         } else if ("TEACHER".equals(userRole) && schoolId != null) {
             users = getUsersBySchool(schoolId);
+        } else if ("STUDENT".equals(userRole) && schoolId != null) {
+            // Học sinh cần lấy danh sách học sinh trường (có class) để dashboard lấy thông tin lớp của mình
+            users = getUsersBySchoolAndRole(schoolId, "STUDENT");
         } else {
             throw new ForbiddenException("Access denied");
         }

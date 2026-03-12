@@ -12,6 +12,7 @@ import {
     Megaphone,
     NotebookPen,
     LogOut,
+    UserCircle,
 } from "lucide-react";
 
 import logo from "../../../../../assets/logo.jpg";
@@ -76,6 +77,8 @@ const LeftSideBar = ({ user, onLogout }) => {
                 return ClipboardList;
             case "/announcements":
                 return Megaphone;
+            case "/profile":
+                return UserCircle;
             default:
                 return School;
         }
@@ -106,6 +109,7 @@ const LeftSideBar = ({ user, onLogout }) => {
             { path: "/schedules", label: "Xem thời khóa biểu", roles: ["TEACHER"] },
             { path: "/announcements", label: "Thông báo", roles: ["TEACHER"] },
 
+            { path: "/profile", label: "Thông tin cá nhân", roles: ["STUDENT"] },
             { path: "/schedules", label: "Xem thời khóa biểu", roles: ["STUDENT"] },
             { path: "/exam-scores", label: "Xem điểm", roles: ["STUDENT"] },
             { path: "/assignments", label: "Bài tập", roles: ["STUDENT"] },

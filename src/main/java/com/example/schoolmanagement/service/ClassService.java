@@ -109,8 +109,11 @@ public class ClassService {
     }
 
     public ClassEntity getClassById(Integer id) {
-        return classRepository.findById(id)
+        ClassEntity entity = classRepository.findById(id)
                 .orElseThrow(() -> new com.example.schoolmanagement.exception.ResourceNotFoundException("Class not found with id: " + id));
+        long count = enrollmentRepository.countByClassEntityId(id);
+        entity.setStudentCount((int) count);
+        return entity;
     }
 
     public List<ClassEntity> getClassesBySchool(Integer schoolId) {

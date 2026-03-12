@@ -16,6 +16,14 @@ api.interceptors.request.use(
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
+    const userStr = localStorage.getItem('user');
+    if (userStr) {
+      try {
+        const u = JSON.parse(userStr);
+        if (u?.id != null) config.headers['X-User-Id'] = String(u.id);
+        if (u?.role?.name) config.headers['X-User-Role'] = u.role.name;
+      } catch (_) {}
+    }
     // If data is FormData, remove Content-Type to let browser set it with boundary
     if (config.data instanceof FormData) {
       delete config.headers['Content-Type'];

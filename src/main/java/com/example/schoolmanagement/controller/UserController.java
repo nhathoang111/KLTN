@@ -65,7 +65,12 @@ public class UserController {
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<?> getUser(@PathVariable Integer id) {
+    public ResponseEntity<?> getUser(@PathVariable Integer id,
+                                    @RequestHeader(value = "X-User-Id", required = false) Integer currentUserId,
+                                    @RequestHeader(value = "X-User-Role", required = false) String currentUserRole) {
+        if (currentUserRole != null && currentUserRole.toUpperCase().contains("STUDENT") && currentUserId != null && !id.equals(currentUserId)) {
+            return ResponseEntity.status(403).body(Map.of("error", "Học sinh chỉ được xem thông tin cá nhân của chính mình."));
+        }
         Map<String, Object> user = userService.getUserForEdit(id);
         return ResponseEntity.ok(user);
     }
@@ -97,7 +102,12 @@ public class UserController {
     }
 
     @GetMapping("/{id}/enrollment")
-    public ResponseEntity<?> getStudentEnrollment(@PathVariable Integer id) {
+    public ResponseEntity<?> getStudentEnrollment(@PathVariable Integer id,
+                                                  @RequestHeader(value = "X-User-Id", required = false) Integer currentUserId,
+                                                  @RequestHeader(value = "X-User-Role", required = false) String currentUserRole) {
+        if (currentUserRole != null && currentUserRole.toUpperCase().contains("STUDENT") && currentUserId != null && !id.equals(currentUserId)) {
+            return ResponseEntity.status(403).body(Map.of("error", "Học sinh chỉ được xem thông tin của chính mình."));
+        }
         return ResponseEntity.ok(userService.getStudentEnrollment(id));
     }
 

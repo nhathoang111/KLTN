@@ -83,6 +83,10 @@ public class AssignmentService {
         return assignmentSubmissionRepository.findByAssignmentId(assignmentId);
     }
 
+    public List<AssignmentSubmission> getSubmissionsByStudent(Integer studentId) {
+        return assignmentSubmissionRepository.findByStudentId(studentId);
+    }
+
     public AssignmentSubmission saveSubmission(AssignmentSubmission submission) {
         return assignmentSubmissionRepository.save(submission);
     }
