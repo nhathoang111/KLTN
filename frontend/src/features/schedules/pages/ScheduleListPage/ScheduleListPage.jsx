@@ -258,18 +258,18 @@ const ScheduleListPage = () => {
         room: formData.room || null
       };
 
-      // X? ly date - ?u tiên date h?n dayOfWeek
+      // Xử lý date - ưu tiên date hơn dayOfWeek
       if (formData.date && formData.date.trim() !== '') {
-        // ??m b?o date ???c format ?úng YYYY-MM-DD (kh?ng có timezone)
-        // Input type="date" tr? v? YYYY-MM-DD, nh?ng c?n ??m b?o kh?ng b? chuy?n ??i
+        // Đảm bảo date được format đúng YYYY-MM-DD (không có timezone)
+        // Input type="date" trả về YYYY-MM-DD, nhưng cần đảm bảo không bị chuyển đổi
         const dateValue = formData.date.trim();
-        // N?u date có format YYYY-MM-DD, dùng tr?c ti?p
+        // Nếu date có format YYYY-MM-DD, dùng trực tiếp
         if (dateValue.match(/^\d{4}-\d{2}-\d{2}$/)) {
           schedulePayload.date = dateValue;
-          // Clear dayOfWeek n?u có date
+          // Clear dayOfWeek nếu có date
           schedulePayload.dayOfWeek = null;
         } else {
-          // N?u kh?ng, parse và format l?i
+          // Nếu không, parse và format lại
           const date = new Date(dateValue);
           if (!isNaN(date.getTime())) {
             const year = date.getFullYear();
@@ -278,7 +278,7 @@ const ScheduleListPage = () => {
             schedulePayload.date = `${year}-${month}-${day}`;
             schedulePayload.dayOfWeek = null;
           } else {
-            alert('Invalid date. Please select again.');
+            alert('Ngày không hợp lệ. Vui lòng chọn lại.');
             return;
           }
         }
@@ -288,11 +288,11 @@ const ScheduleListPage = () => {
         if (dayOfWeekValue >= 1 && dayOfWeekValue <= 6) {
           schedulePayload.dayOfWeek = dayOfWeekValue;
         } else {
-          alert('Invalid weekday. Please select from Mon to Sat.');
+          alert('Thứ trong tuần không hợp lệ. Vui lòng chọn từ Thứ 2 đến Thứ 7.');
           return;
         }
       } else {
-        alert('Please select a date or weekday.');
+        alert('Vui lòng chọn ngày cụ thể hoặc thứ trong tuần.');
         return;
       }
 
@@ -301,10 +301,10 @@ const ScheduleListPage = () => {
 
       if (editingSchedule) {
         await api.put(`/schedules/${editingSchedule.id}`, schedulePayload);
-        alert('Schedule updated successfully!');
+        alert('Cập nhật lịch học thành công!');
       } else {
         await api.post('/schedules', schedulePayload);
-        alert('Schedule added successfully!');
+        alert('Thêm lịch học thành công!');
       }
 
       setShowModal(false);
@@ -322,7 +322,7 @@ const ScheduleListPage = () => {
     } catch (error) {
       console.error('Error saving schedule:', error);
       const errorMessage = error.response?.data?.error || error.message || 'Unknown error';
-      alert('Error saving schedule: ' + errorMessage);
+      alert('Lỗi khi lưu lịch học: ' + errorMessage);
     }
   };
 
@@ -358,60 +358,60 @@ const ScheduleListPage = () => {
   };
 
   const handleDelete = async (id) => {
-    if (window.confirm('Are you sure you want to delete this schedule?')) {
+    if (window.confirm('Bạn có chắc chắn muốn xóa lịch học này?')) {
       try {
         await api.delete(`/schedules/${id}`);
         fetchSchedules();
       } catch (error) {
         console.error('Error deleting schedule:', error);
-        alert('Error deleting schedule');
+        alert('Lỗi khi xóa lịch học');
       }
     }
   };
 
   const handleDeleteAllByClass = async () => {
     if (!selectedClassId) {
-      alert('Please select a class first');
+      alert('Vui lòng chọn lớp trước');
       return;
     }
 
-    const className = classes.find(c => c.id.toString() === selectedClassId)?.name || 'this class';
-    const confirmMessage = `Are you sure you want to delete ALL schedules of ${className}?\n\nThis action cannot be undone!`;
+    const className = classes.find(c => c.id.toString() === selectedClassId)?.name || 'lớp này';
+    const confirmMessage = `Bạn có chắc chắn muốn xóa TẤT CẢ thời khóa biểu của ${className}?\n\nHành động này không thể hoàn tác!`;
 
     if (window.confirm(confirmMessage)) {
       try {
         const response = await api.delete(`/schedules/class/${selectedClassId}`);
         const count = response.data.count || 0;
-        alert(`Deleted ${count} schedules of ${className} successfully.`);
+        alert(`Đã xóa ${count} lịch học của ${className} thành công.`);
         fetchSchedules();
       } catch (error) {
         console.error('Error deleting all schedules by class:', error);
-        alert('Error deleting schedules: ' + (error.response?.data?.error || error.message));
+        alert('Lỗi khi xóa thời khóa biểu: ' + (error.response?.data?.error || error.message));
       }
     }
   };
 
   const handleDeleteAll = async () => {
-    const confirmMessage = `ARE YOU SURE YOU WANT TO DELETE ALL SCHEDULES IN THE SYSTEM?\n\nThis action will remove all schedules and cannot be undone!\n\nType "DELETE ALL" to confirm:`;
+    const confirmMessage = `BẠN CÓ CHẮC CHẮN MUỐN XÓA TOÀN BỘ THỜI KHÓA BIỂU TRONG HỆ THỐNG?\n\nHành động này sẽ xóa toàn bộ lịch học và không thể hoàn tác!\n\nGõ "DELETE ALL" để xác nhận:`;
 
     const userInput = window.prompt(confirmMessage);
     if (userInput !== 'DELETE ALL') {
       if (userInput !== null) {
-        alert('Confirmation text does not match. Action canceled.');
+        alert('Chuỗi xác nhận không khớp. Đã hủy thao tác.');
       }
       return;
     }
 
-    if (window.confirm('Final confirmation: delete ALL schedules?')) {
+    if (window.confirm('Xác nhận lần cuối: XÓA TOÀN BỘ thời khóa biểu?')) {
       try {
         const response = await api.delete('/schedules/all');
         const count = response.data.count || 0;
-        alert(`Deleted ${count} schedules across the whole system successfully.`);
+        alert(`Đã xóa ${count} lịch học trên toàn hệ thống thành công.`);
         fetchSchedules();
         setSelectedClassId('');
       } catch (error) {
         console.error('Error deleting all schedules:', error);
-        alert('Error deleting schedules: ' + (error.response?.data?.error || error.message));
+        alert('Lỗi khi xóa thời khóa biểu: ' + (error.response?.data?.error || error.message));
       }
     }
   };
@@ -419,7 +419,7 @@ const ScheduleListPage = () => {
   const handleGenerate = async () => {
     try {
       if (!generateData.classId || generateData.subjectAssignments.length === 0) {
-        alert('Please select a class and add at least one subject.');
+        alert('Vui lòng chọn lớp và thêm ít nhất một môn học.');
         return;
       }
 
@@ -443,10 +443,10 @@ const ScheduleListPage = () => {
         numberOfWeeks: 1
       });
       await fetchSchedules();
-      alert(`Timetable generated successfully.\n\nCreated ${createdCount} schedules for ${numberOfWeeksCreated} week(s).\n\nUse "Next Week ->" to view following weeks.`);
+      alert(`Tạo thời khóa biểu tự động thành công.\n\nĐã tạo ${createdCount} lịch học cho ${numberOfWeeksCreated} tuần.\n\nDùng nút "Tuần sau →" để xem các tuần tiếp theo.`);
     } catch (error) {
       console.error('Error generating schedules:', error);
-      alert('Error generating timetable: ' + (error.response?.data?.error || error.message));
+      alert('Lỗi khi tạo thời khóa biểu: ' + (error.response?.data?.error || error.message));
     }
   };
 
@@ -474,7 +474,7 @@ const ScheduleListPage = () => {
   };
 
   const getDayName = (dayOfWeek) => {
-    const days = ['', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const days = ['', 'Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7'];
     return days[dayOfWeek] || '';
   };
 
@@ -626,11 +626,15 @@ const ScheduleListPage = () => {
   const canManage = isAdmin;
 
   if (loading) {
-    return <div className="schedule-list-page"><div className="loading">Loading...</div></div>;
+    return <div className="schedule-list-page"><div className="loading">Đang tải...</div></div>;
   }
 
   const isTeacher = userRole === 'TEACHER';
-  const pageTitle = isStudent ? 'View Timetable' : isTeacher ? 'View Timetable' : 'Schedule Management';
+  const pageTitle = isStudent
+    ? 'Xem thời khóa biểu'
+    : isTeacher
+      ? 'Xem thời khóa biểu'
+      : 'Quản lý thời khóa biểu';
 
   return (
     <div className="schedule-list-page">
@@ -639,7 +643,7 @@ const ScheduleListPage = () => {
         {canManage && (
           <div style={{ display: 'flex', gap: '10px' }}>
             <button className="btn btn-primary" onClick={() => setShowGenerateModal(true)}>
-              Auto Generate
+              Tạo TKB tự động
             </button>
             <button
               className="btn btn-primary"
@@ -657,7 +661,7 @@ const ScheduleListPage = () => {
                 setShowModal(true);
               }}
             >
-              Add Schedule
+              Thêm lịch học
             </button>
           </div>
         )}
@@ -667,13 +671,13 @@ const ScheduleListPage = () => {
         <div className="schedule-filters">
           <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
             <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              Select class:
+              Chọn lớp:
               <select
                 value={selectedClassId}
                 onChange={(e) => setSelectedClassId(e.target.value)}
                 style={{ padding: '5px' }}
               >
-                <option value="">-- Select Class --</option>
+                <option value="">-- Chọn lớp --</option>
                 {classes.map(cls => (
                   <option key={cls.id} value={cls.id}>{cls.name}</option>
                 ))}
@@ -683,9 +687,9 @@ const ScheduleListPage = () => {
               <button
                 className="btn btn-danger"
                 onClick={handleDeleteAllByClass}
-                title="Delete all schedules of selected class"
+                title="Xóa toàn bộ TKB của lớp đang chọn"
               >
-                Delete all class schedules
+                Xóa toàn bộ TKB lớp này
               </button>
             )}
           </div>
@@ -704,8 +708,8 @@ const ScheduleListPage = () => {
       {isStudent && classes.length === 0 && !loading && (
         <div className="schedule-filters" style={{ marginBottom: '1rem' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', padding: '0.5rem', backgroundColor: '#fff3cd', borderRadius: '5px', border: '1px solid #ffc107' }}>
-            <span style={{ fontWeight: 'bold', color: '#856404' }}>Notice:</span>
-            <span style={{ color: '#856404' }}>You are not assigned to any class. Please contact the administrator.</span>
+            <span style={{ fontWeight: 'bold', color: '#856404' }}>Lưu ý:</span>
+            <span style={{ color: '#856404' }}>Bạn chưa được xếp vào lớp nào. Vui lòng liên hệ quản trị viên.</span>
           </div>
         </div>
       )}
@@ -717,26 +721,26 @@ const ScheduleListPage = () => {
             <button
               className="btn btn-secondary"
               onClick={goToPreviousWeek}
-              title="Previous Week"
+              title="Tuần trước"
             >
-              ← Previous Week
+              ← Tuần trước
             </button>
             <button
               className="btn btn-primary"
               onClick={goToToday}
-              title="Today"
+              title="Hôm nay"
             >
-              Today
+              Hôm nay
             </button>
             <button
               className="btn btn-secondary"
               onClick={goToNextWeek}
-              title="Next Week"
+              title="Tuần sau"
             >
-              Next Week →
+              Tuần sau →
             </button>
             <div className="week-info">
-              <span className="week-label">Week:</span>
+              <span className="week-label">Tuần:</span>
               <span className="week-dates">{getWeekInfo()}</span>
             </div>
           </div>
@@ -745,20 +749,20 @@ const ScheduleListPage = () => {
             <div className="schedule-empty-state">
               {isStudent ? (
                 <>
-                  <p>Your class has no schedules yet.</p>
+                  <p>Lớp của bạn hiện chưa có thời khóa biểu.</p>
                   <p style={{ fontSize: '0.9em', color: '#666', marginTop: '10px' }}>
-                    Please contact your homeroom teacher for more information.
+                    Vui lòng liên hệ giáo viên chủ nhiệm để được hỗ trợ.
                   </p>
                 </>
               ) : isTeacher ? (
                 <>
-                  <p>You have no assigned schedules yet.</p>
+                  <p>Hiện bạn chưa được xếp lịch dạy.</p>
                   <p style={{ fontSize: '0.9em', color: '#666', marginTop: '10px' }}>
-                    Please contact the admin to get teaching assignments.
+                    Vui lòng liên hệ quản trị viên để được phân công giảng dạy.
                   </p>
                 </>
               ) : (
-                'No schedules yet'
+                'Chưa có thời khóa biểu'
               )}
             </div>
           ) : (
@@ -784,7 +788,7 @@ const ScheduleListPage = () => {
                 <div key={period} className="timetable-row">
                   <div className="timetable-period-label">
                     <span className="period-number">{period}</span>
-                    <span className="period-text">Period</span>
+                    <span className="period-text">Tiết</span>
                   </div>
                   {[1, 2, 3, 4, 5, 6].map(dayOfWeek => {
                     const schedule = getScheduleForDayAndPeriod(dayOfWeek, period);
@@ -800,11 +804,11 @@ const ScheduleListPage = () => {
                             </div>
                             <div className="schedule-card-body">
                               <div className="schedule-info-item">
-                                <span className="info-icon">Info:</span>
+                                <span className="info-icon">GV:</span>
                                 <span className="info-text">{schedule.teacher?.fullName || 'Không có'}</span>
                               </div>
                               <div className="schedule-info-item">
-                                <span className="info-icon">Info:</span>
+                                <span className="info-icon">Phòng:</span>
                                 <span className="info-text">{schedule.room || 'Không có'}</span>
                               </div>
                             </div>
@@ -813,14 +817,14 @@ const ScheduleListPage = () => {
                                 <button
                                   className="action-btn edit-btn"
                                   onClick={() => handleEdit(schedule)}
-                                  title="Edit"
+                                  title="Sửa"
                                 >
                                   E
                                 </button>
                                 <button
                                   className="action-btn delete-btn"
                                   onClick={() => handleDelete(schedule.id)}
-                                  title="Delete"
+                                  title="Xóa"
                                 >
                                   D
                                 </button>
@@ -844,16 +848,16 @@ const ScheduleListPage = () => {
       {showModal && (
         <div className="modal-overlay" onClick={() => setShowModal(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <h2>{editingSchedule ? 'Edit Schedule' : 'Add Schedule'}</h2>
+            <h2>{editingSchedule ? 'Sửa lịch học' : 'Thêm lịch học'}</h2>
             <form onSubmit={handleSubmit}>
               <div className="form-group">
-                <label>Class *</label>
+                <label>Lớp *</label>
                 <select
                   value={formData.classId}
                   onChange={(e) => setFormData({ ...formData, classId: e.target.value })}
                   required
                 >
-                  <option value="">-- Select Class --</option>
+                  <option value="">-- Chọn lớp --</option>
                   {classes.map(cls => (
                     <option key={cls.id} value={cls.id}>{cls.name}</option>
                   ))}
@@ -861,12 +865,12 @@ const ScheduleListPage = () => {
               </div>
 
               <div className="form-group">
-                <label>Subject</label>
+                <label>Môn học</label>
                 <select
                   value={formData.subjectId}
                   onChange={(e) => setFormData({ ...formData, subjectId: e.target.value })}
                 >
-                  <option value="">-- Select subject --</option>
+                  <option value="">-- Chọn môn học --</option>
                   {subjects.map(subject => (
                     <option key={subject.id} value={subject.id}>{subject.name}</option>
                   ))}
@@ -879,7 +883,7 @@ const ScheduleListPage = () => {
                   value={formData.teacherId}
                   onChange={(e) => setFormData({ ...formData, teacherId: e.target.value })}
                 >
-                  <option value="">-- Select teacher --</option>
+                  <option value="">-- Chọn giáo viên --</option>
                   {teachers.map(teacher => (
                     <option key={teacher.id} value={teacher.id}>{teacher.fullName}</option>
                   ))}
@@ -887,65 +891,65 @@ const ScheduleListPage = () => {
               </div>
 
               <div className="form-group">
-                <label>Date (YYYY-MM-DD) or weekday</label>
+                <label>Ngày (YYYY-MM-DD) hoặc thứ trong tuần</label>
                 <div style={{ display: 'flex', gap: '10px' }}>
                   <input
                     type="date"
                     value={formData.date}
                     onChange={(e) => setFormData({ ...formData, date: e.target.value, dayOfWeek: '' })}
-                    placeholder="Specific date"
+                    placeholder="Ngày cụ thể"
                   />
                   <select
                     value={formData.dayOfWeek}
                     onChange={(e) => setFormData({ ...formData, dayOfWeek: e.target.value, date: '' })}
                   >
-                    <option value="">-- Select day --</option>
-                    <option value="1">Mon</option>
-                    <option value="2">Tue</option>
-                    <option value="3">Wed</option>
-                    <option value="4">Thu</option>
-                    <option value="5">Fri</option>
-                    <option value="6">Sat</option>
+                    <option value="">-- Chọn thứ --</option>
+                    <option value="1">Thứ 2</option>
+                    <option value="2">Thứ 3</option>
+                    <option value="3">Thứ 4</option>
+                    <option value="4">Thứ 5</option>
+                    <option value="5">Thứ 6</option>
+                    <option value="6">Thứ 7</option>
                   </select>
                 </div>
               </div>
 
               <div className="form-group">
-                <label>Period *</label>
+                <label>Tiết học *</label>
                 <select
                   value={formData.period}
                   onChange={(e) => setFormData({ ...formData, period: e.target.value })}
                   required
                 >
-                  <option value="">-- Select period --</option>
-                  <option value="1">Period 1</option>
-                  <option value="2">Period 2</option>
-                  <option value="3">Period 3</option>
-                  <option value="4">Period 4</option>
-                  <option value="5">Period 5</option>
+                  <option value="">-- Chọn tiết --</option>
+                  <option value="1">Tiết 1</option>
+                  <option value="2">Tiết 2</option>
+                  <option value="3">Tiết 3</option>
+                  <option value="4">Tiết 4</option>
+                  <option value="5">Tiết 5</option>
                 </select>
               </div>
 
               <div className="form-group">
-                <label>Room</label>
+                <label>Phòng học</label>
                 <input
                   type="text"
                   value={formData.room}
                   onChange={(e) => setFormData({ ...formData, room: e.target.value })}
-                  placeholder="e.g. A101"
+                  placeholder="VD: A101"
                 />
               </div>
 
               <div className="form-actions">
                 <button type="submit" className="btn btn-primary">
-                  {editingSchedule ? 'Update' : 'Add'}
+                  {editingSchedule ? 'Cập nhật' : 'Thêm mới'}
                 </button>
                 <button
                   type="button"
                   className="btn btn-secondary"
                   onClick={() => setShowModal(false)}
                 >
-                  Cancel
+                  Hủy
                 </button>
               </div>
             </form>
@@ -957,15 +961,15 @@ const ScheduleListPage = () => {
       {showGenerateModal && (
         <div className="modal-overlay" onClick={() => setShowGenerateModal(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '600px' }}>
-            <h2>Auto Generate Timetable</h2>
+            <h2>Tạo thời khóa biểu tự động</h2>
             <div className="form-group">
-              <label>Class *</label>
+              <label>Lớp *</label>
               <select
                 value={generateData.classId}
                 onChange={(e) => setGenerateData({ ...generateData, classId: e.target.value })}
                 required
               >
-                <option value="">-- Select Class --</option>
+                <option value="">-- Chọn lớp --</option>
                 {classes.map(cls => (
                   <option key={cls.id} value={cls.id}>{cls.name}</option>
                 ))}
@@ -973,7 +977,7 @@ const ScheduleListPage = () => {
             </div>
 
             <div className="form-group">
-              <label>Number of weeks *</label>
+              <label>Số tuần *</label>
               <input
                 type="number"
                 value={generateData.numberOfWeeks}
@@ -981,16 +985,16 @@ const ScheduleListPage = () => {
                 min="1"
                 max="20"
                 required
-                placeholder="Enter weeks (1-20)"
+                placeholder="Nhập số tuần (1-20)"
                 style={{ width: '100%' }}
               />
               <small style={{ color: '#666', fontSize: '0.85rem', display: 'block', marginTop: '0.5rem' }}>
-                Timetable will be generated from current week for the selected number of weeks.
+                Thời khóa biểu sẽ được tạo từ tuần hiện tại cho số tuần đã chọn.
               </small>
             </div>
 
             <div className="form-group">
-              <label>Subject Assignment</label>
+              <label>Phân bổ môn học</label>
               {generateData.subjectAssignments.map((assignment, index) => (
                 <div key={index} style={{ display: 'flex', gap: '10px', marginBottom: '10px', alignItems: 'end' }}>
                   <select
@@ -998,7 +1002,7 @@ const ScheduleListPage = () => {
                     onChange={(e) => updateSubjectAssignment(index, 'subjectId', e.target.value)}
                     style={{ flex: 1 }}
                   >
-                    <option value="">-- Subject --</option>
+                    <option value="">-- Môn học --</option>
                     {subjects.map(subject => (
                       <option key={subject.id} value={subject.id}>{subject.name}</option>
                     ))}
@@ -1017,7 +1021,7 @@ const ScheduleListPage = () => {
                     type="number"
                     value={assignment.periodsPerWeek}
                     onChange={(e) => updateSubjectAssignment(index, 'periodsPerWeek', e.target.value)}
-                    placeholder="Periods/week"
+                    placeholder="Tiết/tuần"
                     min="1"
                     max="5"
                     style={{ width: '100px' }}
@@ -1027,7 +1031,7 @@ const ScheduleListPage = () => {
                     className="btn btn-sm btn-danger"
                     onClick={() => removeSubjectAssignment(index)}
                   >
-                    Remove
+                    Xóa
                   </button>
                 </div>
               ))}
@@ -1036,7 +1040,7 @@ const ScheduleListPage = () => {
                 className="btn btn-sm btn-secondary"
                 onClick={addSubjectAssignment}
               >
-                + Add Subject
+                + Thêm môn
               </button>
             </div>
 
@@ -1046,14 +1050,14 @@ const ScheduleListPage = () => {
                 className="btn btn-primary"
                 onClick={handleGenerate}
               >
-                Auto Generate
+                Tạo tự động
               </button>
               <button
                 type="button"
                 className="btn btn-secondary"
                 onClick={() => setShowGenerateModal(false)}
               >
-                Cancel
+                Hủy
               </button>
             </div>
           </div>

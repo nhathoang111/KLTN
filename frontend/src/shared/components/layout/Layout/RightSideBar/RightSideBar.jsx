@@ -131,7 +131,7 @@ const RightSideBar = ({ user }) => {
         flex flex-col
         transition-all
         duration-300
-        ${collapsed ? "!w-[70px]" : "!w-[340px]"}
+        ${collapsed ? "!w-[64px]" : "!w-[280px]"}
       `}
         >
             {/* TOP BAR */}
@@ -198,40 +198,40 @@ const RightSideBar = ({ user }) => {
                     <div className="flex-1 overflow-y-auto !px-5 !py-5">
                         {/* CALENDAR */}
                         <section>
-                            <div className="flex items-center justify-between !mb-5">
-                                <h3 className="font-bold text-slate-900 !text-[18px]">
+                            <div className="flex items-center justify-between !mb-4">
+                                <h3 className="font-bold text-slate-900 !text-[16px]">
                                     {monthLabel}
                                 </h3>
 
-                                <div className="flex !gap-2">
+                                <div className="flex !gap-1.5">
                                     <button
                                         onClick={handlePrevMonth}
-                                        className="!w-9 !h-9 rounded-xl border border-slate-200 bg-slate-50 flex items-center justify-center"
+                                        className="!w-8 !h-8 rounded-xl border border-slate-200 bg-slate-50 flex items-center justify-center"
                                     >
-                                        <ChevronLeft className="!w-4 !h-4" />
+                                        <ChevronLeft className="!w-3.5 !h-3.5" />
                                     </button>
 
                                     <button
                                         onClick={handleNextMonth}
-                                        className="!w-9 !h-9 rounded-xl border border-slate-200 bg-slate-50 flex items-center justify-center"
+                                        className="!w-8 !h-8 rounded-xl border border-slate-200 bg-slate-50 flex items-center justify-center"
                                     >
-                                        <ChevronRight className="!w-4 !h-4" />
+                                        <ChevronRight className="!w-3.5 !h-3.5" />
                                     </button>
                                 </div>
                             </div>
 
-                            <div className="grid grid-cols-7 !gap-y-3 !gap-x-1 !mb-3">
+                            <div className="grid grid-cols-7 !gap-y-2.5 !gap-x-1 !mb-2.5">
                                 {daysOfWeek.map((day) => (
                                     <div
                                         key={day}
-                                        className="text-center text-slate-400 !text-[12px] font-semibold"
+                                        className="text-center text-slate-400 !text-[11px] font-semibold"
                                     >
                                         {day}
                                     </div>
                                 ))}
                             </div>
 
-                            <div className="grid grid-cols-7 !gap-y-3 !gap-x-1">
+                            <div className="grid grid-cols-7 !gap-y-2.5 !gap-x-1">
                                 {calendarDays.map((item, index) => (
                                     <div
                                         key={`${item.day}-${index}`}
@@ -240,9 +240,9 @@ const RightSideBar = ({ user }) => {
                                         <button
                                             className={`
                         relative
-                        !w-9 !h-9
+                        !w-7 !h-7
                         rounded-full
-                        !text-[13px]
+                        !text-[11px]
                         font-semibold
                         transition
                         ${item.currentMonth
