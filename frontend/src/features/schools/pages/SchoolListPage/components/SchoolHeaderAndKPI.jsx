@@ -16,7 +16,7 @@ const SchoolHeaderAndKPI = ({
             <span className="school-page-title-icon">
               <Building2 size={20} />
             </span>
-            <span>Dàshbard</span>
+            <span>Dashboard</span>
           </h1>
           <p className="school-page-subtitle">
             Tổng quan và quản lý danh sách trường học.

@@ -1,5 +1,13 @@
 import React from 'react';
 
+const inputClass =
+  'block h-12 w-full rounded-xl border border-slate-200 bg-white px-4 text-sm text-slate-900 shadow-sm outline-none transition focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 disabled:bg-slate-50 disabled:text-slate-400';
+
+const selectClass =
+  'block h-12 w-full cursor-pointer rounded-xl border border-slate-200 bg-white px-4 text-sm text-slate-900 shadow-sm outline-none transition focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 disabled:bg-slate-50 disabled:text-slate-400';
+
+const labelClass = 'mb-2 block text-sm font-medium text-slate-800';
+
 const SchoolFormModal = ({
   show,
   editingSchool,
@@ -39,38 +47,33 @@ const SchoolFormModal = ({
   } = locations;
 
   return (
-    <div className="common-modal-overlay">
-      <div className="common-modal">
-        <div className="common-modal-header">
-          <h2>{editingSchool ? 'Sửa trường học' : 'Thêm trường học'}</h2>
-          <button className="common-close-btn" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/50 px-4 py-8">
+      <div className="relative w-full sm:w-[1000px] max-h-[90vh] overflow-hidden rounded-3xl bg-white shadow-2xl flex flex-col">
+        <div className="flex items-center justify-between bg-gradient-to-r from-indigo-500 via-purple-500 to-fuchsia-500 px-8 py-5 text-white">
+          <h2 className="text-[22px] font-semibold tracking-wide">
+            {editingSchool ? 'Sửa trường học' : 'Thêm trường học'}
+          </h2>
+          <button
+            type="button"
+            className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-2xl font-bold text-white shadow-sm transition hover:bg-white/20 hover:text-white/90"
+            onClick={onClose}
+          >
             ×
           </button>
         </div>
-        <form onSubmit={onSubmit} className="common-modal-form">
+
+        <form
+          onSubmit={onSubmit}
+          className="px-8 pb-6 pt-6 overflow-y-auto"
+        >
           {error && (
-            <div
-              className="error-message"
-              style={{
-                backgroundColor: '#fee2e2',
-                borderLeft: '4px solid #ef4444',
-                color: '#991b1b',
-                padding: '12px 16px',
-                borderRadius: '4px',
-                marginBottom: '16px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                fontSize: '14px',
-                fontWeight: '500',
-              }}
-            >
+            <div className="mb-6 flex items-center gap-3 rounded-xl border-l-4 border-red-500 bg-red-50 px-4 py-3 text-sm font-medium text-red-800">
               <svg
                 width="20"
                 height="20"
                 viewBox="0 0 20 20"
                 fill="currentColor"
-                style={{ flexShrink: 0 }}
+                className="shrink-0"
               >
                 <path
                   fillRule="evenodd"
@@ -82,456 +85,297 @@ const SchoolFormModal = ({
             </div>
           )}
 
-          <div className="common-form-group">
-            <label>Tên trường *</label>
-            <input
-              type="text"
-              value={formData.name}
-              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              required
-            />
+          <div className="mb-5 border-b border-slate-100 pb-3">
+            <p className="text-base font-semibold text-slate-900">
+              Thông tin cơ bản
+            </p>
           </div>
 
-          <div className="common-form-group">
-            <label>Mã trường *</label>
-            <input
-              type="text"
-              value={formData.code}
-              onChange={(e) => setFormData({ ...formData, code: e.target.value })}
-              required
-            />
-          </div>
-
-          <div className="common-form-group">
-            <label>Logo trường</label>
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '12px',
-                flexWrap: 'wrap',
-              }}
-            >
-              {formData.logo ? (
-                <img
-                  src={formData.logo}
-                  alt="Logo"
-                  style={{
-                    width: 64,
-                    height: 64,
-                    objectFit: 'cover',
-                    borderRadius: 8,
-                    border: '1px solid #e1e5e9',
-                  }}
-                />
-              ) : (
-                <div
-                  style={{
-                    width: 64,
-                    height: 64,
-                    borderRadius: 8,
-                    border: '2px dashed #d1d5db',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontSize: 12,
-                    color: '#9ca3af',
-                  }}
-                >
-                  Chưa có
-                </div>
-              )}
+          <div className="grid grid-cols-1 gap-x-8 gap-y-6 lg:grid-cols-2">
+            {/* Hàng 1 */}
+            <div>
+              <label className={labelClass}>
+                Tên trường <span className="text-red-500">*</span>
+              </label>
               <input
-                type="file"
-                accept="image/*"
-                onChange={handleLogoChange}
-                style={{ fontSize: 14 }}
+                type="text"
+                value={formData.name}
+                onChange={(e) =>
+                  setFormData({ ...formData, name: e.target.value })
+                }
+                required
+                className={inputClass}
               />
             </div>
-            <span
-              style={{
-                fontSize: 12,
-                color: '#6b7280',
-                marginTop: 4,
-                display: 'block',
-              }}
-            >
-              JPG, PNG (tùy chọn)
-            </span>
-          </div>
 
-          <div className="common-form-group">
-            <label>Năm thành lập</label>
-            <input
-              type="number"
-              min="1900"
-              max={new Date().getFullYear()}
-              value={formData.establishmentYear}
-              onChange={(e) =>
-                setFormData({ ...formData, establishmentYear: e.target.value })
-              }
-              placeholder="VD: 1990"
-            />
-          </div>
-
-          <div className="common-form-group">
-            <label>Cấp quản lý (trường công / tư)</label>
-            <select
-              value={formData.managementType}
-              onChange={(e) =>
-                setFormData({ ...formData, managementType: e.target.value })
-              }
-            >
-              <option value="">-- Chọn --</option>
-              <option value="PUBLIC">Trường công</option>
-              <option value="PRIVATE">Trường tư</option>
-            </select>
-          </div>
-
-          <div className="common-form-group" style={{ position: 'relative' }}>
-            <label>Tỉnh/Thành phố</label>
-            <input
-              ref={provinceInputRef}
-              type="text"
-              value={formData.province}
-              onChange={handleProvinceChange}
-              onFocus={() => {
-                if (!provinces || provinces.length === 0) {
-                  return;
+            <div>
+              <label className={labelClass}>
+                Mã trường <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                value={formData.code}
+                onChange={(e) =>
+                  setFormData({ ...formData, code: e.target.value })
                 }
+                required
+                className={inputClass}
+              />
+            </div>
 
-                if (formData.province.length === 0) {
-                  const allProvinces = provinces
-                    .filter((province) => province && province.name)
-                    .slice(0, 15);
-                  setProvinceSuggestions(allProvinces);
-                  setShowProvinceSuggestions(true);
-                } else if (provinceSuggestions.length > 0) {
-                  setShowProvinceSuggestions(true);
-                } else {
-                  const filtered = provinces
-                    .filter(
-                      (province) =>
-                        province &&
-                        province.name &&
-                        province.name
-                          .toLowerCase()
-                          .includes(formData.province.toLowerCase()),
-                    )
-                    .slice(0, 15);
-                  setProvinceSuggestions(filtered);
-                  setShowProvinceSuggestions(true);
-                }
-              }}
-              placeholder="Nhập tỉnh/thành phố..."
-              autoComplete="off"
-              disabled={loadingLocations}
-            />
-            {loadingLocations && (
-              <span
-                style={{
-                  fontSize: '0.85em',
-                  color: '#666',
-                  marginTop: '4px',
-                  display: 'block',
-                }}
-              >
-                Đang tải dữ liệu...
-              </span>
-            )}
-            {showProvinceSuggestions && provinceSuggestions.length > 0 && (
-              <div
-                ref={provinceSuggestionsRef}
-                style={{
-                  position: 'absolute',
-                  top: '100%',
-                  left: 0,
-                  right: 0,
-                  backgroundColor: 'white',
-                  border: '1px solid #e1e5e9',
-                  borderRadius: '8px',
-                  boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
-                  zIndex: 10000,
-                  maxHeight: '200px',
-                  overflowY: 'auto',
-                  marginTop: '4px',
-                }}
-              >
-                {provinceSuggestions.map((province, index) => (
-                  <div
-                    key={province.code || index}
-                    onClick={() => handleSelectProvince(province)}
-                    style={{
-                      padding: '10px 12px',
-                      cursor: 'pointer',
-                      borderBottom:
-                        index < provinceSuggestions.length - 1
-                          ? '1px solid #f0f0f0'
-                          : 'none',
-                      transition: 'background-color 0.2s',
-                    }}
-                    onMouseEnter={(e) => {
-                      e.target.style.backgroundColor = '#f5f5f5';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.target.style.backgroundColor = 'white';
-                    }}
+            {/* Hàng 2 */}
+            <div>
+              <label className={labelClass}>Logo trường</label>
+              <div className="flex h-[140px] gap-4 rounded-2xl border border-slate-200 bg-slate-50/60 p-4">
+                <div className="flex h-full w-32 shrink-0 items-center justify-center rounded-xl border-2 border-dashed border-slate-300 bg-white text-center text-xs text-slate-500 overflow-hidden">
+                  {formData.logo ? (
+                    <img
+                      src={formData.logo}
+                      alt="Logo"
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <div className="space-y-1 px-2">
+                      <div className="text-lg">🖼</div>
+                      <p>Chưa có logo</p>
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex flex-1 flex-col justify-center">
+                  <label
+                    htmlFor="school-logo-input"
+                    className="inline-flex h-12 cursor-pointer items-center justify-center rounded-xl border border-indigo-200 bg-white px-4 text-sm font-semibold text-indigo-600 transition hover:bg-indigo-50"
                   >
-                    {province.name}
-                  </div>
-                ))}
+                    Tải lên logo
+                  </label>
+                  <input
+                    id="school-logo-input"
+                    type="file"
+                    accept="image/*"
+                    onChange={handleLogoChange}
+                    className="hidden"
+                  />
+                  <span className="mt-2 text-xs text-slate-500">
+                    Hỗ trợ JPG, PNG. Tối đa 5MB
+                  </span>
+                </div>
               </div>
-            )}
-          </div>
+            </div>
 
-          <div className="common-form-group" style={{ position: 'relative' }}>
-            <label>Quận/Huyện</label>
-            <input
-              ref={districtInputRef}
-              type="text"
-              value={formData.district}
-              onChange={handleDistrictChange}
-              onFocus={() => {
-                if (!districts || districts.length === 0) {
-                  return;
-                }
+            <div className="grid grid-cols-1 gap-6">
+              <div>
+                <label className={labelClass}>Năm thành lập</label>
+                <input
+                  type="number"
+                  min="1900"
+                  max={new Date().getFullYear()}
+                  value={formData.establishmentYear}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      establishmentYear: e.target.value,
+                    })
+                  }
+                  placeholder="VD: 1990"
+                  className={inputClass}
+                />
+              </div>
 
-                if (formData.district.length === 0) {
-                  const allDistricts = districts
-                    .filter((district) => district && district.name)
-                    .slice(0, 15);
-                  setDistrictSuggestions(allDistricts);
-                  setShowDistrictSuggestions(true);
-                } else if (districtSuggestions.length > 0) {
-                  setShowDistrictSuggestions(true);
-                } else {
-                  const filtered = districts
-                    .filter(
-                      (district) =>
-                        district &&
-                        district.name &&
-                        district.name
-                          .toLowerCase()
-                          .includes(formData.district.toLowerCase()),
-                    )
-                    .slice(0, 15);
-                  setDistrictSuggestions(filtered);
-                  setShowDistrictSuggestions(true);
-                }
-              }}
-              placeholder="Nhập quận/huyện..."
-              autoComplete="off"
-              disabled={!formData.province}
-            />
-            {!formData.province && (
-              <span
-                style={{
-                  fontSize: '0.85em',
-                  color: '#999',
-                  marginTop: '4px',
-                  display: 'block',
-                }}
-              >
-                Vui lòng chọn tỉnh/thành phố trước
-              </span>
-            )}
-            {showDistrictSuggestions && districtSuggestions.length > 0 && (
-              <div
-                ref={districtSuggestionsRef}
-                style={{
-                  position: 'absolute',
-                  top: '100%',
-                  left: 0,
-                  right: 0,
-                  backgroundColor: 'white',
-                  border: '1px solid #e1e5e9',
-                  borderRadius: '8px',
-                  boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
-                  zIndex: 10000,
-                  maxHeight: '200px',
-                  overflowY: 'auto',
-                  marginTop: '4px',
-                }}
-              >
-                {districtSuggestions.map((district, index) => (
-                  <div
-                    key={district.code || index}
-                    onClick={() => handleSelectDistrict(district)}
-                    style={{
-                      padding: '10px 12px',
-                      cursor: 'pointer',
-                      borderBottom:
-                        index < districtSuggestions.length - 1
-                          ? '1px solid #f0f0f0'
-                          : 'none',
-                      transition: 'background-color 0.2s',
-                    }}
-                    onMouseEnter={(e) => {
-                      e.target.style.backgroundColor = '#f5f5f5';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.target.style.backgroundColor = 'white';
-                    }}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className={labelClass}>Cấp quản lý</label>
+                  <select
+                    value={formData.managementType}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        managementType: e.target.value,
+                      })
+                    }
+                    className={selectClass}
                   >
-                    {district.name}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+                    <option value="">— Chọn —</option>
+                    <option value="PUBLIC">Trường công</option>
+                    <option value="PRIVATE">Trường tư</option>
+                  </select>
+                </div>
 
-          <div className="common-form-group" style={{ position: 'relative' }}>
-            <label>Phường/Xã</label>
-            <input
-              ref={wardInputRef}
-              type="text"
-              value={formData.ward}
-              onChange={handleWardChange}
-              onFocus={() => {
-                if (!wards || wards.length === 0) {
-                  return;
-                }
-
-                if (formData.ward.length === 0) {
-                  const allWards = wards
-                    .filter((ward) => ward && ward.name)
-                    .slice(0, 15);
-                  setWardSuggestions(allWards);
-                  setShowWardSuggestions(true);
-                } else if (wardSuggestions.length > 0) {
-                  setShowWardSuggestions(true);
-                } else {
-                  const filtered = wards
-                    .filter(
-                      (ward) =>
-                        ward &&
-                        ward.name &&
-                        ward.name
-                          .toLowerCase()
-                          .includes(formData.ward.toLowerCase()),
-                    )
-                    .slice(0, 15);
-                  setWardSuggestions(filtered);
-                  setShowWardSuggestions(true);
-                }
-              }}
-              placeholder="Nhập phường/xã..."
-              autoComplete="off"
-              disabled={!formData.district}
-            />
-            {!formData.district && (
-              <span
-                style={{
-                  fontSize: '0.85em',
-                  color: '#999',
-                  marginTop: '4px',
-                  display: 'block',
-                }}
-              >
-                Vui lòng chọn quận/huyện trước
-              </span>
-            )}
-            {showWardSuggestions && wardSuggestions.length > 0 && (
-              <div
-                ref={wardSuggestionsRef}
-                style={{
-                  position: 'absolute',
-                  top: '100%',
-                  left: 0,
-                  right: 0,
-                  backgroundColor: 'white',
-                  border: '1px solid #e1e5e9',
-                  borderRadius: '8px',
-                  boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
-                  zIndex: 10000,
-                  maxHeight: '200px',
-                  overflowY: 'auto',
-                  marginTop: '4px',
-                }}
-              >
-                {wardSuggestions.map((ward, index) => (
-                  <div
-                    key={ward.code || index}
-                    onClick={() => handleSelectWard(ward)}
-                    style={{
-                      padding: '10px 12px',
-                      cursor: 'pointer',
-                      borderBottom:
-                        index < wardSuggestions.length - 1
-                          ? '1px solid #f0f0f0'
-                          : 'none',
-                      transition: 'background-color 0.2s',
-                    }}
-                    onMouseEnter={(e) => {
-                      e.target.style.backgroundColor = '#f5f5f5';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.target.style.backgroundColor = 'white';
-                    }}
+                <div>
+                  <label className={labelClass}>Trạng thái</label>
+                  <select
+                    value={formData.status}
+                    onChange={(e) =>
+                      setFormData({ ...formData, status: e.target.value })
+                    }
+                    className={selectClass}
                   >
-                    {ward.name}
-                  </div>
-                ))}
+                    <option value="ACTIVE">Hoạt động</option>
+                    <option value="INACTIVE">Không hoạt động</option>
+                  </select>
+                </div>
               </div>
-            )}
+            </div>
+
+            {/* Hàng 3 */}
+            <div className="relative">
+              <label className={labelClass}>Tỉnh/Thành phố</label>
+              <input
+                ref={provinceInputRef}
+                type="text"
+                value={formData.province}
+                onChange={handleProvinceChange}
+                placeholder="Nhập tỉnh/thành phố..."
+                autoComplete="off"
+                disabled={loadingLocations}
+                className={inputClass}
+              />
+              {loadingLocations && (
+                <span className="mt-1 block text-xs text-slate-500">
+                  Đang tải dữ liệu...
+                </span>
+              )}
+              {showProvinceSuggestions && provinceSuggestions.length > 0 && (
+                <div
+                  ref={provinceSuggestionsRef}
+                  className="absolute left-0 right-0 top-full z-[10000] mt-1 max-h-52 overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-lg"
+                >
+                  {provinceSuggestions.map((province, index) => (
+                    <div
+                      key={province.code || index}
+                      onClick={() => handleSelectProvince(province)}
+                      className="cursor-pointer px-4 py-3 text-sm text-slate-700 transition hover:bg-slate-50"
+                    >
+                      {province.name}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="relative">
+              <label className={labelClass}>Quận/Huyện</label>
+              <input
+                ref={districtInputRef}
+                type="text"
+                value={formData.district}
+                onChange={handleDistrictChange}
+                placeholder="Nhập quận/huyện..."
+                autoComplete="off"
+                disabled={!formData.province}
+                className={inputClass}
+              />
+              {!formData.province && (
+                <span className="mt-1 block text-xs text-slate-400">
+                  Vui lòng chọn tỉnh/thành phố trước
+                </span>
+              )}
+              {showDistrictSuggestions && districtSuggestions.length > 0 && (
+                <div
+                  ref={districtSuggestionsRef}
+                  className="absolute left-0 right-0 top-full z-[10000] mt-1 max-h-52 overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-lg"
+                >
+                  {districtSuggestions.map((district, index) => (
+                    <div
+                      key={district.code || index}
+                      onClick={() => handleSelectDistrict(district)}
+                      className="cursor-pointer px-4 py-3 text-sm text-slate-700 transition hover:bg-slate-50"
+                    >
+                      {district.name}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Hàng 4 */}
+            <div className="relative">
+              <label className={labelClass}>Phường/Xã</label>
+              <input
+                ref={wardInputRef}
+                type="text"
+                value={formData.ward}
+                onChange={handleWardChange}
+                placeholder="Nhập phường/xã..."
+                autoComplete="off"
+                disabled={!formData.district}
+                className={inputClass}
+              />
+              {!formData.district && (
+                <span className="mt-1 block text-xs text-slate-400">
+                  Vui lòng chọn quận/huyện trước
+                </span>
+              )}
+              {showWardSuggestions && wardSuggestions.length > 0 && (
+                <div
+                  ref={wardSuggestionsRef}
+                  className="absolute left-0 right-0 top-full z-[10000] mt-1 max-h-52 overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-lg"
+                >
+                  {wardSuggestions.map((ward, index) => (
+                    <div
+                      key={ward.code || index}
+                      onClick={() => handleSelectWard(ward)}
+                      className="cursor-pointer px-4 py-3 text-sm text-slate-700 transition hover:bg-slate-50"
+                    >
+                      {ward.name}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div>
+              <label className={labelClass}>Số điện thoại</label>
+              <input
+                type="tel"
+                value={formData.phone}
+                onChange={(e) =>
+                  setFormData({ ...formData, phone: e.target.value })
+                }
+                className={inputClass}
+              />
+            </div>
+
+            {/* Hàng 5 */}
+            <div>
+              <label className={labelClass}>Địa chỉ chi tiết</label>
+              <input
+                type="text"
+                value={formData.address}
+                onChange={(e) =>
+                  setFormData({ ...formData, address: e.target.value })
+                }
+                placeholder="Số nhà, tên đường..."
+                className={inputClass}
+              />
+            </div>
+
+            <div>
+              <label className={labelClass}>Email</label>
+              <input
+                type="email"
+                value={formData.email}
+                onChange={(e) =>
+                  setFormData({ ...formData, email: e.target.value })
+                }
+                placeholder='VD: example@gmail.com'
+                className={inputClass}
+              />
+            </div>
           </div>
 
-          <div className="common-form-group">
-            <label>Địa chỉ chi tiết</label>
-            <input
-              type="text"
-              value={formData.address}
-              onChange={(e) =>
-                setFormData({ ...formData, address: e.target.value })
-              }
-              placeholder="Số nhà, tên đường..."
-            />
-          </div>
-
-          <div className="common-form-group">
-            <label>Số điện thoại</label>
-            <input
-              type="tel"
-              value={formData.phone}
-              onChange={(e) =>
-                setFormData({ ...formData, phone: e.target.value })
-              }
-            />
-          </div>
-
-          <div className="common-form-group">
-            <label>Email</label>
-            <input
-              type="email"
-              value={formData.email}
-              onChange={(e) =>
-                setFormData({ ...formData, email: e.target.value })
-              }
-            />
-          </div>
-
-          <div className="common-form-group">
-            <label>Trạng thái</label>
-            <select
-              value={formData.status}
-              onChange={(e) =>
-                setFormData({ ...formData, status: e.target.value })
-              }
-            >
-              <option value="ACTIVE">Hoạt động</option>
-              <option value="INACTIVE">Không hoạt động</option>
-            </select>
-          </div>
-
-          <div className="common-modal-actions">
+          <div className="mt-8 flex items-center justify-end gap-3 border-t border-slate-100 pt-5">
             <button
               type="button"
-              className="btn btn-secondary"
+              className="inline-flex h-11 items-center justify-center rounded-xl border border-slate-200 bg-white px-5 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50"
               onClick={onClose}
             >
               Hủy
             </button>
-            <button type="submit" className="btn btn-primary">
+            <button
+              type="submit"
+              className="inline-flex h-11 items-center justify-center rounded-xl bg-gradient-to-r from-indigo-500 to-purple-500 px-6 text-sm font-semibold text-white shadow-sm transition hover:from-indigo-600 hover:to-purple-600"
+            >
               {editingSchool ? 'Cập nhật' : 'Tạo mới'}
             </button>
           </div>
@@ -542,4 +386,3 @@ const SchoolFormModal = ({
 };
 
 export default SchoolFormModal;
-
