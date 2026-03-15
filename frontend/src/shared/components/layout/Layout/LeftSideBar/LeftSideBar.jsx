@@ -109,7 +109,7 @@ const LeftSideBar = ({ user, onLogout }) => {
             { path: "/schedules", label: "Xem thời khóa biểu", roles: ["TEACHER"] },
             { path: "/announcements", label: "Thông báo", roles: ["TEACHER"] },
 
-            { path: "/profile", label: "Thông tin cá nhân", roles: ["STUDENT"] },
+            { path: "/profile", label: "Thông tin cá nhân", roles: ["STUDENT", "TEACHER"] },
             { path: "/schedules", label: "Xem thời khóa biểu", roles: ["STUDENT"] },
             { path: "/exam-scores", label: "Xem điểm", roles: ["STUDENT"] },
             { path: "/assignments", label: "Bài tập", roles: ["STUDENT"] },

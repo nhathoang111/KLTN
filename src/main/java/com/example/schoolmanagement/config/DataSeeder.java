@@ -54,6 +54,9 @@ public class DataSeeder implements CommandLineRunner {
 
     @Override
     public void run(String... args) throws Exception {
+        // Luôn đảm bảo tài khoản Super Admin tồn tại (tạo lại nếu bị xóa)
+        ensureSuperAdminExists();
+
         // Check if data already exists
         if (schoolRepository.count() > 0) {
             System.out.println("Data already exists, skipping seeding...");
@@ -221,6 +224,32 @@ public class DataSeeder implements CommandLineRunner {
         System.out.println("Student 1: student1@example.com / 123456");
         System.out.println("Student 2: student2@example.com / 123456");
         System.out.println("Student 3: student3@example.com / 123456");
+    }
+
+    /** Tạo lại tài khoản Super Admin nếu chưa có (email: superadmin@example.com / 123456). */
+    private void ensureSuperAdminExists() {
+        if (userRepository.findByEmail("superadmin@example.com").isPresent()) {
+            return;
+        }
+        School anySchool = schoolRepository.findAll().stream().findFirst().orElse(null);
+        Role superAdminRole = roleRepository.findByName("SUPER_ADMIN")
+                .orElseGet(() -> {
+                    Role r = new Role();
+                    r.setName("SUPER_ADMIN");
+                    r.setDescription("Super Administrator - Full system access");
+                    r.setSchool(null);
+                    r.setCreatedAt(LocalDateTime.now());
+                    return roleRepository.save(r);
+                });
+        User superAdmin = new User();
+        superAdmin.setEmail("superadmin@example.com");
+        superAdmin.setFullName("Super Administrator");
+        superAdmin.setPasswordHash(passwordEncoder.encode("123456"));
+        superAdmin.setRole(superAdminRole);
+        superAdmin.setSchool(anySchool);
+        superAdmin.setStatus("ACTIVE");
+        userRepository.save(superAdmin);
+        System.out.println("✅ Super Admin đã được tạo lại: superadmin@example.com / 123456");
     }
 
     // Helper methods
