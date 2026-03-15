@@ -269,7 +269,8 @@ const SchoolListPage = () => {
       fetchSchools();
     } catch (error) {
       console.error('Error deleting school:', error);
-      alert('Không thể xóa trường học. Vui lòng thử lại.');
+      const msg = error.response?.data?.message || error.response?.data?.error || error.message || 'Không thể xóa trường học. Vui lòng thử lại.';
+      alert(msg);
     }
   };
 
@@ -282,35 +283,19 @@ const SchoolListPage = () => {
       return;
     }
 
-    if (!window.confirm(`Bạn có chắc chắn muốn xóa toàn bộ ${totalItems} mục dữ liệu liên quan và trường học "${schoolToDelete.name}"?\n\nĐiều này sẽ xóa:\n- ${relatedData.userCount} người dùng\n- ${relatedData.roleCount} phân quyền\n- ${relatedData.classCount} lớp học\n- Trường học\n\nHành động này không thể hoàn tác!`)) {
+    if (!window.confirm(`Bạn có chắc chắn muốn xóa toàn bộ ${totalItems} mục dữ liệu liên quan của trường "${schoolToDelete.name}"?\n\nĐiều này sẽ xóa:\n- ${relatedData.userCount} người dùng\n- ${relatedData.roleCount} phân quyền\n- ${relatedData.classCount} lớp học\n\nTrường học sẽ được giữ lại (chỉ xóa thông tin bên trong).\n\nHành động này không thể hoàn tác!`)) {
       return;
     }
 
     try {
-      // Xóa tất cả dữ liệu liên quan và trường học cùng lúc
-      // Backend sẽ tự động xóa tất cả dữ liệu liên quan khi xóa trường học
-      await api.delete(`/schools/${schoolToDelete.id}`);
-      alert('Đã xóa toàn bộ dữ liệu liên quan và trường học thành công!');
-      setShowDeleteModal(false);
-      setSchoolToDelete(null);
-      setRelatedData({
-        users: [],
-        roles: [],
-        classes: [],
-        userCount: 0,
-        roleCount: 0,
-        classCount: 0
-      });
+      // Chỉ xóa dữ liệu liên quan, KHÔNG xóa trường học
+      await api.delete(`/schools/${schoolToDelete.id}/related-data`);
+      alert('Đã xóa toàn bộ dữ liệu liên quan. Trường học vẫn giữ nguyên.');
+      if (schoolToDelete?.id) await fetchRelatedData(schoolToDelete.id);
       fetchSchools();
     } catch (error) {
-      console.error('Error deleting all related data and school:', error);
-      let errorMessage = 'Không thể xóa toàn bộ dữ liệu. Vui lòng thử lại.';
-
-      if (error.response?.data) {
-        const data = error.response.data;
-        errorMessage = data.error || data.message || data.msg || errorMessage;
-      }
-
+      console.error('Error deleting related data:', error);
+      const errorMessage = error.response?.data?.message || error.response?.data?.error || error.response?.data?.msg || error.message || 'Không thể xóa toàn bộ dữ liệu. Vui lòng thử lại.';
       alert(errorMessage);
     }
   };
