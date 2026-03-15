@@ -59,4 +59,11 @@ public class SchoolController {
         schoolService.deleteSchool(id);
         return ResponseEntity.ok(Map.of("message", "Xóa trường học thành công"));
     }
+
+    /** Chỉ xóa toàn bộ dữ liệu liên quan (người dùng, lớp, môn, ...), không xóa bản ghi trường. */
+    @DeleteMapping("/{id}/related-data")
+    public ResponseEntity<?> deleteAllRelatedDataOnly(@PathVariable Integer id) {
+        schoolService.deleteAllRelatedDataOnly(id);
+        return ResponseEntity.ok(Map.of("message", "Đã xóa toàn bộ dữ liệu liên quan. Trường học vẫn giữ nguyên."));
+    }
 }

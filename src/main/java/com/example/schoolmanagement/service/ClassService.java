@@ -66,6 +66,12 @@ public class ClassService {
     @Autowired
     private SchoolYearRepository schoolYearRepository;
 
+    @Autowired
+    private com.example.schoolmanagement.repository.ClassSectionRepository classSectionRepository;
+
+    @Autowired
+    private com.example.schoolmanagement.repository.ScheduleRepository scheduleRepository;
+
     public List<ClassEntity> getAllClasses() {
         List<ClassEntity> classes = classRepository.findAll();
         
@@ -143,6 +149,18 @@ public class ClassService {
         log.info("Starting deletion process for class ID: {}", id);
         
         try {
+            // Bước 0: Xóa class_sections và schedules tham chiếu tới lớp này
+            List<com.example.schoolmanagement.entity.ClassSection> classSections = classSectionRepository.findByClassRoomId(id);
+            if (!classSections.isEmpty()) {
+                log.debug("Deleting {} class section(s) for class {}", classSections.size(), id);
+                classSectionRepository.deleteAll(classSections);
+            }
+            List<com.example.schoolmanagement.entity.Schedule> schedules = scheduleRepository.findByClassEntityId(id);
+            if (!schedules.isEmpty()) {
+                log.debug("Deleting {} schedule(s) for class {}", schedules.size(), id);
+                scheduleRepository.deleteAll(schedules);
+            }
+
             // Bước 1: Xóa enrollments
             List<com.example.schoolmanagement.entity.Enrollment> enrollments = enrollmentRepository.findByClassEntityId(id);
             if (!enrollments.isEmpty()) {

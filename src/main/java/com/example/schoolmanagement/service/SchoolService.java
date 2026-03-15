@@ -67,6 +67,21 @@ public class SchoolService {
     @Autowired
     private com.example.schoolmanagement.repository.AttendanceRepository attendanceRepository;
 
+    @Autowired
+    private com.example.schoolmanagement.repository.ScheduleRepository scheduleRepository;
+
+    @Autowired
+    private com.example.schoolmanagement.repository.ClassSectionRepository classSectionRepository;
+
+    @Autowired
+    private com.example.schoolmanagement.repository.SchoolYearRepository schoolYearRepository;
+
+    @Autowired
+    private com.example.schoolmanagement.repository.ParentStudentRepository parentStudentRepository;
+
+    @Autowired
+    private com.example.schoolmanagement.repository.TeacherSubjectRepository teacherSubjectRepository;
+
     public List<School> getAllSchools() {
         return schoolRepository.findAll();
     }
@@ -305,290 +320,130 @@ public class SchoolService {
     
     public void deleteSchool(Integer id) {
         log.debug("=== Starting deletion process for school ID: " + id + " ===");
-        
         try {
-            // Bước 0: Xóa tất cả dữ liệu trực tiếp liên quan đến school (trước khi xóa classes, users, roles)
-            
-            // 0.1: Xóa assignment_submissions theo school_id
-            try {
-                List<com.example.schoolmanagement.entity.AssignmentSubmission> submissions = 
-                    assignmentSubmissionRepository.findBySchoolId(id);
-                if (!submissions.isEmpty()) {
-                    log.debug("  - Found " + submissions.size() + " assignment submission(s) to delete");
-                    assignmentSubmissionRepository.deleteAll(submissions);
-                }
-            } catch (Exception e) {
-                log.error("    - Error deleting assignment submissions: " + e.getMessage());
-            }
-            
-            // 0.2: Xóa assignments theo school_id
-            try {
-                List<com.example.schoolmanagement.entity.Assignment> assignments = 
-                    assignmentRepository.findBySchoolId(id);
-                if (!assignments.isEmpty()) {
-                    log.debug("  - Found " + assignments.size() + " assignment(s) to delete");
-                    assignmentRepository.deleteAll(assignments);
-                }
-            } catch (Exception e) {
-                log.error("    - Error deleting assignments: " + e.getMessage());
-            }
-            
-            // 0.3: Xóa announcements theo school_id
-            try {
-                List<com.example.schoolmanagement.entity.Announcement> announcements = 
-                    announcementRepository.findBySchoolId(id);
-                if (!announcements.isEmpty()) {
-                    log.debug("  - Found " + announcements.size() + " announcement(s) to delete");
-                    announcementRepository.deleteAll(announcements);
-                }
-            } catch (Exception e) {
-                log.error("    - Error deleting announcements: " + e.getMessage());
-            }
-            
-            // 0.4: Xóa attendance theo school_id
-            try {
-                List<com.example.schoolmanagement.entity.Attendance> attendances = 
-                    attendanceRepository.findBySchoolId(id);
-                if (!attendances.isEmpty()) {
-                    log.debug("  - Found " + attendances.size() + " attendance record(s) to delete");
-                    attendanceRepository.deleteAll(attendances);
-                }
-            } catch (Exception e) {
-                log.error("    - Error deleting attendance: " + e.getMessage());
-            }
-            
-            // 0.5: Xóa documents theo school_id
-            try {
-                List<com.example.schoolmanagement.entity.Document> documents = 
-                    documentRepository.findBySchoolId(id);
-                if (!documents.isEmpty()) {
-                    log.debug("  - Found " + documents.size() + " document(s) to delete");
-                    documentRepository.deleteAll(documents);
-                }
-            } catch (Exception e) {
-                log.error("    - Error deleting documents: " + e.getMessage());
-            }
-            
-            // 0.6: Xóa enrollments theo school_id
-            try {
-                List<com.example.schoolmanagement.entity.Enrollment> enrollments = 
-                    enrollmentRepository.findBySchoolId(id);
-                if (!enrollments.isEmpty()) {
-                    log.debug("  - Found " + enrollments.size() + " enrollment(s) to delete");
-                    enrollmentRepository.deleteAll(enrollments);
-                }
-            } catch (Exception e) {
-                log.error("    - Error deleting enrollments: " + e.getMessage());
-            }
-            
-            // 0.7: Xóa exam_scores theo school_id
-            try {
-                List<com.example.schoolmanagement.entity.ExamScore> examScores = 
-                    examScoreRepository.findBySchoolId(id);
-                if (!examScores.isEmpty()) {
-                    log.debug("  - Found " + examScores.size() + " exam score(s) to delete");
-                    examScoreRepository.deleteAll(examScores);
-                }
-            } catch (Exception e) {
-                log.error("    - Error deleting exam scores: " + e.getMessage());
-            }
-            
-            // 0.8: Xóa records theo school_id
-            try {
-                List<com.example.schoolmanagement.entity.Record> records = 
-                    recordRepository.findBySchoolId(id);
-                if (!records.isEmpty()) {
-                    log.debug("  - Found " + records.size() + " record(s) to delete");
-                    recordRepository.deleteAll(records);
-                }
-            } catch (Exception e) {
-                log.error("    - Error deleting records: " + e.getMessage());
-            }
-            
-            // 0.9: Xóa schedules theo school_id (đã xóa chức năng schedule)
-            // Schedule functionality has been removed
-            
-            // 0.10: Xóa subjects theo school_id
-            try {
-                List<com.example.schoolmanagement.entity.Subject> subjects = 
-                    subjectRepository.findBySchoolId(id);
-                if (!subjects.isEmpty()) {
-                    log.debug("  - Found " + subjects.size() + " subject(s) to delete");
-                    subjectRepository.deleteAll(subjects);
-                }
-            } catch (Exception e) {
-                log.error("    - Error deleting subjects: " + e.getMessage());
-            }
-            
-            // Bước 1: Xóa tất cả classes của trường
-            List<com.example.schoolmanagement.entity.ClassEntity> classes = classRepository.findBySchoolId(id);
-            if (!classes.isEmpty()) {
-                log.debug("  - Found " + classes.size() + " class(es) to delete");
-                for (com.example.schoolmanagement.entity.ClassEntity cls : classes) {
-                    try {
-                        classService.deleteClass(cls.getId());
-                        log.debug("    - Deleted class: " + cls.getName() + " (ID: " + cls.getId() + ")");
-                    } catch (Exception e) {
-                        log.error("    - Error deleting class " + cls.getId() + ": " + e.getMessage());
-                        // Tiếp tục xóa các class khác
-                    }
-                }
-            } else {
-                log.debug("  - No classes to delete");
-            }
-            
-            // Bước 2: Xóa tất cả users của trường (sử dụng UserService để xóa tất cả dữ liệu liên quan)
-            List<User> users = userRepository.findBySchoolId(id);
-            if (!users.isEmpty()) {
-                log.debug("  - Found " + users.size() + " user(s) to delete");
-                // Lưu danh sách user IDs trước khi xóa để tránh concurrent modification
-                List<Integer> userIds = users.stream()
-                    .map(User::getId)
-                    .collect(java.util.stream.Collectors.toList());
-                
-                for (Integer userId : userIds) {
-                    try {
-                        userService.deleteUser(userId);
-                        log.debug("    - Deleted user ID: " + userId);
-                    } catch (Exception e) {
-                        log.error("    - Error deleting user " + userId + ": " + e.getMessage());
-                        e.printStackTrace();
-                        // Tiếp tục xóa các user khác
-                    }
-                }
-            } else {
-                log.debug("  - No users to delete");
-            }
-            
-            // Bước 3: Xóa tất cả roles của trường
-            List<Role> roles = roleRepository.findBySchoolId(id);
-            if (!roles.isEmpty()) {
-                log.debug("  - Found " + roles.size() + " role(s) to delete");
-                for (Role role : roles) {
-                    try {
-                        roleRepository.deleteById(role.getId());
-                        log.debug("    - Deleted role: " + role.getName() + " (ID: " + role.getId() + ")");
-                    } catch (Exception e) {
-                        log.error("    - Error deleting role " + role.getId() + ": " + e.getMessage());
-                        // Tiếp tục xóa các role khác
-                    }
-                }
-            } else {
-                log.debug("  - No roles to delete");
-            }
-            
-            // Bước 4: Cuối cùng, xóa trường
+            deleteRelatedDataStep0To3b(id);
             log.debug("  - Deleting school ID: " + id);
             schoolRepository.deleteById(id);
             log.debug("✅ School deletion completed for ID: " + id);
-            
         } catch (org.springframework.dao.DataIntegrityViolationException e) {
-            // Wrap exception với message tiếng Việt
-            log.error("=== DataIntegrityViolationException caught in service ===");
-            String errorMsg = e.getMessage();
-            Throwable cause = e.getCause();
-            String fullErrorMsg = errorMsg != null ? errorMsg : "";
-            
-            // Lấy message từ cause
-            while (cause != null) {
-                if (cause.getMessage() != null) {
-                    fullErrorMsg += " | " + cause.getMessage();
-                }
-                cause = cause.getCause();
-            }
-            
-            log.error("Full error message in service: " + fullErrorMsg);
-            String lowerErrorMsg = fullErrorMsg.toLowerCase();
-            
-            // Tạo exception mới với message tiếng Việt
-            if (lowerErrorMsg.contains("users") && (lowerErrorMsg.contains("school_id") || lowerErrorMsg.contains("fk3gj5j7vnsoxf1wp9n5hsqdiq3"))) {
-                log.error("Service throwing Vietnamese exception for users");
-                throw new BadRequestException("Không thể xóa trường này vì có người dùng đang thuộc trường này. Vui lòng xóa hoặc chuyển tất cả người dùng trước.");
-            }
-            
-            if (lowerErrorMsg.contains("roles") && lowerErrorMsg.contains("school_id")) {
-                log.error("Service throwing Vietnamese exception for roles");
-                throw new BadRequestException("Không thể xóa trường này vì có phân quyền đang thuộc trường này. Vui lòng xóa tất cả phân quyền trước.");
-            }
-            
-            if (lowerErrorMsg.contains("classes") && lowerErrorMsg.contains("school_id")) {
-                log.error("Service throwing Vietnamese exception for classes");
-                throw new BadRequestException("Không thể xóa trường này vì có lớp học đang thuộc trường này. Vui lòng xóa tất cả lớp học trước.");
-            }
-            
-            if (lowerErrorMsg.contains("foreign key") || lowerErrorMsg.contains("cannot delete")) {
-                log.error("Service throwing Vietnamese exception for foreign key");
-                throw new BadRequestException("Không thể xóa trường này vì có dữ liệu liên quan (người dùng, phân quyền, lớp học, v.v.). Vui lòng xóa tất cả dữ liệu liên quan trước.");
-            }
-            
-            log.error("Service throwing fallback Vietnamese exception");
-            throw new BadRequestException("Không thể xóa trường này vì có dữ liệu liên quan. Vui lòng xóa tất cả dữ liệu liên quan trước.");
+            handleDeleteSchoolException(e, "DataIntegrityViolationException");
         } catch (jakarta.persistence.PersistenceException e) {
-            // Xử lý tương tự cho PersistenceException
-            log.error("=== PersistenceException caught in service ===");
-            String errorMsg = e.getMessage();
-            Throwable cause = e.getCause();
-            String fullErrorMsg = errorMsg != null ? errorMsg : "";
-            
-            while (cause != null) {
-                if (cause.getMessage() != null) {
-                    fullErrorMsg += " | " + cause.getMessage();
-                }
-                cause = cause.getCause();
-            }
-            
-            log.error("Full error message in service: " + fullErrorMsg);
-            String lowerErrorMsg = fullErrorMsg.toLowerCase();
-            
-            if (lowerErrorMsg.contains("users") && (lowerErrorMsg.contains("school_id") || lowerErrorMsg.contains("fk3gj5j7vnsoxf1wp9n5hsqdiq3"))) {
-                log.error("Service throwing Vietnamese exception for users (PersistenceException)");
-                throw new BadRequestException("Không thể xóa trường này vì có người dùng đang thuộc trường này. Vui lòng xóa hoặc chuyển tất cả người dùng trước.");
-            }
-            
-            if (lowerErrorMsg.contains("foreign key") || lowerErrorMsg.contains("cannot delete")) {
-                log.error("Service throwing Vietnamese exception for foreign key (PersistenceException)");
-                throw new BadRequestException("Không thể xóa trường này vì có dữ liệu liên quan (người dùng, phân quyền, lớp học, v.v.). Vui lòng xóa tất cả dữ liệu liên quan trước.");
-            }
-            
-            log.error("Service throwing fallback Vietnamese exception (PersistenceException)");
-            throw new BadRequestException("Không thể xóa trường này vì có dữ liệu liên quan. Vui lòng xóa tất cả dữ liệu liên quan trước.");
+            handleDeleteSchoolException(e, "PersistenceException");
         } catch (Exception e) {
-            // Catch-all để đảm bảo tất cả exception đều được xử lý
-            log.error("=== General Exception caught in service ===");
-            log.error("Exception type: " + e.getClass().getName());
-            String errorMsg = e.getMessage();
-            Throwable cause = e.getCause();
-            String fullErrorMsg = errorMsg != null ? errorMsg : "";
-            
-            while (cause != null) {
-                if (cause.getMessage() != null) {
-                    fullErrorMsg += " | " + cause.getMessage();
-                }
-                cause = cause.getCause();
-            }
-            
-            log.error("Full error message in service: " + fullErrorMsg);
-            String lowerErrorMsg = fullErrorMsg.toLowerCase();
-            
-            // Kiểm tra nếu đã là message tiếng Việt từ catch block trước
-            if (errorMsg != null && errorMsg.contains("Không thể xóa")) {
-                throw e; // Re-throw exception với message tiếng Việt
-            }
-            
-            // Xử lý các exception khác
-            if (lowerErrorMsg.contains("users") && (lowerErrorMsg.contains("school_id") || lowerErrorMsg.contains("fk3gj5j7vnsoxf1wp9n5hsqdiq3"))) {
-                log.error("Service throwing Vietnamese exception for users (catch-all)");
-                throw new BadRequestException("Không thể xóa trường này vì có người dùng đang thuộc trường này. Vui lòng xóa hoặc chuyển tất cả người dùng trước.");
-            }
-            
-            if (lowerErrorMsg.contains("foreign key") || lowerErrorMsg.contains("cannot delete")) {
-                log.error("Service throwing Vietnamese exception for foreign key (catch-all)");
-                throw new BadRequestException("Không thể xóa trường này vì có dữ liệu liên quan (người dùng, phân quyền, lớp học, v.v.). Vui lòng xóa tất cả dữ liệu liên quan trước.");
-            }
-            
-            // Re-throw exception gốc nếu không match pattern nào
+            handleDeleteSchoolException(e, "Exception");
+        }
+    }
+
+    /**
+     * Chỉ xóa toàn bộ dữ liệu liên quan (người dùng, lớp, môn, v.v.), KHÔNG xóa bản ghi trường học.
+     */
+    public void deleteAllRelatedDataOnly(Integer id) {
+        log.debug("=== Clearing all related data for school ID: " + id + " (keeping school) ===");
+        try {
+            runDeleteRelatedDataForSchool(id);
+            log.debug("✅ All related data cleared for school ID: " + id);
+        } catch (org.springframework.dao.DataIntegrityViolationException e) {
+            handleDeleteSchoolException(e, "DataIntegrityViolationException");
+        } catch (jakarta.persistence.PersistenceException e) {
+            handleDeleteSchoolException(e, "PersistenceException");
+        } catch (Exception e) {
+            handleDeleteSchoolException(e, "Exception");
+        }
+    }
+
+    private void handleDeleteSchoolException(Exception e, String type) {
+        if (e instanceof BadRequestException) throw (BadRequestException) e;
+        log.error("=== " + type + " caught in service ===");
+        String errorMsg = e.getMessage();
+        Throwable cause = e.getCause();
+        String fullErrorMsg = errorMsg != null ? errorMsg : "";
+        while (cause != null) {
+            if (cause.getMessage() != null) fullErrorMsg += " | " + cause.getMessage();
+            cause = cause.getCause();
+        }
+        log.error("Full error message: " + fullErrorMsg);
+        String lowerErrorMsg = fullErrorMsg.toLowerCase();
+        if (lowerErrorMsg.contains("users") && (lowerErrorMsg.contains("school_id") || lowerErrorMsg.contains("fk3gj5j7vnsoxf1wp9n5hsqdiq3")))
+            throw new BadRequestException("Không thể xóa trường này vì có người dùng đang thuộc trường này. Vui lòng xóa hoặc chuyển tất cả người dùng trước.");
+        if (lowerErrorMsg.contains("roles") && lowerErrorMsg.contains("school_id"))
+            throw new BadRequestException("Không thể xóa trường này vì có phân quyền đang thuộc trường này. Vui lòng xóa tất cả phân quyền trước.");
+        if (lowerErrorMsg.contains("classes") && lowerErrorMsg.contains("school_id"))
+            throw new BadRequestException("Không thể xóa trường này vì có lớp học đang thuộc trường này. Vui lòng xóa tất cả lớp học trước.");
+        if (lowerErrorMsg.contains("foreign key") || lowerErrorMsg.contains("cannot delete"))
+            throw new BadRequestException("Không thể xóa trường này vì có dữ liệu liên quan (người dùng, phân quyền, lớp học, v.v.). Vui lòng xóa tất cả dữ liệu liên quan trước.");
+        if (e.getMessage() != null && e.getMessage().contains("Không thể xóa")) throw new BadRequestException(e.getMessage());
+        throw new BadRequestException("Không thể xóa trường này vì có dữ liệu liên quan. Vui lòng xóa tất cả dữ liệu liên quan trước.");
+    }
+
+    /** Thực hiện xóa toàn bộ dữ liệu liên quan trường (không xóa bản ghi trường). */
+    private void runDeleteRelatedDataForSchool(int id) {
+        // Bước 0.1 -> 3b: giống deleteSchool (không có Bước 4)
+        try {
+            deleteRelatedDataStep0To3b(id);
+        } catch (Exception e) {
             throw e;
         }
+    }
+
+    private void deleteRelatedDataStep0To3b(int id) {
+        // 0.1
+        List<com.example.schoolmanagement.entity.AssignmentSubmission> submissions = assignmentSubmissionRepository.findBySchoolId(id);
+        if (!submissions.isEmpty()) { assignmentSubmissionRepository.deleteAll(submissions); }
+        // 0.2
+        List<com.example.schoolmanagement.entity.Assignment> assignments = assignmentRepository.findBySchoolId(id);
+        if (!assignments.isEmpty()) { assignmentRepository.deleteAll(assignments); }
+        // 0.3
+        List<com.example.schoolmanagement.entity.Announcement> announcements = announcementRepository.findBySchoolId(id);
+        if (!announcements.isEmpty()) { announcementRepository.deleteAll(announcements); }
+        // 0.4
+        List<com.example.schoolmanagement.entity.Attendance> attendances = attendanceRepository.findBySchoolId(id);
+        if (!attendances.isEmpty()) { attendanceRepository.deleteAll(attendances); }
+        // 0.5
+        List<com.example.schoolmanagement.entity.Document> documents = documentRepository.findBySchoolId(id);
+        if (!documents.isEmpty()) { documentRepository.deleteAll(documents); }
+        // 0.6
+        List<com.example.schoolmanagement.entity.Enrollment> enrollments = enrollmentRepository.findBySchoolId(id);
+        if (!enrollments.isEmpty()) { enrollmentRepository.deleteAll(enrollments); }
+        // 0.7
+        List<com.example.schoolmanagement.entity.ExamScore> examScores = examScoreRepository.findBySchoolId(id);
+        if (!examScores.isEmpty()) { examScoreRepository.deleteAll(examScores); }
+        // 0.8
+        List<com.example.schoolmanagement.entity.Record> records = recordRepository.findBySchoolId(id);
+        if (!records.isEmpty()) { recordRepository.deleteAll(records); }
+        // 0.9
+        List<com.example.schoolmanagement.entity.Schedule> schedules = scheduleRepository.findBySchoolId(id);
+        if (!schedules.isEmpty()) { scheduleRepository.deleteAll(schedules); }
+        // 0.9b
+        List<com.example.schoolmanagement.entity.ClassSection> classSections = classSectionRepository.findBySchoolId(id);
+        if (!classSections.isEmpty()) { classSectionRepository.deleteAll(classSections); }
+        // 0.9c
+        List<com.example.schoolmanagement.entity.ParentStudent> parentStudents = parentStudentRepository.findBySchoolId(id);
+        if (!parentStudents.isEmpty()) { parentStudentRepository.deleteAll(parentStudents); }
+        // 0.9d
+        List<com.example.schoolmanagement.entity.TeacherSubject> teacherSubjects = teacherSubjectRepository.findBySchoolId(id);
+        if (!teacherSubjects.isEmpty()) { teacherSubjectRepository.deleteAll(teacherSubjects); }
+        // 0.10
+        List<com.example.schoolmanagement.entity.Subject> subjects = subjectRepository.findBySchoolId(id);
+        if (!subjects.isEmpty()) { subjectRepository.deleteAll(subjects); }
+        // 1
+        List<com.example.schoolmanagement.entity.ClassEntity> classes = classRepository.findBySchoolId(id);
+        for (com.example.schoolmanagement.entity.ClassEntity cls : classes) {
+            try { classService.deleteClass(cls.getId()); } catch (Exception ex) { log.error("Error deleting class " + cls.getId(), ex); }
+        }
+        // 2
+        List<User> users = userRepository.findBySchoolId(id);
+        List<Integer> userIds = users.stream().map(User::getId).collect(java.util.stream.Collectors.toList());
+        for (Integer userId : userIds) {
+            try { userService.deleteUser(userId); } catch (Exception ex) { log.error("Error deleting user " + userId, ex); }
+        }
+        // 3
+        List<Role> roles = roleRepository.findBySchoolId(id);
+        for (Role role : roles) {
+            try { roleRepository.deleteById(role.getId()); } catch (Exception ex) { log.error("Error deleting role " + role.getId(), ex); }
+        }
+        // 3b
+        List<com.example.schoolmanagement.entity.SchoolYear> schoolYears = schoolYearRepository.findBySchoolId(id);
+        if (!schoolYears.isEmpty()) { schoolYearRepository.deleteAll(schoolYears); }
     }
 
     public boolean existsByCode(String code) {
