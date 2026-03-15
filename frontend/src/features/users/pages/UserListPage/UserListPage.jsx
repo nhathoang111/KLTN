@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
+import { Pencil, Trash2 } from 'lucide-react';
 import { useAuth } from '../../../auth/context/AuthContext';
 import api from '../../../../shared/lib/api';
 import './UserListPage.css';
@@ -252,6 +253,13 @@ const UserListPage = () => {
   const pageIndex = Math.min(currentPage, totalPages - 1);
   const paginatedUsers = displayedUsers.slice(pageIndex * pageSize, (pageIndex + 1) * pageSize);
 
+  const isSuperAdmin = user?.role?.name?.toUpperCase() === 'SUPER_ADMIN';
+  const totalAdmins = isSuperAdmin ? users.length : 0;
+  const activeAdmins = isSuperAdmin ? users.filter((u) => (u.status || '').toUpperCase() === 'ACTIVE').length : 0;
+  const lockedAdmins = isSuperAdmin
+    ? users.filter((u) => ['SUSPENDED', 'INACTIVE', 'LOCKED'].includes((u.status || '').toUpperCase())).length
+    : 0;
+
   const toggleSelectAll = () => {
     const onPage = paginatedUsers.map((u) => u.id);
     const allSelected = onPage.length > 0 && onPage.every((id) => selectedIds.has(id));
@@ -372,38 +380,102 @@ const UserListPage = () => {
 
   if (loading) {
     return (
-      <div className="user-list-page">
-        <div className="loading">
-          <div className="spinner"></div>
-          <p>Đang tải...</p>
+      <div className="min-h-screen bg-slate-100 px-4 py-6 flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3 text-slate-600">
+          <div className="h-10 w-10 rounded-full border-4 border-indigo-200 border-t-indigo-500 animate-spin" />
+          <p className="text-sm font-medium">Đang tải danh sách người dùng...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="user-list-page">
-      <div className="common-page-header">
-        <div>
-          <h1>
-            {user?.role?.name?.toUpperCase() === 'SUPER_ADMIN'
-              ? 'Quản lý quản trị trường'
-              : 'Quản lý Giáo viên & Học sinh'}
-          </h1>
-          <p style={{ marginTop: '0.5rem', fontSize: '0.9rem', opacity: 0.9 }}>
-            {user?.role?.name?.toUpperCase() === 'SUPER_ADMIN'
-              ? 'Quản lý các tài khoản quản trị của tất cả trường học.'
-              : 'Quản lý giáo viên và học sinh trong trường của bạn.'}
-          </p>
+    <div className={isSuperAdmin ? 'min-h-screen bg-slate-100 px-4 py-6' : 'user-list-page'}>
+      {isSuperAdmin ? (
+        <div className="mx-auto max-w-6xl space-y-4">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <h1 className="text-2xl font-semibold text-slate-900">
+                Quản lý Admin trường
+              </h1>
+              <p className="mt-1 text-sm text-slate-500">
+                Tổng quan và quản lý danh sách quản trị trường.
+              </p>
+            </div>
+            <Link
+              to="/users/create"
+              className="inline-flex items-center gap-2 rounded-full bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-md shadow-indigo-500/30 hover:bg-indigo-500"
+            >
+              <span className="text-lg leading-none">＋</span>
+              <span>Thêm quản trị mới</span>
+            </Link>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-3">
+            <div className="rounded-2xl border border-slate-200 bg-white/90 px-4 py-3 shadow-md shadow-slate-900/5">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Tổng số quản trị
+                  </p>
+                  <p className="mt-1 text-2xl font-semibold text-slate-900">
+                    {totalAdmins}
+                  </p>
+                </div>
+                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-indigo-50 text-indigo-600 text-lg">
+                  🏫
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50/80 px-4 py-3 shadow-md shadow-emerald-500/10">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-emerald-600">
+                    Quản trị đang hoạt động
+                  </p>
+                  <p className="mt-1 text-2xl font-semibold text-emerald-700">
+                    {activeAdmins}
+                  </p>
+                </div>
+                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 text-lg">
+                  ✓
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 shadow-md shadow-slate-900/5">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Quản trị bị khóa / ngưng
+                  </p>
+                  <p className="mt-1 text-2xl font-semibold text-slate-900">
+                    {lockedAdmins}
+                  </p>
+                </div>
+                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-slate-600 text-lg">
+                  ⛔
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
-        <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
-          <Link
-            to="/users/create"
-            className="btn btn-primary"
-          >
-            ➕ {user?.role?.name?.toUpperCase() === 'SUPER_ADMIN' ? 'Thêm quản trị mới' : 'Thêm người dùng mới'}
-          </Link>
-          {user?.role?.name?.toUpperCase() !== 'SUPER_ADMIN' && (
+      ) : (
+        <div className="common-page-header">
+          <div>
+            <h1>Quản lý Giáo viên & Học sinh</h1>
+            <p style={{ marginTop: '0.5rem', fontSize: '0.9rem', opacity: 0.9 }}>
+              Quản lý giáo viên và học sinh trong trường của bạn.
+            </p>
+          </div>
+          <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+            <Link
+              to="/users/create"
+              className="btn btn-primary"
+            >
+              ➕ Thêm người dùng mới
+            </Link>
             <button
               type="button"
               className="btn btn-secondary"
@@ -411,9 +483,9 @@ const UserListPage = () => {
             >
               📤 Nhập từ Excel
             </button>
-          )}
+          </div>
         </div>
-      </div>
+      )}
 
       {showImportModal && (
         <div className="common-modal-overlay" onClick={() => !importLoading && setShowImportModal(false)}>
@@ -548,118 +620,390 @@ const UserListPage = () => {
         </div>
       )}
 
-      <div className="filter-bar">
-        <input
-          type="text"
-          placeholder="Tìm theo tên hoặc email..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          className="filter-input"
-        />
-        <select
-          value={filterRole}
-          onChange={(e) => setFilterRole(e.target.value)}
-          className="filter-select"
-        >
-          <option value="ALL">Tất cả vai trò</option>
-          {user?.role?.name?.toUpperCase() === 'SUPER_ADMIN' && (
-            <option value="ADMIN">Quản trị trường</option>
-          )}
-          {user?.role?.name?.toUpperCase() === 'ADMIN' && (
-            <>
-              <option value="TEACHER">Giáo viên</option>
-              <option value="STUDENT">Học sinh</option>
-              <option value="PARENT">Phụ huynh</option>
-            </>
-          )}
-        </select>
-        <select
-          value={filterStatus}
-          onChange={(e) => setFilterStatus(e.target.value)}
-          className="filter-select"
-        >
-          <option value="ALL">Tất cả trạng thái</option>
-          <option value="ACTIVE">Đang hoạt động</option>
-          <option value="INACTIVE">Ngưng hoạt động</option>
-          <option value="SUSPENDED">Bị khóa</option>
-        </select>
-      </div>
-
-      {error && (
-        <div style={{
-          background: '#fee',
-          border: '1px solid #fcc',
-          color: '#c33',
-          padding: '1rem',
-          borderRadius: '8px',
-          marginBottom: '1rem'
-        }}>
-          {error}
-        </div>
-      )}
-
-      {success && (
-        <div style={{
-          background: '#efe',
-          border: '1px solid #cfc',
-          color: '#3c3',
-          padding: '1rem',
-          borderRadius: '8px',
-          marginBottom: '1rem'
-        }}>
-          {success}
-        </div>
-      )}
-
-      {selectedIds.size > 0 && (
-        <div className="bulk-action-bar">
-          <span className="bulk-action-count">Đã chọn {selectedIds.size} người dùng</span>
-          <div className="bulk-action-buttons">
-            <button type="button" className="btn btn-sm btn-secondary" onClick={clearSelection} disabled={bulkActionLoading}>
-              Bỏ chọn
-            </button>
-            <button type="button" className="btn btn-sm btn-danger" onClick={handleBulkDelete} disabled={bulkActionLoading}>
-              {bulkActionLoading ? 'Đang xử lý...' : '🗑️ Xóa hàng loạt'}
-            </button>
-            <button type="button" className="btn btn-sm btn-secondary" onClick={() => setShowBulkStatusModal(true)} disabled={bulkActionLoading}>
-              Đổi trạng thái
-            </button>
-            {user?.role?.name?.toUpperCase() === 'ADMIN' && selectedStudents.length > 0 && (
-              <button type="button" className="btn btn-sm btn-secondary" onClick={() => { setShowBulkClassModal(true); fetchBulkClasses(); }} disabled={bulkActionLoading}>
-                Gán lớp ({selectedStudents.length} học sinh)
+      {isSuperAdmin ? (
+        <div className="mx-auto mt-4 max-w-6xl space-y-3">
+          <div className="rounded-2xl bg-white/95 px-4 py-3 shadow-lg shadow-slate-900/5">
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="relative flex-1 min-w-[220px]">
+                <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-slate-400">
+                  🔍
+                </span>
+                <input
+                  type="text"
+                  placeholder="Tìm kiếm theo tên hoặc email..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full rounded-full border border-slate-200 bg-slate-50 pl-9 pr-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                />
+              </div>
+              <select
+                value={filterRole}
+                onChange={(e) => setFilterRole(e.target.value)}
+                className="h-9 rounded-full border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+              >
+                <option value="ALL">Tất cả vai trò</option>
+                <option value="ADMIN">Quản trị trường</option>
+              </select>
+              <select
+                value={filterStatus}
+                onChange={(e) => setFilterStatus(e.target.value)}
+                className="h-9 rounded-full border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+              >
+                <option value="ALL">Tất cả trạng thái</option>
+                <option value="ACTIVE">Đang hoạt động</option>
+                <option value="INACTIVE">Ngưng hoạt động</option>
+                <option value="SUSPENDED">Bị khóa</option>
+              </select>
+              <button
+                type="button"
+                className="inline-flex items-center gap-2 rounded-full bg-indigo-50 px-4 py-2 text-xs font-medium text-indigo-600 shadow-sm shadow-indigo-100"
+              >
+                <span className="text-sm">⚙</span>
+                <span>Bộ lọc</span>
               </button>
+            </div>
+            <p className="mt-2 text-xs text-slate-500">
+              Hiển thị {totalFiltered === 0 ? 0 : pageIndex * pageSize + 1}–
+              {Math.min((pageIndex + 1) * pageSize, totalFiltered)} / {totalFiltered} quản trị viên
+            </p>
+          </div>
+
+          {error && (
+            <div className="mx-auto max-w-6xl rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+              {error}
+            </div>
+          )}
+
+          {success && (
+            <div className="mx-auto max-w-6xl rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+              {success}
+            </div>
+          )}
+
+          {selectedIds.size > 0 && (
+            <div className="mx-auto max-w-6xl flex flex-wrap items-center justify-between gap-3 rounded-xl border border-indigo-100 bg-white px-4 py-2.5 text-sm shadow-sm">
+              <span className="font-medium text-slate-700">
+                Đã chọn {selectedIds.size} người dùng
+              </span>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={clearSelection}
+                  disabled={bulkActionLoading}
+                  className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-60"
+                >
+                  Bỏ chọn
+                </button>
+                <button
+                  type="button"
+                  onClick={handleBulkDelete}
+                  disabled={bulkActionLoading}
+                  className="rounded-full bg-rose-500 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-rose-400 disabled:opacity-60"
+                >
+                  {bulkActionLoading ? 'Đang xử lý...' : 'Xóa hàng loạt'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowBulkStatusModal(true)}
+                  disabled={bulkActionLoading}
+                  className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+                >
+                  Đổi trạng thái
+                </button>
+              </div>
+            </div>
+          )}
+
+          <div className="mx-auto max-w-6xl rounded-2xl border border-slate-200 bg-white/95 shadow-xl shadow-slate-900/5 flex flex-col">
+            {totalFiltered === 0 ? (
+              <div className="flex flex-col items-center justify-center gap-3 px-6 py-10 text-center">
+                <div className="text-4xl opacity-60">👥</div>
+                <h3 className="text-base font-semibold text-slate-800">
+                  {users.length === 0
+                    ? 'Chưa có quản trị viên nào'
+                    : 'Không tìm thấy người dùng phù hợp bộ lọc'}
+                </h3>
+                <p className="max-w-md text-sm text-slate-500">
+                  {users.length === 0
+                    ? 'Bắt đầu bằng cách tạo quản trị viên mới.'
+                    : 'Hãy thử thay đổi điều kiện lọc hoặc từ khóa tìm kiếm.'}
+                </p>
+                <Link
+                  to="/users/create"
+                  className="inline-flex items-center gap-2 rounded-full bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-md shadow-indigo-500/30 hover:bg-indigo-500"
+                >
+                  <span className="text-lg leading-none">＋</span>
+                  <span>Thêm quản trị mới</span>
+                </Link>
+              </div>
+            ) : (
+              <>
+                <div className="overflow-hidden rounded-2xl flex-1 min-h-[260px]">
+                  <table className="min-w-full border-collapse">
+                    <thead className="bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      <tr>
+                        <th className="w-11 px-4 py-3 text-left">
+                          <input
+                            ref={selectAllCheckboxRef}
+                            type="checkbox"
+                            checked={allSelected}
+                            onChange={toggleSelectAll}
+                            aria-label="Chọn tất cả trên trang"
+                            className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                          />
+                        </th>
+                        <th className="px-4 py-3 text-left">Người dùng</th>
+                        <th className="px-4 py-3 text-left">Vai trò</th>
+                        <th className="px-4 py-3 text-left">Trạng thái</th>
+                        <th className="px-4 py-3 text-center">Thao tác</th>
+                      </tr>
+                    </thead>
+                    <tbody className="text-sm text-slate-700">
+                      {paginatedUsers.map((userItem) => {
+                        const status = (userItem.status || '').toUpperCase();
+                        const statusClasses =
+                          status === 'ACTIVE'
+                            ? 'bg-sky-500 text-white'
+                            : status === 'INACTIVE'
+                            ? 'bg-slate-300 text-slate-700'
+                            : 'bg-rose-500 text-white';
+
+                        return (
+                          <tr
+                            key={userItem.id}
+                            className="border-t border-slate-100 hover:bg-slate-50/80 transition-colors"
+                          >
+                            <td className="px-4 py-3">
+                              <input
+                                type="checkbox"
+                                checked={selectedIds.has(userItem.id)}
+                                onChange={() => toggleSelectOne(userItem.id)}
+                                aria-label={`Chọn ${userItem.fullName || userItem.email}`}
+                                className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                              />
+                            </td>
+                            <td className="px-4 py-3">
+                              <div className="flex items-center gap-3">
+                                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-indigo-500 to-purple-500 text-sm font-semibold text-white">
+                                  {userItem.fullName?.charAt(0)?.toUpperCase() ||
+                                    userItem.email?.charAt(0)?.toUpperCase() ||
+                                    'A'}
+                                </div>
+                                <div className="flex flex-col">
+                                  <span className="text-sm font-semibold text-slate-900">
+                                    {userItem.fullName || '—'}
+                                  </span>
+                                  <span className="text-xs text-slate-500">
+                                    {userItem.email}
+                                  </span>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-4 py-3">
+                              <span className="inline-flex items-center rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-700">
+                                Quản trị trường
+                              </span>
+                            </td>
+                            <td className="px-4 py-3">
+                              <span
+                                className={`inline-flex min-w-[80px] justify-center rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wide ${statusClasses}`}
+                              >
+                                {status || 'N/A'}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3">
+                              <div className="flex items-center justify-center gap-2">
+                                <Link
+                                  to={`/users/${userItem.id}/edit`}
+                                  className="flex h-8 w-8 items-center justify-center rounded-full bg-sky-100 text-sky-700 hover:bg-sky-200 transition-colors"
+                                >
+                                  <Pencil size={15} />
+                                </Link>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDelete(userItem.id, userItem.fullName)}
+                                  disabled={deleteLoading === userItem.id}
+                                  className="flex h-8 w-8 items-center justify-center rounded-full bg-rose-100 text-rose-600 hover:bg-rose-200 transition-colors disabled:opacity-60"
+                                >
+                                  <Trash2 size={15} />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                {totalFiltered > 0 && (
+                  <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 px-4 py-3 text-xs text-slate-600">
+                    <div className="flex items-center gap-2">
+                      <span>
+                        Hiển thị {pageIndex * pageSize + 1}–
+                        {Math.min((pageIndex + 1) * pageSize, totalFiltered)} / {totalFiltered} quản trị viên
+                      </span>
+                      <label className="flex items-center gap-1">
+                        <span>Số dòng/trang:</span>
+                        <select
+                          value={pageSize}
+                          onChange={(e) => {
+                            setPageSize(Number(e.target.value));
+                            setCurrentPage(0);
+                          }}
+                          className="h-7 rounded-md border border-slate-200 bg-white px-2 text-xs focus:border-indigo-500 focus:outline-none"
+                        >
+                          <option value={5}>5</option>
+                          <option value={10}>10</option>
+                          <option value={20}>20</option>
+                        </select>
+                      </label>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => setCurrentPage((p) => Math.max(0, p - 1))}
+                        disabled={pageIndex === 0}
+                        className="flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 bg-white text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+                      >
+                        ‹
+                      </button>
+                      {Array.from({ length: totalPages }, (_, i) => i).map((p) => (
+                        <button
+                          key={p}
+                          type="button"
+                          onClick={() => setCurrentPage(p)}
+                          className={`flex h-8 w-8 items-center justify-center rounded-md text-sm ${
+                            p === pageIndex
+                              ? 'bg-indigo-500 text-white'
+                              : 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                          }`}
+                        >
+                          {p + 1}
+                        </button>
+                      ))}
+                      <button
+                        type="button"
+                        onClick={() => setCurrentPage((p) => Math.min(totalPages - 1, p + 1))}
+                        disabled={pageIndex >= totalPages - 1}
+                        className="flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 bg-white text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+                      >
+                        ›
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </>
             )}
           </div>
         </div>
-      )}
-
-      <div className="common-table-container">
-        {totalFiltered === 0 ? (
-          <div className="empty-state">
-            <div className="empty-state-icon">👥</div>
-            <h3 className="empty-state-title">
-              {users.length === 0
-                ? (user?.role?.name?.toUpperCase() === 'SUPER_ADMIN'
-                  ? 'Chưa có quản trị viên nào'
-                  : 'Chưa có giáo viên hoặc học sinh nào')
-                : 'Không tìm thấy người dùng phù hợp bộ lọc'}
-            </h3>
-            <p className="empty-state-description">
-              {users.length === 0
-                ? (user?.role?.name?.toUpperCase() === 'SUPER_ADMIN'
-                  ? 'Bắt đầu bằng cách tạo quản trị viên mới.'
-                  : 'Bắt đầu bằng cách tạo giáo viên hoặc học sinh mới.')
-                : 'Hãy thử thay đổi điều kiện lọc hoặc từ khóa tìm kiếm.'}
-            </p>
-            <Link
-              to="/users/create"
-              className="btn btn-primary"
+      ) : (
+        <>
+          <div className="filter-bar">
+            <input
+              type="text"
+              placeholder="Tìm theo tên hoặc email..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="filter-input"
+            />
+            <select
+              value={filterRole}
+              onChange={(e) => setFilterRole(e.target.value)}
+              className="filter-select"
             >
-              ➕ {user?.role?.name?.toUpperCase() === 'SUPER_ADMIN' ? 'Thêm quản trị mới' : 'Thêm người dùng mới'}
-            </Link>
+              <option value="ALL">Tất cả vai trò</option>
+              {user?.role?.name?.toUpperCase() === 'ADMIN' && (
+                <>
+                  <option value="TEACHER">Giáo viên</option>
+                  <option value="STUDENT">Học sinh</option>
+                  <option value="PARENT">Phụ huynh</option>
+                </>
+              )}
+            </select>
+            <select
+              value={filterStatus}
+              onChange={(e) => setFilterStatus(e.target.value)}
+              className="filter-select"
+            >
+              <option value="ALL">Tất cả trạng thái</option>
+              <option value="ACTIVE">Đang hoạt động</option>
+              <option value="INACTIVE">Ngưng hoạt động</option>
+              <option value="SUSPENDED">Bị khóa</option>
+            </select>
           </div>
-        ) : (
-          <table className="common-table user-list-table">
+
+          {error && (
+            <div style={{
+              background: '#fee',
+              border: '1px solid #fcc',
+              color: '#c33',
+              padding: '1rem',
+              borderRadius: '8px',
+              marginBottom: '1rem'
+            }}>
+              {error}
+            </div>
+          )}
+
+          {success && (
+            <div style={{
+              background: '#efe',
+              border: '1px solid #cfc',
+              color: '#3c3',
+              padding: '1rem',
+              borderRadius: '8px',
+              marginBottom: '1rem'
+            }}>
+              {success}
+            </div>
+          )}
+
+          {selectedIds.size > 0 && (
+            <div className="bulk-action-bar">
+              <span className="bulk-action-count">Đã chọn {selectedIds.size} người dùng</span>
+              <div className="bulk-action-buttons">
+                <button type="button" className="btn btn-sm btn-secondary" onClick={clearSelection} disabled={bulkActionLoading}>
+                  Bỏ chọn
+                </button>
+                <button type="button" className="btn btn-sm btn-danger" onClick={handleBulkDelete} disabled={bulkActionLoading}>
+                  {bulkActionLoading ? 'Đang xử lý...' : '🗑️ Xóa hàng loạt'}
+                </button>
+                <button type="button" className="btn btn-sm btn-secondary" onClick={() => setShowBulkStatusModal(true)} disabled={bulkActionLoading}>
+                  Đổi trạng thái
+                </button>
+                {user?.role?.name?.toUpperCase() === 'ADMIN' && selectedStudents.length > 0 && (
+                  <button type="button" className="btn btn-sm btn-secondary" onClick={() => { setShowBulkClassModal(true); fetchBulkClasses(); }} disabled={bulkActionLoading}>
+                    Gán lớp ({selectedStudents.length} học sinh)
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
+          <div className="common-table-container">
+            {totalFiltered === 0 ? (
+              <div className="empty-state">
+                <div className="empty-state-icon">👥</div>
+                <h3 className="empty-state-title">
+                  {users.length === 0
+                    ? 'Chưa có giáo viên hoặc học sinh nào'
+                    : 'Không tìm thấy người dùng phù hợp bộ lọc'}
+                </h3>
+                <p className="empty-state-description">
+                  {users.length === 0
+                    ? 'Bắt đầu bằng cách tạo giáo viên hoặc học sinh mới.'
+                    : 'Hãy thử thay đổi điều kiện lọc hoặc từ khóa tìm kiếm.'}
+                </p>
+                <Link
+                  to="/users/create"
+                  className="btn btn-primary"
+                >
+                  ➕ Thêm người dùng mới
+                </Link>
+              </div>
+            ) : (
+              <table className="common-table user-list-table">
             <thead>
               <tr>
                 <th style={{ width: '44px' }}>
@@ -701,14 +1045,16 @@ const UserListPage = () => {
                     </label>
                   </td>
                   <td>
-                    <div className="user-cell">
+                    <div className="user-cell user-cell--centered">
                       <div className="user-cell-top">
                         <div className="user-avatar">
                           {userItem.fullName?.charAt(0)?.toUpperCase() || '👤'}
                         </div>
-                        <span className="user-name">{userItem.fullName}</span>
+                        <div className="user-cell-info">
+                          <span className="user-name">{userItem.fullName}</span>
+                          <div className="user-cell-email">{userItem.email}</div>
+                        </div>
                       </div>
-                      <div className="user-cell-email">{userItem.email}</div>
                     </div>
                   </td>
                   <td>
@@ -832,8 +1178,10 @@ const UserListPage = () => {
           </table>
         )}
       </div>
+        </>
+      )}
 
-      {totalFiltered > 0 && (
+      {!isSuperAdmin && totalFiltered > 0 && (
         <div className="pagination-bar" style={{
           display: 'flex',
           alignItems: 'center',

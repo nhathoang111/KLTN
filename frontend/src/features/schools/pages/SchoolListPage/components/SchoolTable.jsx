@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { MoreVertical, Edit3, Lock, Unlock, Trash2 } from 'lucide-react';
 
 const SchoolTable = ({ schools, onEdit, onToggleLock, onDeleteClick }) => {
@@ -8,9 +8,31 @@ const SchoolTable = ({ schools, onEdit, onToggleLock, onDeleteClick }) => {
     setActionMenuOpenId((prev) => (prev === id ? null : id));
   };
 
+  // Đóng menu khi click ra ngoài (bất kỳ đâu trong document)
+  useEffect(() => {
+    const handleDocumentClick = (event) => {
+      const target = event.target;
+      if (!target) return;
+      // Nếu click không nằm trong cụm .schools-row-actions thì đóng menu
+      const inActions = target.closest('.schools-row-actions');
+      if (!inActions) {
+        setActionMenuOpenId(null);
+      }
+    };
+
+    if (actionMenuOpenId !== null) {
+      document.addEventListener('click', handleDocumentClick);
+    }
+
+    return () => {
+      document.removeEventListener('click', handleDocumentClick);
+    };
+  }, [actionMenuOpenId]);
+
   return (
     <div className="schools-table-container">
-      <table className="schools-table">
+      <div className="schools-table-inner">
+        <table className="schools-table">
         <thead>
           <tr>
             <th className="schools-col-name-header">TÊN TRƯỜNG</th>
@@ -108,7 +130,8 @@ const SchoolTable = ({ schools, onEdit, onToggleLock, onDeleteClick }) => {
             );
           })}
         </tbody>
-      </table>
+        </table>
+      </div>
     </div>
   );
 };

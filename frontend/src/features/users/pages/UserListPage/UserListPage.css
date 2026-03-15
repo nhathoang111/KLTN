@@ -1,11 +1,275 @@
-﻿/* User List Page - Đồng bộ với CommonPageStyles */
+/* User List Page - Đồng bộ với CommonPageStyles */
 @import '../../../../styles/CommonPageStyles.css';
 
 /* ---- Page ---- */
 .user-list-page {
-  padding: 2rem;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  padding: 24px 16px 40px;
+  background: #f4f6fb;
   min-height: 100vh;
+}
+
+/* ---- SUPER ADMIN UI (giống layout trang trường) ---- */
+.admin-users-header {
+  margin-bottom: 16px;
+}
+
+.admin-users-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.admin-users-title {
+  font-size: 24px;
+  font-weight: 700;
+  color: #1f2933;
+  margin: 0 0 4px;
+}
+
+.admin-users-subtitle {
+  margin: 0;
+  font-size: 14px;
+  color: #6b7280;
+}
+
+.admin-users-kpi-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.admin-users-kpi-card {
+  border-radius: 16px;
+  padding: 14px 16px;
+  background: #ffffff;
+  box-shadow: 0 7px 18px rgba(15, 23, 42, 0.06);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.admin-users-kpi-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.admin-users-kpi-card--blue {
+  border-left: 4px solid #3b82f6;
+}
+
+.admin-users-kpi-card--green {
+  border-left: 4px solid #22c55e;
+}
+
+.admin-users-kpi-card--purple {
+  border-left: 4px solid #a855f7;
+}
+
+.admin-users-kpi-label {
+  font-size: 13px;
+  color: #6b7280;
+}
+
+.admin-users-kpi-value {
+  font-size: 20px;
+  font-weight: 700;
+  color: #111827;
+}
+
+.admin-users-kpi-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+}
+
+.admin-users-kpi-icon--blue {
+  background: #eff6ff;
+  color: #2563eb;
+}
+
+.admin-users-kpi-icon--green {
+  background: #ecfdf3;
+  color: #16a34a;
+}
+
+.admin-users-kpi-icon--purple {
+  background: #f5f3ff;
+  color: #7c3aed;
+}
+
+.admin-users-main-card {
+  border-radius: 18px;
+  background: #ffffff;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
+  padding: 16px 18px 18px;
+  position: relative;
+}
+
+.admin-users-top-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.admin-users-search {
+  flex: 1;
+  position: relative;
+}
+
+.admin-users-search input {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 999px;
+  border: 1px solid #e2e8f0;
+  font-size: 14px;
+  background-color: #f9fafb;
+  outline: none;
+  transition: border-color 0.12s ease, box-shadow 0.12s ease, background-color 0.12s ease;
+  padding-left: 32px;
+}
+
+.admin-users-search-icon {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  color: #9ca3af;
+}
+
+.admin-users-search input::placeholder {
+  color: #9ca3af;
+}
+
+.admin-users-search input:focus {
+  border-color: #4f46e5;
+  box-shadow: 0 0 0 1px rgba(79, 70, 229, 0.15);
+  background-color: #ffffff;
+}
+
+.admin-users-filter-select {
+  padding: 9px 12px;
+  border-radius: 999px;
+  border: 1px solid #e5e7eb;
+  background: #f9fafb;
+  font-size: 14px;
+  color: #374151;
+}
+
+.admin-users-filter-btn {
+  padding: 9px 18px;
+  border-radius: 999px;
+  border: none;
+  background: #eef2ff;
+  color: #4f46e5;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
+  transition: background 0.12s ease, transform 0.08s ease, box-shadow 0.12s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.admin-users-filter-btn:hover {
+  background: #e0e7ff;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 10px rgba(15, 23, 42, 0.12);
+}
+
+.admin-users-summary {
+  margin: 4px 0 10px;
+  font-size: 13px;
+  color: #6b7280;
+}
+
+.admin-users-alert {
+  padding: 0.8rem 1rem;
+  border-radius: 10px;
+  font-size: 0.9rem;
+  margin-bottom: 0.75rem;
+}
+
+.admin-users-alert--error {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #b91c1c;
+}
+
+.admin-users-alert--success {
+  background: #ecfdf3;
+  border: 1px solid #bbf7d0;
+  color: #166534;
+}
+
+.admin-users-table-container {
+  border-radius: 14px;
+  border: 1px solid #e5e7eb;
+  overflow: hidden;
+  /* Chiều cao tối thiểu để footer phân trang luôn cố định phía dưới card
+     (ước lượng cho 1 trang ~ 5 dòng dữ liệu) */
+  min-height: 360px;
+}
+
+.admin-users-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.admin-users-table th,
+.admin-users-table td {
+  padding: 10px 12px;
+  text-align: left;
+}
+
+.admin-users-table tbody tr:not(:last-child) {
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.admin-users-table tbody tr:hover {
+  background-color: #f9fafb;
+}
+
+/* Reset mọi gradient tím từ common-table cho header SUPER ADMIN */
+.admin-users-table thead,
+.admin-users-table thead tr,
+.admin-users-table thead th {
+  background: #f9fafb !important;
+  background-image: none !important;
+}
+
+.admin-users-table thead th {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #6b7280;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.admin-users-pagination {
+  border-top: none;
+  padding-top: 0.75rem;
+}
+
+.admin-users-pagination-info {
+  font-size: 0.875rem;
+  color: #6b7280;
 }
 
 /* ---- Table row ---- */
@@ -35,9 +299,12 @@
 /* ---- Cột Người dùng (avatar + tên + email) ---- */
 .user-cell {
   display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  min-height: 3rem;
+  align-items: center;
+  min-height: 3.5rem;
+}
+
+.user-cell--centered {
+  align-items: center;
   justify-content: center;
 }
 
@@ -45,6 +312,12 @@
   display: flex;
   align-items: center;
   gap: 0.75rem;
+}
+
+.user-cell-info {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
 }
 
 .user-avatar {
@@ -72,7 +345,6 @@
   font-size: 0.8125rem;
   color: #6b7280;
   line-height: 1.35;
-  padding-left: calc(40px + 0.75rem);
 }
 
 /* Text trong bảng thống nhất */
@@ -233,6 +505,40 @@
   display: flex;
   gap: 0.5rem;
   flex-wrap: wrap;
+}
+
+.action-buttons--icon-only {
+  justify-content: center;
+}
+
+.icon-action-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  border: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.icon-action-btn--edit {
+  background: #e0f2fe;
+  color: #0369a1;
+}
+
+.icon-action-btn--edit:hover {
+  background: #bae6fd;
+}
+
+.icon-action-btn--delete {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.icon-action-btn--delete:hover {
+  background: #fecaca;
 }
 
 .btn-sm {

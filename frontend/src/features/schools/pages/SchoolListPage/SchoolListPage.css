@@ -310,7 +310,12 @@
 .schools-table-container {
   border-radius: 14px;
   border: 1px solid #e5e7eb;
-  overflow: hidden;
+}
+
+/* Cho phép menu thao tác tràn ra ngoài bảng, không bị cắt */
+.schools-table-inner {
+  border-radius: 14px;
+  overflow: visible;
 }
 
 .schools-table {
