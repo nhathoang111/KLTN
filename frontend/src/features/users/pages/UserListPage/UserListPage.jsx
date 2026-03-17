@@ -4,6 +4,11 @@ import { Pencil, Trash2 } from 'lucide-react';
 import { useAuth } from '../../../auth/context/AuthContext';
 import api from '../../../../shared/lib/api';
 import './UserListPage.css';
+import CreateUserModal from './components/CreateUserModal';
+import ImportUsersExcelModal from './components/ImportUsersExcelModal';
+import SuperAdminHeader from './components/SuperAdminHeader';
+import AdminHeader from './components/AdminHeader';
+import EditUserModal from './components/EditUserModal';
 
 const UserListPage = () => {
   const { user } = useAuth();
@@ -16,10 +21,6 @@ const UserListPage = () => {
   const [filterRole, setFilterRole] = useState('ALL');
   const [filterStatus, setFilterStatus] = useState('ALL');
   const [showImportModal, setShowImportModal] = useState(false);
-  const [importFile, setImportFile] = useState(null);
-  const [importLoading, setImportLoading] = useState(false);
-  const [importResult, setImportResult] = useState(null);
-  const [importError, setImportError] = useState(null);
   const [currentPage, setCurrentPage] = useState(0);
   const [pageSize, setPageSize] = useState(10);
   const [selectedIds, setSelectedIds] = useState(new Set());
@@ -30,6 +31,9 @@ const UserListPage = () => {
   const [bulkClassLoading, setBulkClassLoading] = useState(false);
   const selectAllCheckboxRef = useRef(null);
   const [linkModal, setLinkModal] = useState(null);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingUserId, setEditingUserId] = useState(null);
 
   useEffect(() => {
     // Chờ user context sẵn sàng trước khi fetch
@@ -260,6 +264,26 @@ const UserListPage = () => {
     ? users.filter((u) => ['SUSPENDED', 'INACTIVE', 'LOCKED'].includes((u.status || '').toUpperCase())).length
     : 0;
 
+  const isAdmin = user?.role?.name?.toUpperCase() === 'ADMIN';
+  const totalUsers = !isSuperAdmin ? users.length : 0;
+  const activeUsers = !isSuperAdmin ? users.filter((u) => (u.status || '').toUpperCase() === 'ACTIVE').length : 0;
+  const lockedUsers = !isSuperAdmin
+    ? users.filter((u) => ['SUSPENDED', 'INACTIVE', 'LOCKED'].includes((u.status || '').toUpperCase())).length
+    : 0;
+
+  const totalTeachers = !isSuperAdmin
+    ? users.filter((u) => (u.role?.name || '').toUpperCase().includes('TEACHER')).length
+    : 0;
+  const totalStudents = !isSuperAdmin
+    ? users.filter((u) => (u.role?.name || '').toUpperCase().includes('STUDENT')).length
+    : 0;
+  const totalParents = !isSuperAdmin
+    ? users.filter((u) => {
+        const r = (u.role?.name || '').toUpperCase();
+        return r.includes('PARENT') || r.includes('PHU HUYNH') || r.includes('PHỤ HUYNH');
+      }).length
+    : 0;
+
   const toggleSelectAll = () => {
     const onPage = paginatedUsers.map((u) => u.id);
     const allSelected = onPage.length > 0 && onPage.every((id) => selectedIds.has(id));
@@ -390,530 +414,91 @@ const UserListPage = () => {
   }
 
   return (
-    <div className={isSuperAdmin ? 'min-h-screen bg-slate-100 px-4 py-6' : 'user-list-page'}>
-      {isSuperAdmin ? (
-        <div className="mx-auto max-w-6xl space-y-4">
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              <h1 className="text-2xl font-semibold text-slate-900">
-                Quản lý Admin trường
-              </h1>
-              <p className="mt-1 text-sm text-slate-500">
-                Tổng quan và quản lý danh sách quản trị trường.
-              </p>
-            </div>
-            <Link
-              to="/users/create"
-              className="inline-flex items-center gap-2 rounded-full bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-md shadow-indigo-500/30 hover:bg-indigo-500"
-            >
-              <span className="text-lg leading-none">＋</span>
-              <span>Thêm quản trị mới</span>
-            </Link>
-          </div>
+    <div className="min-h-screen bg-slate-100 px-4 py-6">
+      <div className="mx-auto max-w-6xl space-y-4">
+        {isSuperAdmin ? (
+          <SuperAdminHeader
+            onOpenCreate={() => setShowCreateModal(true)}
+            totalAdmins={totalAdmins}
+            activeAdmins={activeAdmins}
+            lockedAdmins={lockedAdmins}
+          />
+        ) : (
+          <AdminHeader
+            onOpenCreate={() => setShowCreateModal(true)}
+            onOpenImport={() => setShowImportModal(true)}
+            totalUsers={totalUsers}
+            activeUsers={activeUsers}
+            lockedUsers={lockedUsers}
+            totalTeachers={totalTeachers}
+            totalStudents={totalStudents}
+            totalParents={totalParents}
+          />
+        )}
+      </div>
 
-          <div className="grid gap-4 md:grid-cols-3">
-            <div className="rounded-2xl border border-slate-200 bg-white/90 px-4 py-3 shadow-md shadow-slate-900/5">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Tổng số quản trị
-                  </p>
-                  <p className="mt-1 text-2xl font-semibold text-slate-900">
-                    {totalAdmins}
-                  </p>
-                </div>
-                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-indigo-50 text-indigo-600 text-lg">
-                  🏫
-                </div>
-              </div>
-            </div>
+      <CreateUserModal
+        open={showCreateModal}
+        onClose={() => setShowCreateModal(false)}
+        onCreated={() => {
+          setSuccess('Tạo người dùng thành công.');
+          setTimeout(() => setSuccess(''), 3000);
+          fetchUsers();
+        }}
+      />
 
-            <div className="rounded-2xl border border-emerald-200 bg-emerald-50/80 px-4 py-3 shadow-md shadow-emerald-500/10">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-wide text-emerald-600">
-                    Quản trị đang hoạt động
-                  </p>
-                  <p className="mt-1 text-2xl font-semibold text-emerald-700">
-                    {activeAdmins}
-                  </p>
-                </div>
-                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 text-lg">
-                  ✓
-                </div>
-              </div>
-            </div>
+      <EditUserModal
+        open={showEditModal}
+        userId={editingUserId}
+        onClose={() => {
+          setShowEditModal(false);
+          setEditingUserId(null);
+        }}
+        onUpdated={() => {
+          setSuccess('Cập nhật người dùng thành công.');
+          setTimeout(() => setSuccess(''), 3000);
+          fetchUsers();
+          setShowEditModal(false);
+          setEditingUserId(null);
+        }}
+      />
 
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 shadow-md shadow-slate-900/5">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Quản trị bị khóa / ngưng
-                  </p>
-                  <p className="mt-1 text-2xl font-semibold text-slate-900">
-                    {lockedAdmins}
-                  </p>
-                </div>
-                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-slate-600 text-lg">
-                  ⛔
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      ) : (
-        <div className="common-page-header">
-          <div>
-            <h1>Quản lý Giáo viên & Học sinh</h1>
-            <p style={{ marginTop: '0.5rem', fontSize: '0.9rem', opacity: 0.9 }}>
-              Quản lý giáo viên và học sinh trong trường của bạn.
-            </p>
-          </div>
-          <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
-            <Link
-              to="/users/create"
-              className="btn btn-primary"
-            >
-              ➕ Thêm người dùng mới
-            </Link>
-            <button
-              type="button"
-              className="btn btn-secondary"
-              onClick={() => { setShowImportModal(true); setImportResult(null); setImportError(null); setImportFile(null); }}
-            >
-              📤 Nhập từ Excel
-            </button>
-          </div>
-        </div>
-      )}
+      <ImportUsersExcelModal
+        open={showImportModal}
+        onClose={() => setShowImportModal(false)}
+        user={user}
+        onImported={() => {
+          setSuccess('Nhập Excel thành công.');
+          setTimeout(() => setSuccess(''), 3000);
+          fetchUsers();
+        }}
+      />
 
-      {showImportModal && (
-        <div className="common-modal-overlay" onClick={() => !importLoading && setShowImportModal(false)}>
-          <div className="common-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '520px' }}>
-            <div className="common-modal-header">
-              <h2>Nhập người dùng từ Excel</h2>
-              <button type="button" className="common-close-btn" onClick={() => !importLoading && setShowImportModal(false)}>×</button>
-            </div>
-            <div style={{ padding: '1rem' }}>
-              <p style={{ marginBottom: '1rem', fontSize: '0.9rem', color: '#555' }}>
-                Tải file mẫu, điền thông tin (Email, Họ tên, Mật khẩu, Vai trò, Mã trường, Mã lớp), sau đó chọn file và nhấn Tải lên.
-              </p>
-              <a
-                href={`${api.defaults.baseURL || window.location.origin + '/api'}/users/import-template`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="btn btn-secondary"
-                style={{ marginBottom: '1rem', display: 'inline-block' }}
-              >
-                ⬇ Tải file mẫu Excel
-              </a>
-              <form onSubmit={async (e) => {
-                e.preventDefault();
-                if (!importFile) {
-                  setImportError('Vui lòng chọn file Excel');
-                  return;
-                }
-                setImportLoading(true);
-                setImportError(null);
-                setImportResult(null);
-                try {
-                  const formData = new FormData();
-                  formData.append('file', importFile);
-                  const headers = {
-                    'X-User-Role': user?.role?.name || ''
-                  };
-                  if (user?.school?.id != null) headers['X-User-School-Id'] = String(user.school.id);
-                  const res = await api.post('/users/import', formData, { headers });
-                  setImportResult(res.data);
-                  setImportError(null);
-                  fetchUsers();
-                  setImportFile(null);
-                } catch (err) {
-                  const msg = err.response?.data?.error || err.response?.data?.message || err.message || 'Nhập dữ liệu thất bại';
-                  setImportError(msg);
-                  setImportResult(null);
-                } finally {
-                  setImportLoading(false);
-                }
-              }}>
-                <div className="common-form-group">
-                  <label>Chọn file (.xlsx)</label>
-                  <input
-                    type="file"
-                    accept=".xlsx,.xls"
-                    onChange={(e) => setImportFile(e.target.files?.[0] || null)}
-                    disabled={importLoading}
-                  />
-                </div>
-                <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem' }}>
-                  <button type="submit" className="btn btn-primary" disabled={importLoading || !importFile}>
-                    {importLoading ? 'Đang xử lý...' : 'Tải lên'}
-                  </button>
-                  <button type="button" className="btn btn-secondary" onClick={() => !importLoading && setShowImportModal(false)}>
-                    Đóng
-                  </button>
-                </div>
-              </form>
-
-              {importError && (
-                <div style={{
-                  marginTop: '1rem',
-                  padding: '0.75rem 1rem',
-                  background: '#fef2f2',
-                  border: '1px solid #fecaca',
-                  color: '#b91c1c',
-                  borderRadius: '8px',
-                  fontSize: '0.9rem'
-                }}>
-                  <strong>❌ Lỗi:</strong> {importError}
-                </div>
-              )}
-
-              {importResult && (
-                <div style={{ marginTop: '1rem' }}>
-                  {importResult.successCount > 0 && (
-                    <div style={{
-                      padding: '0.75rem 1rem',
-                      background: '#f0fdf4',
-                      border: '1px solid #86efac',
-                      color: '#166534',
-                      borderRadius: '8px',
-                      fontSize: '0.9rem',
-                      marginBottom: importResult.failCount > 0 ? '0.75rem' : 0
-                    }}>
-                      <strong>✅ Thành công:</strong> Đã thêm {importResult.successCount} người dùng.
-                    </div>
-                  )}
-                  {importResult.failCount > 0 && (
-                    <div style={{
-                      padding: '0.75rem 1rem',
-                      background: importResult.successCount > 0 ? '#fffbeb' : '#fef2f2',
-                      border: `1px solid ${importResult.successCount > 0 ? '#fde68a' : '#fecaca'}`,
-                      color: importResult.successCount > 0 ? '#92400e' : '#b91c1c',
-                      borderRadius: '8px',
-                      fontSize: '0.9rem'
-                    }}>
-                      <p style={{ margin: 0 }}><strong>{importResult.successCount > 0 ? '⚠️ Một số dòng lỗi' : '❌ Lỗi'}:</strong> {importResult.failCount} dòng không thêm được.</p>
-                      {importResult.errors?.length > 0 && (
-                        <ul style={{ marginTop: '0.5rem', paddingLeft: '1.25rem', maxHeight: '180px', overflow: 'auto', marginBottom: 0 }}>
-                          {importResult.errors.map((err, i) => (
-                            <li key={i}>Dòng {err.row}: {err.email || '(trống)'} – {err.message}</li>
-                          ))}
-                        </ul>
-                      )}
-                    </div>
-                  )}
-                  {importResult.successCount === 0 && importResult.failCount === 0 && (
-                    <div style={{
-                      padding: '0.75rem 1rem',
-                      background: '#f5f5f5',
-                      borderRadius: '8px',
-                      fontSize: '0.9rem'
-                    }}>
-                      Không có dòng dữ liệu nào để xử lý (file trống hoặc không có dòng hợp lệ).
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {isSuperAdmin ? (
-        <div className="mx-auto mt-4 max-w-6xl space-y-3">
-          <div className="rounded-2xl bg-white/95 px-4 py-3 shadow-lg shadow-slate-900/5">
-            <div className="flex flex-wrap items-center gap-3">
-              <div className="relative flex-1 min-w-[220px]">
-                <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-slate-400">
-                  🔍
-                </span>
-                <input
-                  type="text"
-                  placeholder="Tìm kiếm theo tên hoặc email..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full rounded-full border border-slate-200 bg-slate-50 pl-9 pr-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-100"
-                />
-              </div>
-              <select
-                value={filterRole}
-                onChange={(e) => setFilterRole(e.target.value)}
-                className="h-9 rounded-full border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-100"
-              >
-                <option value="ALL">Tất cả vai trò</option>
-                <option value="ADMIN">Quản trị trường</option>
-              </select>
-              <select
-                value={filterStatus}
-                onChange={(e) => setFilterStatus(e.target.value)}
-                className="h-9 rounded-full border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-100"
-              >
-                <option value="ALL">Tất cả trạng thái</option>
-                <option value="ACTIVE">Đang hoạt động</option>
-                <option value="INACTIVE">Ngưng hoạt động</option>
-                <option value="SUSPENDED">Bị khóa</option>
-              </select>
-              <button
-                type="button"
-                className="inline-flex items-center gap-2 rounded-full bg-indigo-50 px-4 py-2 text-xs font-medium text-indigo-600 shadow-sm shadow-indigo-100"
-              >
-                <span className="text-sm">⚙</span>
-                <span>Bộ lọc</span>
-              </button>
-            </div>
-            <p className="mt-2 text-xs text-slate-500">
-              Hiển thị {totalFiltered === 0 ? 0 : pageIndex * pageSize + 1}–
-              {Math.min((pageIndex + 1) * pageSize, totalFiltered)} / {totalFiltered} quản trị viên
-            </p>
-          </div>
-
-          {error && (
-            <div className="mx-auto max-w-6xl rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-              {error}
-            </div>
-          )}
-
-          {success && (
-            <div className="mx-auto max-w-6xl rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
-              {success}
-            </div>
-          )}
-
-          {selectedIds.size > 0 && (
-            <div className="mx-auto max-w-6xl flex flex-wrap items-center justify-between gap-3 rounded-xl border border-indigo-100 bg-white px-4 py-2.5 text-sm shadow-sm">
-              <span className="font-medium text-slate-700">
-                Đã chọn {selectedIds.size} người dùng
+      <div className="mx-auto mt-4 max-w-6xl space-y-3">
+        <div className="rounded-2xl bg-white/95 px-4 py-3 shadow-lg shadow-slate-900/5">
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="relative flex-1 min-w-[220px]">
+              <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-slate-400">
+                🔍
               </span>
-              <div className="flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  onClick={clearSelection}
-                  disabled={bulkActionLoading}
-                  className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-60"
-                >
-                  Bỏ chọn
-                </button>
-                <button
-                  type="button"
-                  onClick={handleBulkDelete}
-                  disabled={bulkActionLoading}
-                  className="rounded-full bg-rose-500 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-rose-400 disabled:opacity-60"
-                >
-                  {bulkActionLoading ? 'Đang xử lý...' : 'Xóa hàng loạt'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setShowBulkStatusModal(true)}
-                  disabled={bulkActionLoading}
-                  className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
-                >
-                  Đổi trạng thái
-                </button>
-              </div>
+              <input
+                type="text"
+                placeholder="Tìm kiếm theo tên hoặc email..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full rounded-full border border-slate-200 bg-slate-50 pl-9 pr-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-100"
+              />
             </div>
-          )}
 
-          <div className="mx-auto max-w-6xl rounded-2xl border border-slate-200 bg-white/95 shadow-xl shadow-slate-900/5 flex flex-col">
-            {totalFiltered === 0 ? (
-              <div className="flex flex-col items-center justify-center gap-3 px-6 py-10 text-center">
-                <div className="text-4xl opacity-60">👥</div>
-                <h3 className="text-base font-semibold text-slate-800">
-                  {users.length === 0
-                    ? 'Chưa có quản trị viên nào'
-                    : 'Không tìm thấy người dùng phù hợp bộ lọc'}
-                </h3>
-                <p className="max-w-md text-sm text-slate-500">
-                  {users.length === 0
-                    ? 'Bắt đầu bằng cách tạo quản trị viên mới.'
-                    : 'Hãy thử thay đổi điều kiện lọc hoặc từ khóa tìm kiếm.'}
-                </p>
-                <Link
-                  to="/users/create"
-                  className="inline-flex items-center gap-2 rounded-full bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-md shadow-indigo-500/30 hover:bg-indigo-500"
-                >
-                  <span className="text-lg leading-none">＋</span>
-                  <span>Thêm quản trị mới</span>
-                </Link>
-              </div>
-            ) : (
-              <>
-                <div className="overflow-hidden rounded-2xl flex-1 min-h-[260px]">
-                  <table className="min-w-full border-collapse">
-                    <thead className="bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                      <tr>
-                        <th className="w-11 px-4 py-3 text-left">
-                          <input
-                            ref={selectAllCheckboxRef}
-                            type="checkbox"
-                            checked={allSelected}
-                            onChange={toggleSelectAll}
-                            aria-label="Chọn tất cả trên trang"
-                            className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-                          />
-                        </th>
-                        <th className="px-4 py-3 text-left">Người dùng</th>
-                        <th className="px-4 py-3 text-left">Vai trò</th>
-                        <th className="px-4 py-3 text-left">Trạng thái</th>
-                        <th className="px-4 py-3 text-center">Thao tác</th>
-                      </tr>
-                    </thead>
-                    <tbody className="text-sm text-slate-700">
-                      {paginatedUsers.map((userItem) => {
-                        const status = (userItem.status || '').toUpperCase();
-                        const statusClasses =
-                          status === 'ACTIVE'
-                            ? 'bg-sky-500 text-white'
-                            : status === 'INACTIVE'
-                            ? 'bg-slate-300 text-slate-700'
-                            : 'bg-rose-500 text-white';
-
-                        return (
-                          <tr
-                            key={userItem.id}
-                            className="border-t border-slate-100 hover:bg-slate-50/80 transition-colors"
-                          >
-                            <td className="px-4 py-3">
-                              <input
-                                type="checkbox"
-                                checked={selectedIds.has(userItem.id)}
-                                onChange={() => toggleSelectOne(userItem.id)}
-                                aria-label={`Chọn ${userItem.fullName || userItem.email}`}
-                                className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-                              />
-                            </td>
-                            <td className="px-4 py-3">
-                              <div className="flex items-center gap-3">
-                                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-indigo-500 to-purple-500 text-sm font-semibold text-white">
-                                  {userItem.fullName?.charAt(0)?.toUpperCase() ||
-                                    userItem.email?.charAt(0)?.toUpperCase() ||
-                                    'A'}
-                                </div>
-                                <div className="flex flex-col">
-                                  <span className="text-sm font-semibold text-slate-900">
-                                    {userItem.fullName || '—'}
-                                  </span>
-                                  <span className="text-xs text-slate-500">
-                                    {userItem.email}
-                                  </span>
-                                </div>
-                              </div>
-                            </td>
-                            <td className="px-4 py-3">
-                              <span className="inline-flex items-center rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-700">
-                                Quản trị trường
-                              </span>
-                            </td>
-                            <td className="px-4 py-3">
-                              <span
-                                className={`inline-flex min-w-[80px] justify-center rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wide ${statusClasses}`}
-                              >
-                                {status || 'N/A'}
-                              </span>
-                            </td>
-                            <td className="px-4 py-3">
-                              <div className="flex items-center justify-center gap-2">
-                                <Link
-                                  to={`/users/${userItem.id}/edit`}
-                                  className="flex h-8 w-8 items-center justify-center rounded-full bg-sky-100 text-sky-700 hover:bg-sky-200 transition-colors"
-                                >
-                                  <Pencil size={15} />
-                                </Link>
-                                <button
-                                  type="button"
-                                  onClick={() => handleDelete(userItem.id, userItem.fullName)}
-                                  disabled={deleteLoading === userItem.id}
-                                  className="flex h-8 w-8 items-center justify-center rounded-full bg-rose-100 text-rose-600 hover:bg-rose-200 transition-colors disabled:opacity-60"
-                                >
-                                  <Trash2 size={15} />
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-
-                {totalFiltered > 0 && (
-                  <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 px-4 py-3 text-xs text-slate-600">
-                    <div className="flex items-center gap-2">
-                      <span>
-                        Hiển thị {pageIndex * pageSize + 1}–
-                        {Math.min((pageIndex + 1) * pageSize, totalFiltered)} / {totalFiltered} quản trị viên
-                      </span>
-                      <label className="flex items-center gap-1">
-                        <span>Số dòng/trang:</span>
-                        <select
-                          value={pageSize}
-                          onChange={(e) => {
-                            setPageSize(Number(e.target.value));
-                            setCurrentPage(0);
-                          }}
-                          className="h-7 rounded-md border border-slate-200 bg-white px-2 text-xs focus:border-indigo-500 focus:outline-none"
-                        >
-                          <option value={5}>5</option>
-                          <option value={10}>10</option>
-                          <option value={20}>20</option>
-                        </select>
-                      </label>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <button
-                        type="button"
-                        onClick={() => setCurrentPage((p) => Math.max(0, p - 1))}
-                        disabled={pageIndex === 0}
-                        className="flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 bg-white text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-50"
-                      >
-                        ‹
-                      </button>
-                      {Array.from({ length: totalPages }, (_, i) => i).map((p) => (
-                        <button
-                          key={p}
-                          type="button"
-                          onClick={() => setCurrentPage(p)}
-                          className={`flex h-8 w-8 items-center justify-center rounded-md text-sm ${
-                            p === pageIndex
-                              ? 'bg-indigo-500 text-white'
-                              : 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
-                          }`}
-                        >
-                          {p + 1}
-                        </button>
-                      ))}
-                      <button
-                        type="button"
-                        onClick={() => setCurrentPage((p) => Math.min(totalPages - 1, p + 1))}
-                        disabled={pageIndex >= totalPages - 1}
-                        className="flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 bg-white text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-50"
-                      >
-                        ›
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </>
-            )}
-          </div>
-        </div>
-      ) : (
-        <>
-          <div className="filter-bar">
-            <input
-              type="text"
-              placeholder="Tìm theo tên hoặc email..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="filter-input"
-            />
             <select
               value={filterRole}
               onChange={(e) => setFilterRole(e.target.value)}
-              className="filter-select"
+              className="h-9 rounded-full border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-100"
             >
               <option value="ALL">Tất cả vai trò</option>
-              {user?.role?.name?.toUpperCase() === 'ADMIN' && (
+              {isSuperAdmin ? (
+                <option value="ADMIN">Quản trị trường</option>
+              ) : (
                 <>
                   <option value="TEACHER">Giáo viên</option>
                   <option value="STUDENT">Học sinh</option>
@@ -921,10 +506,11 @@ const UserListPage = () => {
                 </>
               )}
             </select>
+
             <select
               value={filterStatus}
               onChange={(e) => setFilterStatus(e.target.value)}
-              className="filter-select"
+              className="h-9 rounded-full border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-100"
             >
               <option value="ALL">Tất cả trạng thái</option>
               <option value="ACTIVE">Đang hoạt động</option>
@@ -933,315 +519,410 @@ const UserListPage = () => {
             </select>
           </div>
 
-          {error && (
-            <div style={{
-              background: '#fee',
-              border: '1px solid #fcc',
-              color: '#c33',
-              padding: '1rem',
-              borderRadius: '8px',
-              marginBottom: '1rem'
-            }}>
-              {error}
-            </div>
-          )}
+          <p className="mt-2 text-xs text-slate-500">
+            Hiển thị {totalFiltered === 0 ? 0 : pageIndex * pageSize + 1}–
+            {Math.min((pageIndex + 1) * pageSize, totalFiltered)} / {totalFiltered}{' '}
+            {isSuperAdmin ? 'quản trị viên' : 'người dùng'}
+          </p>
+        </div>
 
-          {success && (
-            <div style={{
-              background: '#efe',
-              border: '1px solid #cfc',
-              color: '#3c3',
-              padding: '1rem',
-              borderRadius: '8px',
-              marginBottom: '1rem'
-            }}>
-              {success}
-            </div>
-          )}
+        {error && (
+          <div className="mx-auto max-w-6xl rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+            {error}
+          </div>
+        )}
 
-          {selectedIds.size > 0 && (
-            <div className="bulk-action-bar">
-              <span className="bulk-action-count">Đã chọn {selectedIds.size} người dùng</span>
-              <div className="bulk-action-buttons">
-                <button type="button" className="btn btn-sm btn-secondary" onClick={clearSelection} disabled={bulkActionLoading}>
-                  Bỏ chọn
-                </button>
-                <button type="button" className="btn btn-sm btn-danger" onClick={handleBulkDelete} disabled={bulkActionLoading}>
-                  {bulkActionLoading ? 'Đang xử lý...' : '🗑️ Xóa hàng loạt'}
-                </button>
-                <button type="button" className="btn btn-sm btn-secondary" onClick={() => setShowBulkStatusModal(true)} disabled={bulkActionLoading}>
-                  Đổi trạng thái
-                </button>
-                {user?.role?.name?.toUpperCase() === 'ADMIN' && selectedStudents.length > 0 && (
-                  <button type="button" className="btn btn-sm btn-secondary" onClick={() => { setShowBulkClassModal(true); fetchBulkClasses(); }} disabled={bulkActionLoading}>
-                    Gán lớp ({selectedStudents.length} học sinh)
-                  </button>
-                )}
-              </div>
-            </div>
-          )}
+        {success && (
+          <div className="mx-auto max-w-6xl rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+            {success}
+          </div>
+        )}
 
-          <div className="common-table-container">
-            {totalFiltered === 0 ? (
-              <div className="empty-state">
-                <div className="empty-state-icon">👥</div>
-                <h3 className="empty-state-title">
-                  {users.length === 0
-                    ? 'Chưa có giáo viên hoặc học sinh nào'
-                    : 'Không tìm thấy người dùng phù hợp bộ lọc'}
-                </h3>
-                <p className="empty-state-description">
-                  {users.length === 0
-                    ? 'Bắt đầu bằng cách tạo giáo viên hoặc học sinh mới.'
-                    : 'Hãy thử thay đổi điều kiện lọc hoặc từ khóa tìm kiếm.'}
-                </p>
-                <Link
-                  to="/users/create"
-                  className="btn btn-primary"
+        {selectedIds.size > 0 && (
+          <div className="mx-auto max-w-6xl flex flex-wrap items-center justify-between gap-3 rounded-xl border border-indigo-100 bg-white px-4 py-2.5 text-sm shadow-sm">
+            <span className="font-medium text-slate-700">
+              Đã chọn {selectedIds.size} người dùng
+            </span>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={clearSelection}
+                disabled={bulkActionLoading}
+                className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-60"
+              >
+                Bỏ chọn
+              </button>
+              <button
+                type="button"
+                onClick={handleBulkDelete}
+                disabled={bulkActionLoading}
+                className="rounded-full bg-rose-500 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-rose-400 disabled:opacity-60"
+              >
+                {bulkActionLoading ? 'Đang xử lý...' : 'Xóa hàng loạt'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowBulkStatusModal(true)}
+                disabled={bulkActionLoading}
+                className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+              >
+                Đổi trạng thái
+              </button>
+
+              {isAdmin && selectedStudents.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowBulkClassModal(true);
+                    fetchBulkClasses();
+                  }}
+                  disabled={bulkActionLoading}
+                  className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
                 >
-                  ➕ Thêm người dùng mới
-                </Link>
-              </div>
-            ) : (
-              <table className="common-table user-list-table">
-            <thead>
-              <tr>
-                <th style={{ width: '44px' }}>
-                  <label className="bulk-checkbox-label">
-                    <input
-                      ref={selectAllCheckboxRef}
-                      type="checkbox"
-                      checked={allSelected}
-                      onChange={toggleSelectAll}
-                      aria-label="Chọn tất cả trên trang"
-                    />
-                  </label>
-                </th>
-                <th>Người dùng</th>
-                <th>Vai trò</th>
-                <th>GVCN lớp</th>
-                {(() => {
-                  const currentUserRole = user?.role?.name?.toUpperCase();
-                  if (currentUserRole === 'ADMIN') {
-                    return <th>Liên kết</th>;
-                  }
-                  return null;
-                })()}
-                <th>Trạng thái</th>
-                <th>Thao tác</th>
-              </tr>
-            </thead>
-            <tbody>
-              {paginatedUsers.map((userItem) => (
-                <tr key={userItem.id} className="user-item">
-                  <td>
-                    <label className="bulk-checkbox-label">
-                      <input
-                        type="checkbox"
-                        checked={selectedIds.has(userItem.id)}
-                        onChange={() => toggleSelectOne(userItem.id)}
-                        aria-label={`Chọn ${userItem.fullName || userItem.email}`}
-                      />
-                    </label>
-                  </td>
-                  <td>
-                    <div className="user-cell user-cell--centered">
-                      <div className="user-cell-top">
-                        <div className="user-avatar">
-                          {userItem.fullName?.charAt(0)?.toUpperCase() || '👤'}
-                        </div>
-                        <div className="user-cell-info">
-                          <span className="user-name">{userItem.fullName}</span>
-                          <div className="user-cell-email">{userItem.email}</div>
-                        </div>
-                      </div>
-                    </div>
-                  </td>
-                  <td>
-                    {(() => {
-                      const { label, badgeClass } = getRoleBadgeConfig(userItem.role?.name);
-                      if (!label) return null;
-                      return (
-                        <span className={`role-badge role-badge--${badgeClass}`}>
-                          {label}
-                        </span>
-                      );
-                    })()}
-                  </td>
-                  <td>
-                    {(() => {
-                      const roleName = userItem.role?.name?.toUpperCase() || '';
-                      const isTeacher = roleName.includes('TEACHER') || roleName === 'TEACHER';
-                      const homeroomClasses = userItem.homeroomClasses && Array.isArray(userItem.homeroomClasses) ? userItem.homeroomClasses : [];
-                      if (!isTeacher) return <span className="text-gray-400">-</span>;
-                      if (homeroomClasses.length === 0) return <span className="link-cell-empty">Không</span>;
-                      if (homeroomClasses.length === 1) {
-                        const cls = homeroomClasses[0];
-                        return <span className="link-cell-badge link-cell-badge--student">{cls.name}</span>;
-                      }
-                      return (
-                        <button
-                          type="button"
-                          className="link-cell-btn"
-                          onClick={() => setLinkModal({ type: 'classes', title: `GVCN lớp: ${userItem.fullName || 'giáo viên'}`, items: homeroomClasses, userName: userItem.fullName })}
-                        >
-                          {homeroomClasses.length} lớp
-                        </button>
-                      );
-                    })()}
-                  </td>
-                  {(() => {
-                    const currentUserRole = user?.role?.name?.toUpperCase();
-                    if (currentUserRole === 'ADMIN') {
-                      return (
-                        <td>
-                          {(() => {
-                            const userRoleName = userItem.role?.name?.toUpperCase() || '';
-                            const isStudent = userRoleName.includes('STUDENT') || userRoleName === 'STUDENT';
-                            const isTeacher = userRoleName.includes('TEACHER') || userRoleName === 'TEACHER';
-                            const isParent = userRoleName.includes('PARENT') || userRoleName.includes('PHU HUYNH') || userRoleName.includes('PHỤ HUYNH');
+                  Gán lớp ({selectedStudents.length} học sinh)
+                </button>
+              )}
+            </div>
+          </div>
+        )}
 
-                            if (isStudent) {
-                              if (userItem.class && userItem.class.name) {
+        <div className="mx-auto max-w-6xl rounded-2xl border border-slate-200 bg-white/95 shadow-xl shadow-slate-900/5 flex flex-col">
+          {totalFiltered === 0 ? (
+            <div className="flex flex-col items-center justify-center gap-3 px-6 py-10 text-center">
+              <div className="text-4xl opacity-60">👥</div>
+              <h3 className="text-base font-semibold text-slate-800">
+                {users.length === 0
+                  ? isSuperAdmin
+                    ? 'Chưa có quản trị viên nào'
+                    : 'Chưa có người dùng nào'
+                  : 'Không tìm thấy người dùng phù hợp bộ lọc'}
+              </h3>
+              <p className="max-w-md text-sm text-slate-500">
+                {users.length === 0
+                  ? isSuperAdmin
+                    ? 'Bắt đầu bằng cách tạo quản trị viên mới.'
+                    : 'Bắt đầu bằng cách tạo người dùng mới.'
+                  : 'Hãy thử thay đổi điều kiện lọc hoặc từ khóa tìm kiếm.'}
+              </p>
+              <Link
+                to="/users/create"
+                className="inline-flex items-center gap-2 rounded-full bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-md shadow-indigo-500/30 hover:bg-indigo-500"
+              >
+                <span className="text-lg leading-none">＋</span>
+                <span>{isSuperAdmin ? 'Thêm quản trị mới' : 'Thêm người dùng mới'}</span>
+              </Link>
+            </div>
+          ) : (
+            <>
+              <div className="overflow-hidden rounded-2xl flex-1 min-h-[260px]">
+                <table className="min-w-full border-collapse">
+                  <thead className="bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    <tr>
+                      <th className="w-11 px-4 py-3 text-left">
+                        <input
+                          ref={selectAllCheckboxRef}
+                          type="checkbox"
+                          checked={allSelected}
+                          onChange={toggleSelectAll}
+                          aria-label="Chọn tất cả trên trang"
+                          className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                        />
+                      </th>
+                      <th className="px-4 py-3 text-left">Người dùng</th>
+                      <th className="px-4 py-3 text-left">Vai trò</th>
+                      {!isSuperAdmin && <th className="px-4 py-3 text-left">GVCN lớp</th>}
+                      {isAdmin && <th className="px-4 py-3 text-left">Liên kết</th>}
+                      <th className="px-4 py-3 text-left">Trạng thái</th>
+                      <th className="px-4 py-3 text-center">Thao tác</th>
+                    </tr>
+                  </thead>
+                  <tbody className="text-sm text-slate-700">
+                    {paginatedUsers.map((userItem) => {
+                      const status = (userItem.status || '').toUpperCase();
+                      const statusClasses =
+                        status === 'ACTIVE'
+                          ? 'bg-sky-500 text-white'
+                          : status === 'INACTIVE'
+                          ? 'bg-slate-300 text-slate-700'
+                          : 'bg-rose-500 text-white';
+
+                      return (
+                        <tr
+                          key={userItem.id}
+                          className="border-t border-slate-100 hover:bg-slate-50/80 transition-colors"
+                        >
+                          <td className="px-4 py-3">
+                            <input
+                              type="checkbox"
+                              checked={selectedIds.has(userItem.id)}
+                              onChange={() => toggleSelectOne(userItem.id)}
+                              aria-label={`Chọn ${userItem.fullName || userItem.email}`}
+                              className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                            />
+                          </td>
+
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-3">
+                              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-indigo-500 to-purple-500 text-sm font-semibold text-white">
+                                {userItem.fullName?.charAt(0)?.toUpperCase() ||
+                                  userItem.email?.charAt(0)?.toUpperCase() ||
+                                  'A'}
+                              </div>
+                              <div className="flex flex-col">
+                                <span className="text-sm font-semibold text-slate-900">
+                                  {userItem.fullName || '—'}
+                                </span>
+                                <span className="text-xs text-slate-500">
+                                  {userItem.email}
+                                </span>
+                              </div>
+                            </div>
+                          </td>
+
+                          <td className="px-4 py-3">
+                            {isSuperAdmin ? (
+                              <span className="inline-flex items-center rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-700">
+                                Quản trị trường
+                              </span>
+                            ) : (
+                              (() => {
+                                const { label, badgeClass } = getRoleBadgeConfig(userItem.role?.name);
+                                if (!label) return <span className="text-slate-400">—</span>;
+                                const badge =
+                                  badgeClass === 'teacher'
+                                    ? 'bg-sky-100 text-sky-700'
+                                    : badgeClass === 'student'
+                                    ? 'bg-amber-100 text-amber-700'
+                                    : badgeClass === 'parent'
+                                    ? 'bg-purple-100 text-purple-700'
+                                    : badgeClass === 'admin'
+                                    ? 'bg-indigo-100 text-indigo-700'
+                                    : 'bg-slate-100 text-slate-700';
                                 return (
-                                  <span className="link-cell-badge link-cell-badge--student">
-                                    {userItem.class.name}
+                                  <span className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${badge}`}>
+                                    {label}
                                   </span>
                                 );
-                              }
-                              return <span className="link-cell-empty">Chưa có lớp</span>;
-                            }
-                            if (isTeacher) {
-                              const classes = userItem.classes && Array.isArray(userItem.classes) ? userItem.classes : [];
-                              const count = classes.length;
-                              if (count > 0) {
-                                return (
-                                  <button
-                                    type="button"
-                                    className="link-cell-btn"
-                                    onClick={() => setLinkModal({ type: 'classes', title: `Lớp của ${userItem.fullName || 'giáo viên'}`, items: classes, userName: userItem.fullName })}
-                                  >
-                                    {count} lớp
-                                  </button>
-                                );
-                              }
-                              return <span className="link-cell-empty">Chưa có lớp</span>;
-                            }
-                            if (isParent) {
-                              const children = userItem.children && Array.isArray(userItem.children) ? userItem.children : [];
-                              const count = userItem.childrenCount != null ? userItem.childrenCount : children.length;
-                              if (count > 0) {
-                                return (
-                                  <button
-                                    type="button"
-                                    className="link-cell-btn"
-                                    onClick={() => setLinkModal({ type: 'children', title: `Con của ${userItem.fullName || 'phụ huynh'}`, items: children, userName: userItem.fullName })}
-                                  >
-                                    {count} con
-                                  </button>
-                                );
-                              }
-                              return <span className="link-cell-empty">Chưa liên kết con</span>;
-                            }
-                            return <span className="link-cell-empty">-</span>;
-                          })()}
-                        </td>
-                      );
-                    }
-                    return null;
-                  })()}
-                  <td>
-                    <span className={`status-badge ${userItem.status?.toLowerCase()}`}>
-                      {userItem.status}
-                    </span>
-                  </td>
-                  <td>
-                    <div className="action-buttons">
-                      <Link
-                        to={`/users/${userItem.id}/edit`}
-                        className="btn btn-sm btn-secondary"
-                      >
-                        ✏️ Sửa
-                      </Link>
-                      <button
-                        onClick={() => handleDelete(userItem.id, userItem.fullName)}
-                        disabled={deleteLoading === userItem.id}
-                        className="btn btn-sm btn-danger"
-                      >
-                        {deleteLoading === userItem.id ? '⏳ Đang xóa...' : '🗑️ Xóa'}
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
-        </>
-      )}
+                              })()
+                            )}
+                          </td>
 
-      {!isSuperAdmin && totalFiltered > 0 && (
-        <div className="pagination-bar" style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          flexWrap: 'wrap',
-          gap: '1rem',
-          marginTop: '1rem',
-          padding: '0.75rem 0',
-          borderTop: '1px solid #e5e7eb'
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <span style={{ fontSize: '0.875rem', color: '#6b7280' }}>
-              Hiển thị {pageIndex * pageSize + 1}–{Math.min((pageIndex + 1) * pageSize, totalFiltered)} / {totalFiltered} {user?.role?.name?.toUpperCase() === 'SUPER_ADMIN' ? 'quản trị viên' : 'người dùng'}
-            </span>
-            <label style={{ fontSize: '0.875rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-              Số dòng/trang:
-              <select
-                value={pageSize}
-                onChange={(e) => { setPageSize(Number(e.target.value)); setCurrentPage(0); }}
-                style={{ padding: '4px 8px', borderRadius: '4px', border: '1px solid #d1d5db' }}
-              >
-                <option value={10}>10</option>
-                <option value={20}>20</option>
-                <option value={50}>50</option>
-              </select>
-            </label>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-            <button
-              type="button"
-              onClick={() => setCurrentPage((p) => Math.max(0, p - 1))}
-              disabled={pageIndex === 0}
-              className="btn btn-sm btn-secondary"
-              style={{ minWidth: '36px' }}
-            >
-              ‹
-            </button>
-            {Array.from({ length: totalPages }, (_, i) => i).map((p) => (
-              <button
-                key={p}
-                type="button"
-                onClick={() => setCurrentPage(p)}
-                className={p === pageIndex ? 'btn btn-sm btn-primary' : 'btn btn-sm btn-secondary'}
-                style={{ minWidth: '36px' }}
-              >
-                {p + 1}
-              </button>
-            ))}
-            <button
-              type="button"
-              onClick={() => setCurrentPage((p) => Math.min(totalPages - 1, p + 1))}
-              disabled={pageIndex >= totalPages - 1}
-              className="btn btn-sm btn-secondary"
-              style={{ minWidth: '36px' }}
-            >
-              ›
-            </button>
-          </div>
+                          {!isSuperAdmin && (
+                            <td className="px-4 py-3">
+                              {(() => {
+                                const roleName = userItem.role?.name?.toUpperCase() || '';
+                                const isTeacherRole = roleName.includes('TEACHER') || roleName === 'TEACHER';
+                                const homeroomClasses = Array.isArray(userItem.homeroomClasses) ? userItem.homeroomClasses : [];
+                                if (!isTeacherRole) return <span className="text-slate-400">—</span>;
+                                if (homeroomClasses.length === 0) return <span className="text-slate-500">Không</span>;
+                                if (homeroomClasses.length === 1) {
+                                  const cls = homeroomClasses[0];
+                                  return (
+                                    <span className="inline-flex items-center rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-700">
+                                      {cls.name}
+                                    </span>
+                                  );
+                                }
+                                return (
+                                  <button
+                                    type="button"
+                                    className="text-xs font-semibold text-indigo-600 hover:text-indigo-500"
+                                    onClick={() =>
+                                      setLinkModal({
+                                        type: 'classes',
+                                        title: `GVCN lớp: ${userItem.fullName || 'giáo viên'}`,
+                                        items: homeroomClasses,
+                                        userName: userItem.fullName,
+                                      })
+                                    }
+                                  >
+                                    {homeroomClasses.length} lớp
+                                  </button>
+                                );
+                              })()}
+                            </td>
+                          )}
+
+                          {isAdmin && (
+                            <td className="px-4 py-3">
+                              {(() => {
+                                const userRoleName = userItem.role?.name?.toUpperCase() || '';
+                                const isStudentRole = userRoleName.includes('STUDENT') || userRoleName === 'STUDENT';
+                                const isTeacherRole = userRoleName.includes('TEACHER') || userRoleName === 'TEACHER';
+                                const isParentRole =
+                                  userRoleName.includes('PARENT') ||
+                                  userRoleName.includes('PHU HUYNH') ||
+                                  userRoleName.includes('PHỤ HUYNH');
+
+                                if (isStudentRole) {
+                                  if (userItem.class && userItem.class.name) {
+                                    return (
+                                      <span className="inline-flex items-center rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-700">
+                                        {userItem.class.name}
+                                      </span>
+                                    );
+                                  }
+                                  return <span className="text-slate-500">Chưa có lớp</span>;
+                                }
+
+                                if (isTeacherRole) {
+                                  const classes = Array.isArray(userItem.classes) ? userItem.classes : [];
+                                  const count = classes.length;
+                                  if (count > 0) {
+                                    return (
+                                      <button
+                                        type="button"
+                                        className="text-xs font-semibold text-indigo-600 hover:text-indigo-500"
+                                        onClick={() =>
+                                          setLinkModal({
+                                            type: 'classes',
+                                            title: `Lớp của ${userItem.fullName || 'giáo viên'}`,
+                                            items: classes,
+                                            userName: userItem.fullName,
+                                          })
+                                        }
+                                      >
+                                        {count} lớp
+                                      </button>
+                                    );
+                                  }
+                                  return <span className="text-slate-500">Chưa có lớp</span>;
+                                }
+
+                                if (isParentRole) {
+                                  const children = Array.isArray(userItem.children) ? userItem.children : [];
+                                  const count = userItem.childrenCount != null ? userItem.childrenCount : children.length;
+                                  if (count > 0) {
+                                    return (
+                                      <button
+                                        type="button"
+                                        className="text-xs font-semibold text-indigo-600 hover:text-indigo-500"
+                                        onClick={() =>
+                                          setLinkModal({
+                                            type: 'children',
+                                            title: `Con của ${userItem.fullName || 'phụ huynh'}`,
+                                            items: children,
+                                            userName: userItem.fullName,
+                                          })
+                                        }
+                                      >
+                                        {count} con
+                                      </button>
+                                    );
+                                  }
+                                  return <span className="text-slate-500">Chưa liên kết con</span>;
+                                }
+
+                                return <span className="text-slate-400">—</span>;
+                              })()}
+                            </td>
+                          )}
+
+                          <td className="px-4 py-3">
+                            <span
+                              className={`inline-flex min-w-[80px] justify-center rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wide ${statusClasses}`}
+                            >
+                              {status || 'N/A'}
+                            </span>
+                          </td>
+
+                          <td className="px-4 py-3">
+                            <div className="flex items-center justify-center gap-2">
+                              <Link
+                                to="#"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  setEditingUserId(userItem.id);
+                                  setShowEditModal(true);
+                                }}
+                                className="flex h-8 w-8 items-center justify-center rounded-full bg-sky-100 text-sky-700 hover:bg-sky-200 transition-colors"
+                                aria-label="Sửa"
+                              >
+                                <Pencil size={15} />
+                              </Link>
+                              <button
+                                type="button"
+                                onClick={() => handleDelete(userItem.id, userItem.fullName)}
+                                disabled={deleteLoading === userItem.id}
+                                className="flex h-8 w-8 items-center justify-center rounded-full bg-rose-100 text-rose-600 hover:bg-rose-200 transition-colors disabled:opacity-60"
+                                aria-label="Xóa"
+                              >
+                                <Trash2 size={15} />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {totalFiltered > 0 && (
+                <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 px-4 py-3 text-xs text-slate-600">
+                  <div className="flex items-center gap-2">
+                    <span>
+                      Hiển thị {pageIndex * pageSize + 1}–
+                      {Math.min((pageIndex + 1) * pageSize, totalFiltered)} / {totalFiltered}{' '}
+                      {isSuperAdmin ? 'quản trị viên' : 'người dùng'}
+                    </span>
+                    <label className="flex items-center gap-1">
+                      <span>Số dòng/trang:</span>
+                      <select
+                        value={pageSize}
+                        onChange={(e) => {
+                          setPageSize(Number(e.target.value));
+                          setCurrentPage(0);
+                        }}
+                        className="h-7 rounded-md border border-slate-200 bg-white px-2 text-xs focus:border-indigo-500 focus:outline-none"
+                      >
+                        <option value={5}>5</option>
+                        <option value={10}>10</option>
+                        <option value={20}>20</option>
+                        <option value={50}>50</option>
+                      </select>
+                    </label>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => setCurrentPage((p) => Math.max(0, p - 1))}
+                      disabled={pageIndex === 0}
+                      className="flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 bg-white text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+                    >
+                      ‹
+                    </button>
+                    {Array.from({ length: totalPages }, (_, i) => i).map((p) => (
+                      <button
+                        key={p}
+                        type="button"
+                        onClick={() => setCurrentPage(p)}
+                        className={`flex h-8 w-8 items-center justify-center rounded-md text-sm ${
+                          p === pageIndex
+                            ? 'bg-indigo-500 text-white'
+                            : 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                        }`}
+                      >
+                        {p + 1}
+                      </button>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() => setCurrentPage((p) => Math.min(totalPages - 1, p + 1))}
+                      disabled={pageIndex >= totalPages - 1}
+                      className="flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 bg-white text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+                    >
+                      ›
+                    </button>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
         </div>
-      )}
+      </div>
+
+      {/* Pagination đã được unify trong khối bảng phía trên */}
 
       {showBulkStatusModal && (
         <div className="common-modal-overlay" onClick={() => !bulkActionLoading && setShowBulkStatusModal(false)}>
@@ -1359,10 +1040,18 @@ const UserListPage = () => {
                 <ul className="link-modal-list">
                   {linkModal.items.map((child, idx) => (
                     <li key={child.id || idx}>
-                      <Link to={`/users/${child.id}/edit`} className="link-modal-item link-modal-item--clickable" onClick={() => setLinkModal(null)}>
+                      <button
+                        type="button"
+                        className="link-modal-item link-modal-item--clickable"
+                        onClick={() => {
+                          setLinkModal(null);
+                          setEditingUserId(child.id);
+                          setShowEditModal(true);
+                        }}
+                      >
                         {child.fullName || child.email || `#${child.id}`}
                         {child.email && <span className="link-modal-email"> — {child.email}</span>}
-                      </Link>
+                      </button>
                     </li>
                   ))}
                 </ul>
