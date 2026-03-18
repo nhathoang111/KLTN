@@ -5,6 +5,7 @@ import com.example.schoolmanagement.entity.ClassEntity;
 import com.example.schoolmanagement.entity.School;
 import com.example.schoolmanagement.entity.Subject;
 import com.example.schoolmanagement.entity.User;
+import com.example.schoolmanagement.entity.ClassSection;
 import com.example.schoolmanagement.exception.BadRequestException;
 import com.example.schoolmanagement.exception.ResourceNotFoundException;
 import com.example.schoolmanagement.repository.ScheduleRepository;
@@ -12,6 +13,7 @@ import com.example.schoolmanagement.repository.ClassRepository;
 import com.example.schoolmanagement.repository.SubjectRepository;
 import com.example.schoolmanagement.repository.UserRepository;
 import com.example.schoolmanagement.repository.EnrollmentRepository;
+import com.example.schoolmanagement.repository.ClassSectionRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -34,6 +36,9 @@ public class ScheduleService {
     
     @Autowired
     private EnrollmentRepository enrollmentRepository;
+
+    @Autowired
+    private ClassSectionRepository classSectionRepository;
 
     public List<Schedule> getAllSchedules() {
         return scheduleRepository.findAllWithRelations();
@@ -504,6 +509,21 @@ public class ScheduleService {
         }
         schedule.setRoom(room);
 
+        // Auto-link to class section if possible (class + subject + teacher)
+        if (subjectId != null && teacherId != null) {
+            List<ClassSection> sections = classSectionRepository.findByClassRoomId(classId);
+            ClassSection matched = sections.stream()
+                    .filter(cs -> cs.getSubject() != null && cs.getSubject().getId() != null
+                            && cs.getTeacher() != null && cs.getTeacher().getId() != null
+                            && cs.getSubject().getId().equals(subjectId)
+                            && cs.getTeacher().getId().equals(teacherId))
+                    .findFirst()
+                    .orElse(null);
+            if (matched != null) {
+                schedule.setClassSection(matched);
+            }
+        }
+
         List<Schedule> conflicts = findConflictsByDate(date, period, teacherId, classId);
         if (!conflicts.isEmpty()) throw new BadRequestException("Schedule conflict detected");
 
@@ -538,8 +558,9 @@ public class ScheduleService {
         }
 
         Object subjectIdObj = scheduleData.get("subjectId");
+        Integer subjectId = null;
         if (subjectIdObj != null) {
-            Integer subjectId = parseInt(subjectIdObj);
+            subjectId = parseInt(subjectIdObj);
             if (subjectId != null) {
                 schedule.setSubject(subjectRepository.findById(subjectId)
                         .orElseThrow(() -> new BadRequestException("Subject not found")));
@@ -547,8 +568,9 @@ public class ScheduleService {
         }
 
         Object teacherIdObj = scheduleData.get("teacherId");
+        Integer teacherId = null;
         if (teacherIdObj != null) {
-            Integer teacherId = parseInt(teacherIdObj);
+            teacherId = parseInt(teacherIdObj);
             if (teacherId != null) {
                 schedule.setTeacher(userRepository.findById(teacherId)
                         .orElseThrow(() -> new BadRequestException("Teacher not found")));
@@ -585,6 +607,23 @@ public class ScheduleService {
 
         String room = (String) scheduleData.get("room");
         if (room != null) schedule.setRoom(room);
+
+        // Re-link to class section when class/subject/teacher changed
+        Integer effectiveClassId = schedule.getClassEntity() != null ? schedule.getClassEntity().getId() : null;
+        if (effectiveClassId != null && subjectId != null && teacherId != null) {
+            List<ClassSection> sections = classSectionRepository.findByClassRoomId(effectiveClassId);
+            ClassSection matched = null;
+            for (ClassSection cs : sections) {
+                if (cs.getSubject() != null && cs.getSubject().getId() != null
+                        && cs.getTeacher() != null && cs.getTeacher().getId() != null
+                        && cs.getSubject().getId().equals(subjectId)
+                        && cs.getTeacher().getId().equals(teacherId)) {
+                    matched = cs;
+                    break;
+                }
+            }
+            schedule.setClassSection(matched);
+        }
 
         return scheduleRepository.save(schedule);
     }

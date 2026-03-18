@@ -206,7 +206,6 @@ const UserEditForm = ({
     if (!userId) return;
     fetchUserData();
     fetchOptions();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId]);
 
   useEffect(() => {
@@ -215,7 +214,6 @@ const UserEditForm = ({
     fetchClassesForSchool(formData.schoolId);
     fetchSubjectsForSchool(formData.schoolId);
     fetchSchoolStudents(formData.schoolId);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [formData.schoolId]);
 
   const selectedRole = useMemo(() => {

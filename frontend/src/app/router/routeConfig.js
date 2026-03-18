@@ -5,6 +5,7 @@ import SchoolEditPage from "../../features/schools/pages/SchoolEditPage/SchoolEd
 import ClassListPage from "../../features/classes/pages/ClassListPage/ClassListPage";
 import ClassCreatePage from "../../features/classes/pages/ClassCreatePage/ClassCreatePage";
 import ClassEditPage from "../../features/classes/pages/ClassEditPage/ClassEditPage";
+import ClassDetailPage from "../../features/classes/pages/ClassDetailPage/ClassDetailPage";
 import SubjectListPage from "../../features/subjects/pages/SubjectListPage/SubjectListPage";
 import SubjectCreatePage from "../../features/subjects/pages/SubjectCreatePage/SubjectCreatePage";
 import SubjectEditPage from "../../features/subjects/pages/SubjectEditPage/SubjectEditPage";
@@ -30,6 +31,7 @@ export const protectedRoutes = [
   { path: "classes", Component: ClassListPage, roles: ["SUPER_ADMIN", "ADMIN", "TEACHER"] },
   { path: "classes/create", Component: ClassCreatePage, roles: ["SUPER_ADMIN", "ADMIN"] },
   { path: "classes/:id/edit", Component: ClassEditPage, roles: ["SUPER_ADMIN", "ADMIN"] },
+  { path: "classes/:id", Component: ClassDetailPage, roles: ["SUPER_ADMIN", "ADMIN", "TEACHER"] },
   { path: "subjects", Component: SubjectListPage, roles: ["SUPER_ADMIN", "ADMIN"] },
   { path: "subjects/create", Component: SubjectCreatePage, roles: ["SUPER_ADMIN", "ADMIN"] },
   { path: "subjects/:id/edit", Component: SubjectEditPage, roles: ["SUPER_ADMIN", "ADMIN"] },

@@ -69,13 +69,25 @@ public class ScheduleController {
     @PostMapping
     public ResponseEntity<?> createSchedule(@RequestBody Map<String, Object> scheduleData) {
         Schedule savedSchedule = scheduleService.createSchedule(scheduleData);
-        return ResponseEntity.ok(savedSchedule);
+        String warning = (savedSchedule.getClassSection() == null)
+                ? "Chưa có phân công chính thức cho lớp–môn–giáo viên này (class_section)."
+                : null;
+        return ResponseEntity.ok(Map.of(
+                "schedule", savedSchedule,
+                "warning", warning
+        ));
     }
 
     @PutMapping("/{id}")
     public ResponseEntity<?> updateSchedule(@PathVariable Integer id, @RequestBody Map<String, Object> scheduleData) {
         Schedule updatedSchedule = scheduleService.updateSchedule(id, scheduleData);
-        return ResponseEntity.ok(updatedSchedule);
+        String warning = (updatedSchedule.getClassSection() == null)
+                ? "Chưa có phân công chính thức cho lớp–môn–giáo viên này (class_section)."
+                : null;
+        return ResponseEntity.ok(Map.of(
+                "schedule", updatedSchedule,
+                "warning", warning
+        ));
     }
 
     @DeleteMapping("/{id}")

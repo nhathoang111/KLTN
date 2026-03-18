@@ -123,7 +123,6 @@ const UserCreateForm = ({
     };
 
     fetchOptions();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUserRole, currentSchoolId]);
 
   useEffect(() => {

@@ -53,12 +53,16 @@ public class AuthService {
             roleType = "TEACHER";
         } else if (roleName.equals("STUDENT")) {
             roleType = "STUDENT";
+        } else if (roleName.equals("PARENT")) {
+            roleType = "PARENT";
         } else if (roleName.startsWith("ADMIN")) {
             roleType = "ADMIN";
         } else if (roleName.startsWith("TEACHER")) {
             roleType = "TEACHER";
         } else if (roleName.startsWith("STUDENT")) {
             roleType = "STUDENT";
+        } else if (roleName.startsWith("PARENT") || roleName.contains("PHU HUYNH") || roleName.contains("PHỤ HUYNH")) {
+            roleType = "PARENT";
         }
 
         if (!isSuperAdmin && user.getSchool() != null) {

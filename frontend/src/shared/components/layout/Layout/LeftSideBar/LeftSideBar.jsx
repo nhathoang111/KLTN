@@ -9,6 +9,7 @@ import {
     BookOpen,
     CalendarDays,
     ClipboardList,
+    ClipboardCheck,
     Megaphone,
     NotebookPen,
     LogOut,
@@ -73,6 +74,8 @@ const LeftSideBar = ({ user, onLogout }) => {
                 return CalendarDays;
             case "/exam-scores":
                 return NotebookPen;
+            case "/attendance":
+                return ClipboardCheck;
             case "/assignments":
                 return ClipboardList;
             case "/announcements":
@@ -101,12 +104,14 @@ const LeftSideBar = ({ user, onLogout }) => {
             { path: "/subjects", label: "Quản lý môn học", roles: ["ADMIN"] },
             { path: "/schedules", label: "Quản lý thời khóa biểu", roles: ["ADMIN"] },
             { path: "/exam-scores", label: "Quản lý điểm số", roles: ["ADMIN"] },
+            { path: "/attendance", label: "Quản lý điểm danh", roles: ["ADMIN"] },
             { path: "/announcements", label: "Thông báo & Tài liệu", roles: ["ADMIN"] },
 
             { path: "/classes", label: "Xem lớp phụ trách", roles: ["TEACHER"] },
             { path: "/exam-scores", label: "Nhập điểm", roles: ["TEACHER"] },
             { path: "/assignments", label: "Bài tập", roles: ["TEACHER"] },
             { path: "/schedules", label: "Xem thời khóa biểu", roles: ["TEACHER"] },
+            { path: "/attendance", label: "Điểm danh", roles: ["TEACHER"] },
             { path: "/announcements", label: "Thông báo", roles: ["TEACHER"] },
 
             { path: "/profile", label: "Thông tin cá nhân", roles: ["STUDENT", "TEACHER"] },

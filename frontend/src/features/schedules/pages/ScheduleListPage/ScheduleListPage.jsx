@@ -299,12 +299,19 @@ const ScheduleListPage = () => {
       console.log('Submitting schedule:', schedulePayload);
       console.log('Form data:', formData);
 
+      let response;
       if (editingSchedule) {
-        await api.put(`/schedules/${editingSchedule.id}`, schedulePayload);
+        response = await api.put(`/schedules/${editingSchedule.id}`, schedulePayload);
         alert('Cập nhật lịch học thành công!');
       } else {
-        await api.post('/schedules', schedulePayload);
+        response = await api.post('/schedules', schedulePayload);
         alert('Thêm lịch học thành công!');
+      }
+
+      const warning = response?.data?.warning;
+      if (warning) {
+        // Cảnh báo nhẹ: chưa có phân công chính thức lớp–môn–GV
+        alert(warning);
       }
 
       setShowModal(false);

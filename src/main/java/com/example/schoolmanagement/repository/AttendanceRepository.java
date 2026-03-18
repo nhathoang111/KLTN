@@ -26,5 +26,14 @@ public interface AttendanceRepository extends JpaRepository<Attendance, Integer>
     List<Attendance> findBySchoolIdAndClassEntityId(@Param("schoolId") Integer schoolId, @Param("classId") Integer classId);
     
     List<Attendance> findByAttendanceDateBetween(LocalDateTime startDate, LocalDateTime endDate);
+
+    @Query("SELECT a FROM Attendance a " +
+            "JOIN FETCH a.student s " +
+            "WHERE a.classSection.id = :classSectionId " +
+            "AND a.attendanceDate BETWEEN :startDate AND :endDate")
+    List<Attendance> findByClassSectionIdAndAttendanceDateBetweenFetchStudent(
+            @Param("classSectionId") Integer classSectionId,
+            @Param("startDate") LocalDateTime startDate,
+            @Param("endDate") LocalDateTime endDate);
 }
 

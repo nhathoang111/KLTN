@@ -22,7 +22,9 @@ api.interceptors.request.use(
         const u = JSON.parse(userStr);
         if (u?.id != null) config.headers['X-User-Id'] = String(u.id);
         if (u?.role?.name) config.headers['X-User-Role'] = u.role.name;
-      } catch (_) {}
+      } catch (_) {
+        // Ignore malformed cached user JSON
+      }
     }
     // If data is FormData, remove Content-Type to let browser set it with boundary
     if (config.data instanceof FormData) {

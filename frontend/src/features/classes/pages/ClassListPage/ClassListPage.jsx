@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import api from '../../../../shared/lib/api';
 import './ClassListPage.css';
 import { useAuth } from '../../../auth/context/AuthContext';
+import { Link } from 'react-router-dom';
 
 const ClassListPage = () => {
   const { user } = useAuth();
@@ -394,7 +395,14 @@ const ClassListPage = () => {
 
               return (
                 <tr key={classItem.id}>
-                  <td>{classItem.name}</td>
+                  <td>
+                    <Link
+                      to={`/classes/${classItem.id}`}
+                      style={{ color: '#2563eb', fontWeight: 600, textDecoration: 'none' }}
+                    >
+                      {classItem.name}
+                    </Link>
+                  </td>
                   <td>{(classItem.studentCount ?? 0)}/{(classItem.capacity ?? 0)}</td>
                   <td>
                     <span style={{
