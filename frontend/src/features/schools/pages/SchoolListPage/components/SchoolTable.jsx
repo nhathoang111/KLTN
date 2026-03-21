@@ -30,21 +30,21 @@ const SchoolTable = ({ schools, onEdit, onToggleLock, onDeleteClick }) => {
   }, [actionMenuOpenId]);
 
   return (
-    <div className="schools-table-container">
-      <div className="schools-table-inner">
-        <table className="schools-table">
-        <thead>
+    <div className="rounded-2xl border border-slate-200 bg-white/95 shadow-xl shadow-slate-900/5 overflow-hidden">
+      <div className="overflow-x-auto">
+        <table className="min-w-full border-collapse text-sm">
+        <thead className="bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
           <tr>
-            <th className="schools-col-name-header">TÊN TRƯỜNG</th>
-            <th className="schools-col-code-header">MÃ TRƯỜNG</th>
-            <th className="schools-col-address-header">ĐỊA CHỈ</th>
-            <th className="schools-col-phone-header">SỐ ĐIỆN THOẠI</th>
-            <th className="schools-col-email-header">EMAIL</th>
-            <th className="schools-col-status-header">TRẠNG THÁI</th>
-            <th></th>
+            <th className="schools-col-name-header px-4 py-3 text-left">TÊN TRƯỜNG</th>
+            <th className="schools-col-code-header px-4 py-3 text-left">MÃ TRƯỜNG</th>
+            <th className="schools-col-address-header px-4 py-3 text-left">ĐỊA CHỈ</th>
+            <th className="schools-col-phone-header px-4 py-3 text-left">SỐ ĐIỆN THOẠI</th>
+            <th className="schools-col-email-header px-4 py-3 text-left">EMAIL</th>
+            <th className="schools-col-status-header px-4 py-3 text-left">TRẠNG THÁI</th>
+            <th className="px-4 py-3 text-center"></th>
           </tr>
         </thead>
-        <tbody>
+        <tbody className="text-sm text-slate-700">
           {schools.map((school) => {
             let displayAddress = '';
             if (school.province || school.district || school.ward) {
@@ -63,13 +63,13 @@ const SchoolTable = ({ schools, onEdit, onToggleLock, onDeleteClick }) => {
               school.status === 'LOCKED' || school.status === 'INACTIVE';
 
             return (
-              <tr key={school.id}>
-                <td className="schools-col-name">{school.name}</td>
-                <td className="schools-col-code">{school.code}</td>
-                <td className="schools-col-address">{displayAddress}</td>
-                <td className="schools-col-phone">{school.phone}</td>
-                <td className="schools-col-email">{school.email}</td>
-                <td className="schools-col-status">
+              <tr key={school.id} className="border-t border-slate-100 hover:bg-slate-50/80 transition-colors">
+                <td className="schools-col-name px-4 py-3">{school.name}</td>
+                <td className="schools-col-code px-4 py-3">{school.code}</td>
+                <td className="schools-col-address px-4 py-3">{displayAddress}</td>
+                <td className="schools-col-phone px-4 py-3">{school.phone}</td>
+                <td className="schools-col-email px-4 py-3">{school.email}</td>
+                <td className="schools-col-status px-4 py-3">
                   <span
                     className={`schools-status-badge ${
                       school.status === 'ACTIVE'
@@ -80,7 +80,7 @@ const SchoolTable = ({ schools, onEdit, onToggleLock, onDeleteClick }) => {
                     {school.status}
                   </span>
                 </td>
-                <td>
+                <td className="px-4 py-3">
                   <div className="schools-row-actions">
                     <button
                       type="button"

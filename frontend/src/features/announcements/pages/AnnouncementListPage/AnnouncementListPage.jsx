@@ -1,5 +1,6 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../../auth/context/AuthContext';
+import { Pencil, Trash2 } from 'lucide-react';
 import api from '../../../../shared/lib/api';
 import './AnnouncementListPage.css';
 
@@ -398,8 +399,13 @@ const AnnouncementListPage = () => {
 
   if (loading) {
     return (
-      <div className="announcement-list-page">
-        <div className="loading">Đang tải...</div>
+      <div className="min-h-screen bg-slate-100 px-4 py-6">
+        <div className="mx-auto flex max-w-6xl items-center justify-center py-16">
+          <div className="flex flex-col items-center gap-3 text-slate-600">
+            <div className="h-10 w-10 rounded-full border-4 border-indigo-200 border-t-indigo-500 animate-spin" />
+            <p className="text-sm font-medium">Đang tải thông báo...</p>
+          </div>
+        </div>
       </div>
     );
   }
@@ -408,9 +414,10 @@ const AnnouncementListPage = () => {
   const userSchoolId = user?.school?.id;
 
   return (
-    <div className="announcement-list-page">
-      <div className="common-page-header">
-        <h1>Quản lý thông báo</h1>
+    <div className="min-h-screen bg-slate-100 px-4 py-6">
+      <div className="mx-auto max-w-6xl space-y-4">
+      <div className="rounded-2xl bg-white/95 px-4 py-3 shadow-lg shadow-slate-900/5 flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-2xl font-bold text-slate-800">Quản lý thông báo</h1>
         <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
           {/* School filter - only show for SUPER_ADMIN */}
           {userRole === 'SUPER_ADMIN' && (
@@ -515,9 +522,9 @@ const AnnouncementListPage = () => {
         </div>
       </div>
 
-      <div className="announcements-container">
+      <div className="announcements-container grid grid-cols-1 gap-4 lg:grid-cols-2">
         {announcements.map((announcement) => (
-          <div key={announcement.id} className="announcement-card">
+          <div key={announcement.id} className="announcement-card rounded-2xl border border-slate-200 bg-white/95 p-4 shadow-xl shadow-slate-900/5">
             <div className="announcement-header">
               <h3>{announcement.title}</h3>
               <div className="announcement-meta">
@@ -581,14 +588,18 @@ const AnnouncementListPage = () => {
                     <button
                       className="btn btn-sm btn-secondary"
                       onClick={() => handleEdit(announcement)}
+                      aria-label="Sửa thông báo"
+                      title="Sửa"
                     >
-                      Sửa
+                      <Pencil size={14} />
                     </button>
                     <button
                       className="btn btn-sm btn-danger"
                       onClick={() => handleDelete(announcement.id)}
+                      aria-label="Xóa thông báo"
+                      title="Xóa"
                     >
-                      Xóa
+                      <Trash2 size={14} />
                     </button>
                   </div>
                 );
@@ -602,14 +613,18 @@ const AnnouncementListPage = () => {
                     <button
                       className="btn btn-sm btn-secondary"
                       onClick={() => handleEdit(announcement)}
+                      aria-label="Sửa thông báo"
+                      title="Sửa"
                     >
-                      Sửa
+                      <Pencil size={14} />
                     </button>
                     <button
                       className="btn btn-sm btn-danger"
                       onClick={() => handleDelete(announcement.id)}
+                      aria-label="Xóa thông báo"
+                      title="Xóa"
                     >
-                      Xóa
+                      <Trash2 size={14} />
                     </button>
                   </div>
                 );
@@ -620,6 +635,7 @@ const AnnouncementListPage = () => {
             })()}
           </div>
         ))}
+      </div>
       </div>
 
       {showModal && (

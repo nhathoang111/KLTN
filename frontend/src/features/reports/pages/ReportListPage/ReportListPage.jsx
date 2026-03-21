@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import api from '../../../../shared/lib/api';
 import './ReportListPage.css';
 
@@ -115,16 +115,22 @@ const ReportListPage = () => {
 
   if (loading) {
     return (
-      <div className="report-list-page">
-        <div className="loading">Đang tải...</div>
+      <div className="min-h-screen bg-slate-100 px-4 py-6">
+        <div className="mx-auto flex max-w-6xl items-center justify-center py-16">
+          <div className="flex flex-col items-center gap-3 text-slate-600">
+            <div className="h-10 w-10 rounded-full border-4 border-indigo-200 border-t-indigo-500 animate-spin" />
+            <p className="text-sm font-medium">Đang tải dữ liệu báo cáo...</p>
+          </div>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="report-list-page">
-      <div className="common-page-header">
-        <h1>Báo cáo & Thống kê</h1>
+    <div className="min-h-screen bg-slate-100 px-4 py-6">
+      <div className="mx-auto max-w-6xl space-y-4">
+      <div className="rounded-2xl bg-white/95 px-4 py-3 shadow-lg shadow-slate-900/5 flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-2xl font-bold text-slate-800">Báo cáo & Thống kê</h1>
         <div className="header-actions">
           <button
             className="btn btn-secondary"
@@ -269,56 +275,59 @@ const ReportListPage = () => {
             </div>
           </div>
 
-          <div className="report-table-container">
-            <table className="report-table">
-              <thead>
+          <div className="rounded-2xl border border-slate-200 bg-white/95 shadow-xl shadow-slate-900/5 overflow-hidden">
+            <div className="overflow-x-auto">
+            <table className="min-w-full border-collapse text-sm">
+              <thead className="bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
                 <tr>
-                  <th>Ngày</th>
-                  <th>Học sinh</th>
-                  <th>Lớp</th>
-                  <th>Môn học</th>
-                  {reportType === 'exam-scores' && <th>Điểm</th>}
-                  {reportType === 'attendance' && <th>Trạng thái</th>}
-                  {reportType === 'behavior' && <th>Hành vi</th>}
-                  <th>Ghi chú</th>
+                  <th className="px-4 py-3 text-left">Ngày</th>
+                  <th className="px-4 py-3 text-left">Học sinh</th>
+                  <th className="px-4 py-3 text-left">Lớp</th>
+                  <th className="px-4 py-3 text-left">Môn học</th>
+                  {reportType === 'exam-scores' && <th className="px-4 py-3 text-left">Điểm</th>}
+                  {reportType === 'attendance' && <th className="px-4 py-3 text-left">Trạng thái</th>}
+                  {reportType === 'behavior' && <th className="px-4 py-3 text-left">Hành vi</th>}
+                  <th className="px-4 py-3 text-left">Ghi chú</th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody className="text-sm text-slate-700">
                 {reportData.records?.map((record) => (
-                  <tr key={record.id}>
-                    <td>{formatDate(record.date)}</td>
-                    <td>{record.student?.fullName || 'Không có'}</td>
-                    <td>{getClassName(record.classEntity?.id)}</td>
-                    <td>{getSubjectName(record.subject?.id)}</td>
+                  <tr key={record.id} className="border-t border-slate-100 hover:bg-slate-50/80 transition-colors">
+                    <td className="px-4 py-3">{formatDate(record.date)}</td>
+                    <td className="px-4 py-3">{record.student?.fullName || 'Không có'}</td>
+                    <td className="px-4 py-3">{getClassName(record.classEntity?.id)}</td>
+                    <td className="px-4 py-3">{getSubjectName(record.subject?.id)}</td>
                     {reportType === 'exam-scores' && (
-                      <td>
+                      <td className="px-4 py-3">
                         <span className={`score ${record.value >= 8 ? 'good' : record.value >= 6.5 ? 'average' : 'poor'}`}>
                           {record.value}
                         </span>
                       </td>
                     )}
                     {reportType === 'attendance' && (
-                      <td>
+                      <td className="px-4 py-3">
                         <span className={`status-badge ${record.status?.toLowerCase()}`}>
                           {record.status}
                         </span>
                       </td>
                     )}
                     {reportType === 'behavior' && (
-                      <td>
+                      <td className="px-4 py-3">
                         <span className={`status-badge ${record.status?.toLowerCase()}`}>
                           {record.status}
                         </span>
                       </td>
                     )}
-                    <td>{record.note || 'Không có'}</td>
+                    <td className="px-4 py-3">{record.note || 'Không có'}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
+            </div>
           </div>
         </div>
       )}
+      </div>
     </div>
   );
 };

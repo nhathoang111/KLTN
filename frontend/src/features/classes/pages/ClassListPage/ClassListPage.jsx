@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import api from '../../../../shared/lib/api';
 import './ClassListPage.css';
 import { useAuth } from '../../../auth/context/AuthContext';
-import { Link } from 'react-router-dom';
+import { Pencil, Trash2 } from 'lucide-react';
 
 const ClassListPage = () => {
   const { user } = useAuth();
@@ -321,8 +321,13 @@ const ClassListPage = () => {
 
   if (loading) {
     return (
-      <div className="class-list-page">
-        <div className="loading">Đang tải...</div>
+      <div className="min-h-screen bg-slate-100 px-4 py-6">
+        <div className="mx-auto flex max-w-6xl items-center justify-center py-16">
+          <div className="flex flex-col items-center gap-3 text-slate-600">
+            <div className="h-10 w-10 rounded-full border-4 border-indigo-200 border-t-indigo-500 animate-spin" />
+            <p className="text-sm font-medium">Đang tải dữ liệu lớp học...</p>
+          </div>
+        </div>
       </div>
     );
   }
@@ -334,118 +339,122 @@ const ClassListPage = () => {
   const canManageClasses = isAdmin || isSuperAdmin; // Chỉ ADMIN và SUPER_ADMIN mới có thể quản lý lớp
 
   return (
-    <div className="class-list-page">
-      <div className="common-page-header">
-        <h1>Quản lý lớp học</h1>
-        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-          <button
-            type="button"
-            className="btn btn-secondary"
-            onClick={() => fetchData()}
-            style={{ marginRight: canManageClasses ? 0 : undefined }}
-          >
-            Làm mới
-          </button>
-          {canManageClasses && (
-          <button
-            className="btn btn-primary"
-            onClick={() => {
-              const defaultSchoolId = (isAdmin || isTeacher) && user?.school?.id
-                ? user.school.id.toString()
-                : '';
-              setFormData({
-                gradeLevel: '',
-                classNumber: '',
-                schoolYear: '',
-                capacity: '',
-                status: 'ACTIVE',
-                schoolId: defaultSchoolId,
-                homeroomTeacherId: '',
-                room: ''
-              });
-              setShowModal(true);
-            }}
-          >
-            Thêm lớp học
-          </button>
-          )}
+    <div className="min-h-screen bg-slate-100 px-4 py-6">
+      <div className="mx-auto max-w-6xl space-y-4">
+        <div className="rounded-2xl bg-white/95 px-4 py-3 shadow-lg shadow-slate-900/5 flex flex-wrap items-center justify-between gap-3">
+          <h1 className="text-2xl font-bold text-slate-800">Quản lý lớp học</h1>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => fetchData()}
+              style={{ marginRight: canManageClasses ? 0 : undefined }}
+            >
+              Làm mới
+            </button>
+            {canManageClasses && (
+              <button
+                className="btn btn-primary"
+                onClick={() => {
+                  const defaultSchoolId = (isAdmin || isTeacher) && user?.school?.id
+                    ? user.school.id.toString()
+                    : '';
+                  setFormData({
+                    gradeLevel: '',
+                    classNumber: '',
+                    schoolYear: '',
+                    capacity: '',
+                    status: 'ACTIVE',
+                    schoolId: defaultSchoolId,
+                    homeroomTeacherId: '',
+                    room: ''
+                  });
+                  setShowModal(true);
+                }}
+              >
+                Thêm lớp học
+              </button>
+            )}
+          </div>
         </div>
-      </div>
 
-      <div className="common-table-container classes-table-container">
-        <table className="common-table classes-table">
-          <thead>
-            <tr>
-              <th>Tên lớp</th>
-              <th>Sĩ số tối đa</th>
-              <th>Phòng học</th>
-              <th>Trường</th>
-              <th>GVCN</th>
-              <th>Trạng thái</th>
-              {canManageClasses && <th>Thao tác</th>}
-            </tr>
-          </thead>
-          <tbody>
-            {classes.map((classItem) => {
-              // Debug: Log room value for each class
-              if (!classItem.room) {
-                console.log(`⚠️ Class ${classItem.name} (ID: ${classItem.id}) has no room field or room is empty`);
-                console.log('   Full classItem:', classItem);
-              }
-
-              return (
-                <tr key={classItem.id}>
-                  <td>
-                    <Link
-                      to={`/classes/${classItem.id}`}
-                      style={{ color: '#2563eb', fontWeight: 600, textDecoration: 'none' }}
-                    >
-                      {classItem.name}
-                    </Link>
-                  </td>
-                  <td>{(classItem.studentCount ?? 0)}/{(classItem.capacity ?? 0)}</td>
-                  <td>
-                    <span style={{
-                      padding: '4px 8px',
-                      backgroundColor: classItem.room ? '#e0f2fe' : '#fee2e2',
-                      color: classItem.room ? '#0369a1' : '#991b1b',
-                      borderRadius: '4px',
-                      fontWeight: '500',
-                      fontSize: '13px'
-                    }}>
-                      {classItem.room || 'Chưa có phòng'}
-                    </span>
-                  </td>
-                  <td>{getSchoolName(classItem.school?.id)}</td>
-                  <td>{getTeacherName(classItem.homeroomTeacher?.id)}</td>
-                  <td>
-                    <span className={`status-badge ${classItem.status?.toLowerCase()}`}>
-                      {classItem.status}
-                    </span>
-                  </td>
-                  {canManageClasses && (
-                    <td>
-                      <div className="action-buttons">
-                        <button
-                          className="btn btn-sm btn-secondary"
-                          onClick={() => handleEdit(classItem)}
-                        >
-                          Sửa
-                        </button>
-                        <button
-                          className="btn btn-sm btn-danger"
-                          onClick={() => handleDelete(classItem.id)}
-                        >
-                          Xóa
-                        </button>
-                      </div>
-                    </td>
-                  )}
+        <div className="rounded-2xl border border-slate-200 bg-white/95 shadow-xl shadow-slate-900/5 overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="min-w-full border-collapse text-sm">
+              <thead className="bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                <tr>
+                  <th className="px-4 py-3 text-left">Tên lớp</th>
+                  <th className="px-4 py-3 text-left">Sĩ số tối đa</th>
+                  <th className="px-4 py-3 text-left">Phòng học</th>
+                  <th className="px-4 py-3 text-left">Trường</th>
+                  <th className="px-4 py-3 text-left">GVCN</th>
+                  <th className="px-4 py-3 text-left">Trạng thái</th>
+                  {canManageClasses && <th className="px-4 py-3 text-center">Thao tác</th>}
                 </tr>
-              );
-            })}
-          </tbody>
-        </table>
+              </thead>
+              <tbody className="text-sm text-slate-700">
+                {classes.map((classItem) => {
+                  // Debug: Log room value for each class
+                  if (!classItem.room) {
+                    console.log(`⚠️ Class ${classItem.name} (ID: ${classItem.id}) has no room field or room is empty`);
+                    console.log('   Full classItem:', classItem);
+                  }
+
+                  return (
+                    <tr key={classItem.id} className="border-t border-slate-100 hover:bg-slate-50/80 transition-colors">
+                      <td className="px-4 py-3">{classItem.name}</td>
+                      <td className="px-4 py-3">{(classItem.studentCount ?? 0)}/{(classItem.capacity ?? 0)}</td>
+                      <td className="px-4 py-3">
+                        <span style={{
+                          padding: '4px 8px',
+                          backgroundColor: classItem.room ? '#e0f2fe' : '#fee2e2',
+                          color: classItem.room ? '#0369a1' : '#991b1b',
+                          borderRadius: '4px',
+                          fontWeight: '500',
+                          fontSize: '13px'
+                        }}>
+                          {classItem.room || 'Chưa có phòng'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">{getSchoolName(classItem.school?.id)}</td>
+                      <td className="px-4 py-3">{getTeacherName(classItem.homeroomTeacher?.id)}</td>
+                      <td className="px-4 py-3">
+                        <span className={`inline-flex min-w-[84px] justify-center rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wide ${classItem.status?.toUpperCase() === 'ACTIVE'
+                          ? 'bg-sky-500 text-white'
+                          : 'bg-slate-300 text-slate-700'
+                          }`}>
+                          {classItem.status}
+                        </span>
+                      </td>
+                      {canManageClasses && (
+                        <td className="px-4 py-3">
+                          <div className="flex items-center justify-center gap-2">
+                            <button
+                              className="rounded-full bg-sky-100 px-3 py-1.5 text-xs font-semibold text-sky-700 hover:bg-sky-200"
+                              onClick={() => handleEdit(classItem)}
+                              aria-label="Sửa lớp học"
+                              title="Sửa"
+                            >
+                              <Pencil size={14} />
+                            </button>
+                            <button
+                              className="rounded-full bg-rose-100 px-3 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-200"
+                              onClick={() => handleDelete(classItem.id)}
+                              aria-label="Xóa lớp học"
+                              title="Xóa"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        </td>
+                      )}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
 
       {showModal && (

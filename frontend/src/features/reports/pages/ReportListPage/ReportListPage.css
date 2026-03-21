@@ -144,37 +144,6 @@
   font-size: 1.1rem;
 }
 
-/* Table - Uses common styles */
-.report-table-container {
-  overflow-x: auto;
-}
-
-.report-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 0.9rem;
-}
-
-.report-table th {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  padding: 1rem;
-  text-align: left;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-.report-table td {
-  padding: 1rem;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
-  vertical-align: middle;
-}
-
-.report-table tr:hover {
-  background: rgba(102, 126, 234, 0.05);
-}
-
 .score {
   padding: 0.25rem 0.75rem;
   border-radius: 20px;
@@ -263,8 +232,5 @@
     grid-template-columns: 1fr;
   }
 
-  .report-table {
-    min-width: 600px;
-  }
 }
 

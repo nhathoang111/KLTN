@@ -59,43 +59,6 @@
   font-size: 0.8rem;
 }
 
-/* Table - Uses common styles */
-.assignments-table-container {
-  background: rgba(255, 255, 255, 0.95);
-  backdrop-filter: blur(10px);
-  border-radius: 15px;
-  padding: 1.5rem;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  overflow: hidden;
-}
-
-.assignments-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 0.9rem;
-}
-
-.assignments-table th {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  padding: 1rem;
-  text-align: left;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-.assignments-table td {
-  padding: 1rem;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
-  vertical-align: middle;
-}
-
-.assignments-table tr:hover {
-  background: rgba(102, 126, 234, 0.05);
-}
-
 .status-badge {
   padding: 0.25rem 0.75rem;
   border-radius: 20px;
@@ -118,11 +81,6 @@
 .status-badge.closed {
   background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%);
   color: #333;
-}
-
-.action-buttons {
-  display: flex;
-  gap: 0.5rem;
 }
 
 .loading {
@@ -163,18 +121,6 @@
     flex-direction: column;
     gap: 1rem;
     text-align: center;
-  }
-
-  .assignments-table-container {
-    overflow-x: auto;
-  }
-
-  .assignments-table {
-    min-width: 800px;
-  }
-
-  .action-buttons {
-    flex-direction: column;
   }
 
   .modal {

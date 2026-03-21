@@ -1,7 +1,8 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import api from '../../../../shared/lib/api';
 import './ExamScoreManagement.css';
 import { useAuth } from '../../../auth/context/AuthContext';
+import { Pencil, Trash2 } from 'lucide-react';
 
 const ExamScoreManagement = () => {
   const { user } = useAuth();
@@ -953,10 +954,12 @@ const ExamScoreManagement = () => {
 
   if (loading) {
     return (
-      <div className="exam-score-management">
-        <div className="loading">
-          <div className="spinner"></div>
-          <p>Đang tải dữ liệu...</p>
+      <div className="min-h-screen bg-slate-100 px-4 py-6">
+        <div className="mx-auto flex max-w-6xl items-center justify-center py-16">
+          <div className="flex flex-col items-center gap-3 text-slate-600">
+            <div className="h-10 w-10 rounded-full border-4 border-indigo-200 border-t-indigo-500 animate-spin" />
+            <p className="text-sm font-medium">Đang tải dữ liệu điểm số...</p>
+          </div>
         </div>
       </div>
     );
@@ -997,9 +1000,10 @@ const ExamScoreManagement = () => {
   };
 
   return (
-    <div className="exam-score-management">
-      <div className="common-page-header">
-        <h2>{isStudent ? 'Xem điểm và nhận xét' : 'Quản lý điểm số'}</h2>
+    <div className="min-h-screen bg-slate-100 px-4 py-6">
+      <div className="mx-auto max-w-6xl space-y-4">
+      <div className="rounded-2xl bg-white/95 px-4 py-3 shadow-lg shadow-slate-900/5 flex flex-wrap items-center justify-between gap-3">
+        <h2 className="text-2xl font-bold text-slate-800">{isStudent ? 'Xem điểm và nhận xét' : 'Quản lý điểm số'}</h2>
         <div className="header-actions">
           {isAdmin && (
             <button
@@ -1099,7 +1103,7 @@ const ExamScoreManagement = () => {
       )}
 
       {/* Bảng điểm số - Admin có thể xem nhưng không thể sửa/xóa */}
-      <div className="common-table-container exam-scores-table-container">
+      <div className="rounded-2xl border border-slate-200 bg-white/95 shadow-xl shadow-slate-900/5 overflow-hidden">
         {groupScoresByStudentAndSubject().length === 0 ? (
           <div style={{
             padding: '40px',
@@ -1113,38 +1117,39 @@ const ExamScoreManagement = () => {
             </p>
           </div>
         ) : (
-          <table className="common-table exam-scores-table">
-            <thead>
+          <div className="overflow-x-auto">
+          <table className="min-w-full border-collapse text-sm">
+            <thead className="bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
               <tr>
-                <th>STT</th>
-                <th>Học sinh</th>
-                <th>Môn học</th>
-                <th>Lớp</th>
-                <th>Điểm 15p</th>
-                <th>Điểm 1 tiết</th>
-                <th>Điểm cuối kỳ</th>
+                <th className="px-4 py-3 text-left">STT</th>
+                <th className="px-4 py-3 text-left">Học sinh</th>
+                <th className="px-4 py-3 text-left">Môn học</th>
+                <th className="px-4 py-3 text-left">Lớp</th>
+                <th className="px-4 py-3 text-left">Điểm 15p</th>
+                <th className="px-4 py-3 text-left">Điểm 1 tiết</th>
+                <th className="px-4 py-3 text-left">Điểm cuối kỳ</th>
                 {/* Chỉ hiển thị cột "Thao tác" cho TEACHER, không hiển thị cho ADMIN và STUDENT */}
-                {!isStudent && !isAdmin && <th>Thao tác</th>}
+                {!isStudent && !isAdmin && <th className="px-4 py-3 text-center">Thao tác</th>}
               </tr>
             </thead>
-            <tbody>
+            <tbody className="text-sm text-slate-700">
               {groupScoresByStudentAndSubject().map((group, index) => {
                 const score15P = group.score15P?.score;
                 const score1Tiet = group.score1Tiet?.score;
                 const scoreCuoiKi = group.scoreCuoiKi?.score;
 
                 return (
-                  <tr key={`${group.student?.id}-${group.subject?.id}`}>
-                    <td>{index + 1}</td>
-                    <td>
+                  <tr key={`${group.student?.id}-${group.subject?.id}`} className="border-t border-slate-100 hover:bg-slate-50/80 transition-colors">
+                    <td className="px-4 py-3">{index + 1}</td>
+                    <td className="px-4 py-3">
                       <div className="student-info">
                         <span className="student-name">{group.student?.fullName}</span>
                         <span className="student-email">{group.student?.email}</span>
                       </div>
                     </td>
-                    <td>{group.subject?.name}</td>
-                    <td>{group.classEntity?.name}</td>
-                    <td>
+                    <td className="px-4 py-3">{group.subject?.name}</td>
+                    <td className="px-4 py-3">{group.classEntity?.name}</td>
+                    <td className="px-4 py-3">
                       {score15P !== null && score15P !== undefined ? (
                         <span
                           className="score-badge"
@@ -1156,7 +1161,7 @@ const ExamScoreManagement = () => {
                         <span style={{ color: '#999' }}>-</span>
                       )}
                     </td>
-                    <td>
+                    <td className="px-4 py-3">
                       {score1Tiet !== null && score1Tiet !== undefined ? (
                         <span
                           className="score-badge"
@@ -1168,7 +1173,7 @@ const ExamScoreManagement = () => {
                         <span style={{ color: '#999' }}>-</span>
                       )}
                     </td>
-                    <td>
+                    <td className="px-4 py-3">
                       {scoreCuoiKi !== null && scoreCuoiKi !== undefined ? (
                         <span
                           className="score-badge"
@@ -1182,26 +1187,28 @@ const ExamScoreManagement = () => {
                     </td>
                     {/* Chỉ hiển thị nút Sửa/Xóa cho TEACHER, không hiển thị cho ADMIN */}
                     {!isStudent && !isAdmin && (
-                      <td>
-                        <div className="action-buttons">
+                      <td className="px-4 py-3">
+                        <div className="flex items-center justify-center gap-2">
                           <button
-                            className="btn btn-edit"
+                            className="rounded-full bg-sky-100 px-3 py-1.5 text-xs font-semibold text-sky-700 hover:bg-sky-200 disabled:opacity-60"
                             onClick={() => {
                               // Mở modal với group để sửa tất cả điểm
                               handleEdit(group);
                             }}
                             disabled={isScoreLocked}
                             title={isScoreLocked ? 'Điểm số đã bị khóa' : 'Sửa điểm'}
+                            aria-label="Sửa điểm"
                           >
-                            ✏️ Sửa
+                            <Pencil size={14} />
                           </button>
                           <button
-                            className="btn btn-delete"
+                            className="rounded-full bg-rose-100 px-3 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-200 disabled:opacity-60"
                             onClick={() => handleDeleteAll(group)}
                             disabled={isScoreLocked}
                             title={isScoreLocked ? 'Điểm số đã bị khóa' : 'Xóa tất cả điểm'}
+                            aria-label="Xóa điểm"
                           >
-                            🗑️ Xóa
+                            <Trash2 size={14} />
                           </button>
                         </div>
                       </td>
@@ -1211,7 +1218,9 @@ const ExamScoreManagement = () => {
               })}
             </tbody>
           </table>
+          </div>
         )}
+      </div>
       </div>
 
 

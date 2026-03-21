@@ -254,22 +254,23 @@ const SuperAdminDashboard = () => {
           <div className="sa-card-header">
             <span className="sa-card-title">Trường mới tạo</span>
           </div>
-          <table className="sa-table">
-            <thead>
+          <div className="overflow-x-auto">
+          <table className="min-w-full border-collapse text-sm">
+            <thead className="bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
               <tr>
-                <th>Tên trường</th>
-                <th>Mã trường</th>
-                <th>Ngày tạo</th>
-                <th>Trạng thái</th>
+                <th className="px-4 py-3 text-left">Tên trường</th>
+                <th className="px-4 py-3 text-left">Mã trường</th>
+                <th className="px-4 py-3 text-left">Ngày tạo</th>
+                <th className="px-4 py-3 text-left">Trạng thái</th>
               </tr>
             </thead>
-            <tbody>
+            <tbody className="text-sm text-slate-700">
               {recentSchools.map((school) => (
-                <tr key={school.id || school.code}>
-                  <td>{school.name || '-'}</td>
-                  <td>{school.code || '-'}</td>
-                  <td>{formatDate(school.createdAt)}</td>
-                  <td>
+                <tr key={school.id || school.code} className="border-t border-slate-100 hover:bg-slate-50/80 transition-colors">
+                  <td className="px-4 py-3">{school.name || '-'}</td>
+                  <td className="px-4 py-3">{school.code || '-'}</td>
+                  <td className="px-4 py-3">{formatDate(school.createdAt)}</td>
+                  <td className="px-4 py-3">
                     <span
                       className={`sa-badge sa-badge--${
                         school.status === 'ACTIVE'
@@ -286,6 +287,7 @@ const SuperAdminDashboard = () => {
               ))}
             </tbody>
           </table>
+          </div>
         </div>
 
         <div className="sa-card">

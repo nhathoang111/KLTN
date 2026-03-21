@@ -70,43 +70,6 @@
   box-shadow: 0 6px 20px rgba(255, 107, 107, 0.6);
 }
 
-/* Table - Uses common styles */
-.attendance-table-container {
-  background: rgba(255, 255, 255, 0.95);
-  backdrop-filter: blur(10px);
-  border-radius: 15px;
-  padding: 1.5rem;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  overflow: hidden;
-}
-
-.attendance-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 0.9rem;
-}
-
-.attendance-table th {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  padding: 1rem;
-  text-align: left;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-.attendance-table td {
-  padding: 1rem;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
-  vertical-align: middle;
-}
-
-.attendance-table tr:hover {
-  background: rgba(102, 126, 234, 0.05);
-}
-
 .student-info {
   display: flex;
   flex-direction: column;
@@ -123,22 +86,6 @@
   color: #666;
 }
 
-.status-badge {
-  display: inline-block;
-  padding: 6px 12px;
-  border-radius: 20px;
-  color: white;
-  font-weight: 600;
-  font-size: 0.8rem;
-  min-width: 80px;
-  text-align: center;
-}
-
-.action-buttons {
-  display: flex;
-  gap: 0.5rem;
-}
-
 /* Modal - Uses common styles from CommonPageStyles.css */
 
 /* Loading - Uses common styles from CommonPageStyles.css */
@@ -153,25 +100,6 @@
 
   .page-header h2 {
     font-size: 1.5rem;
-  }
-
-  .attendance-table-container {
-    overflow-x: auto;
-  }
-
-  .attendance-table {
-    min-width: 700px;
-  }
-
-  .attendance-table th,
-  .attendance-table td {
-    padding: 10px;
-    font-size: 0.8rem;
-  }
-
-  .action-buttons {
-    flex-direction: column;
-    gap: 5px;
   }
 
   .btn {

@@ -319,32 +319,6 @@
   gap: 16px;
 }
 
-/* Table: new schools */
-.sa-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 13px;
-}
-
-.sa-table th,
-.sa-table td {
-  padding: 8px 10px;
-  text-align: left;
-}
-
-.sa-table thead {
-  background: #f9fafb;
-}
-
-.sa-table th {
-  font-weight: 600;
-  color: #4b5563;
-}
-
-.sa-table tbody tr:nth-child(even) {
-  background: #f9fafb;
-}
-
 .sa-badge {
   display: inline-flex;
   align-items: center;

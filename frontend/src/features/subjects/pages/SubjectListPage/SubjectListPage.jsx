@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import api from '../../../../shared/lib/api';
 import './SubjectListPage.css';
 import { useAuth } from '../../../auth/context/AuthContext';
+import { Pencil, Trash2 } from 'lucide-react';
 
 const SubjectListPage = () => {
   const { user } = useAuth();
@@ -133,16 +134,22 @@ const SubjectListPage = () => {
 
   if (loading) {
     return (
-      <div className="subject-list-page">
-        <div className="loading">Đang tải...</div>
+      <div className="min-h-screen bg-slate-100 px-4 py-6">
+        <div className="mx-auto flex max-w-6xl items-center justify-center py-16">
+          <div className="flex flex-col items-center gap-3 text-slate-600">
+            <div className="h-10 w-10 rounded-full border-4 border-indigo-200 border-t-indigo-500 animate-spin" />
+            <p className="text-sm font-medium">Đang tải dữ liệu môn học...</p>
+          </div>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="subject-list-page">
-      <div className="common-page-header">
-        <h1>Quản lý môn học</h1>
+    <div className="min-h-screen bg-slate-100 px-4 py-6">
+      <div className="mx-auto max-w-6xl space-y-4">
+      <div className="rounded-2xl bg-white/95 px-4 py-3 shadow-lg shadow-slate-900/5 flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-2xl font-bold text-slate-800">Quản lý môn học</h1>
         <button
           className="btn btn-primary"
           onClick={() => {
@@ -161,22 +168,23 @@ const SubjectListPage = () => {
         </button>
       </div>
 
-      <div className="common-table-container subjects-table-container">
-        <table className="common-table subjects-table">
-          <thead>
+      <div className="rounded-2xl border border-slate-200 bg-white/95 shadow-xl shadow-slate-900/5 overflow-hidden">
+        <div className="overflow-x-auto">
+        <table className="min-w-full border-collapse text-sm">
+          <thead className="bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
             <tr>
-              <th>Tên môn học</th>
-              <th>Mã môn</th>
-              <th>Số lớp đang học</th>
-              <th>Thao tác</th>
+              <th className="px-4 py-3 text-left">Tên môn học</th>
+              <th className="px-4 py-3 text-left">Mã môn</th>
+              <th className="px-4 py-3 text-left">Số lớp đang học</th>
+              <th className="px-4 py-3 text-center">Thao tác</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody className="text-sm text-slate-700">
             {subjects.map((subject) => (
-              <tr key={subject.id}>
-                <td>{subject.name}</td>
-                <td>{subject.code}</td>
-                <td>
+              <tr key={subject.id} className="border-t border-slate-100 hover:bg-slate-50/80 transition-colors">
+                <td className="px-4 py-3">{subject.name}</td>
+                <td className="px-4 py-3">{subject.code}</td>
+                <td className="px-4 py-3">
                   {(() => {
                     const count = subjectClassCounts[subject.id] ?? subjectClassCounts[String(subject.id)] ?? 0;
                     const n = Number(count);
@@ -185,7 +193,7 @@ const SubjectListPage = () => {
                       return (
                         <button
                           type="button"
-                          className="subject-class-count-link"
+                          className="text-xs font-semibold text-indigo-600 hover:text-indigo-500"
                           onClick={() => handleOpenClassLinks(subject)}
                         >
                           {n}
@@ -195,19 +203,23 @@ const SubjectListPage = () => {
                     return n;
                   })()}
                 </td>
-                <td>
-                  <div className="action-buttons">
+                <td className="px-4 py-3">
+                  <div className="flex items-center justify-center gap-2">
                     <button
-                      className="btn btn-sm btn-secondary"
+                      className="rounded-full bg-sky-100 px-3 py-1.5 text-xs font-semibold text-sky-700 hover:bg-sky-200"
                       onClick={() => handleEdit(subject)}
+                      aria-label="Sửa môn học"
+                      title="Sửa"
                     >
-                      Sửa
+                      <Pencil size={14} />
                     </button>
                     <button
-                      className="btn btn-sm btn-danger"
+                      className="rounded-full bg-rose-100 px-3 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-200"
                       onClick={() => handleDelete(subject.id)}
+                      aria-label="Xóa môn học"
+                      title="Xóa"
                     >
-                      Xóa
+                      <Trash2 size={14} />
                     </button>
                   </div>
                 </td>
@@ -215,6 +227,8 @@ const SubjectListPage = () => {
             ))}
           </tbody>
         </table>
+        </div>
+      </div>
       </div>
 
       {linkModal && (

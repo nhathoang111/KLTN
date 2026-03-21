@@ -1,6 +1,7 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import api from '../../../../shared/lib/api';
 import './DocumentListPage.css';
+import { Pencil, Trash2 } from 'lucide-react';
 
 const DocumentListPage = () => {
   const [documents, setDocuments] = useState([]);
@@ -154,16 +155,22 @@ const DocumentListPage = () => {
 
   if (loading) {
     return (
-      <div className="document-list-page">
-        <div className="loading">Loading...</div>
+      <div className="min-h-screen bg-slate-100 px-4 py-6">
+        <div className="mx-auto flex max-w-6xl items-center justify-center py-16">
+          <div className="flex flex-col items-center gap-3 text-slate-600">
+            <div className="h-10 w-10 rounded-full border-4 border-indigo-200 border-t-indigo-500 animate-spin" />
+            <p className="text-sm font-medium">Đang tải tài liệu...</p>
+          </div>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="document-list-page">
-      <div className="common-page-header">
-        <h1>Document Management</h1>
+    <div className="min-h-screen bg-slate-100 px-4 py-6">
+      <div className="mx-auto max-w-6xl space-y-4">
+      <div className="rounded-2xl bg-white/95 px-4 py-3 shadow-lg shadow-slate-900/5 flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-2xl font-bold text-slate-800">Document Management</h1>
         <button
           className="btn btn-primary"
           onClick={() => setShowModal(true)}
@@ -172,36 +179,52 @@ const DocumentListPage = () => {
         </button>
       </div>
 
-      <div className="common-table-container documents-table-container">
-        <table className="common-table documents-table">
-          <thead><tr><th>Title</th><th>File Name</th><th>File Type</th><th>Size</th><th>Class</th><th>Uploaded By</th><th>Upload Date</th><th>Actions</th></tr></thead>
-          <tbody>
+      <div className="rounded-2xl border border-slate-200 bg-white/95 shadow-xl shadow-slate-900/5 overflow-hidden">
+        <div className="overflow-x-auto">
+        <table className="min-w-full border-collapse text-sm">
+          <thead className="bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
+            <tr>
+              <th className="px-4 py-3 text-left">Title</th>
+              <th className="px-4 py-3 text-left">File Name</th>
+              <th className="px-4 py-3 text-left">File Type</th>
+              <th className="px-4 py-3 text-left">Size</th>
+              <th className="px-4 py-3 text-left">Class</th>
+              <th className="px-4 py-3 text-left">Uploaded By</th>
+              <th className="px-4 py-3 text-left">Upload Date</th>
+              <th className="px-4 py-3 text-center">Actions</th>
+            </tr>
+          </thead>
+          <tbody className="text-sm text-slate-700">
             {documents.map((document) => (
-              <tr key={document.id}>
-                <td>{document.title}</td>
-                <td>{document.fileName}</td>
-                <td>
+              <tr key={document.id} className="border-t border-slate-100 hover:bg-slate-50/80 transition-colors">
+                <td className="px-4 py-3">{document.title}</td>
+                <td className="px-4 py-3">{document.fileName}</td>
+                <td className="px-4 py-3">
                   <span className="file-type-badge">
                     {document.fileType}
                   </span>
                 </td>
-                <td>{formatFileSize(document.fileSize)}</td>
-                <td>{getClassName(document.classEntity?.id)}</td>
-                <td>{getUserName(document.uploadedBy?.id)}</td>
-                <td>{formatDate(document.uploadedAt)}</td>
-                <td>
-                  <div className="action-buttons">
+                <td className="px-4 py-3">{formatFileSize(document.fileSize)}</td>
+                <td className="px-4 py-3">{getClassName(document.classEntity?.id)}</td>
+                <td className="px-4 py-3">{getUserName(document.uploadedBy?.id)}</td>
+                <td className="px-4 py-3">{formatDate(document.uploadedAt)}</td>
+                <td className="px-4 py-3">
+                  <div className="flex items-center justify-center gap-2">
                     <button
-                      className="btn btn-sm btn-secondary"
+                      className="rounded-full bg-sky-100 px-3 py-1.5 text-xs font-semibold text-sky-700 hover:bg-sky-200"
                       onClick={() => handleEdit(document)}
+                      aria-label="Sửa tài liệu"
+                      title="Sửa"
                     >
-                      Edit
+                      <Pencil size={14} />
                     </button>
                     <button
-                      className="btn btn-sm btn-danger"
+                      className="rounded-full bg-rose-100 px-3 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-200"
                       onClick={() => handleDelete(document.id)}
+                      aria-label="Xóa tài liệu"
+                      title="Xóa"
                     >
-                      Delete
+                      <Trash2 size={14} />
                     </button>
                   </div>
                 </td>
@@ -209,6 +232,8 @@ const DocumentListPage = () => {
             ))}
           </tbody>
         </table>
+        </div>
+      </div>
       </div>
 
       {showModal && (

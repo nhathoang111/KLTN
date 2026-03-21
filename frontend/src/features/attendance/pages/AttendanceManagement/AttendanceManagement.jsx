@@ -1,14 +1,8 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
-import api from "../../../../shared/lib/api";
-import "./AttendanceManagement.css";
-import { useAuth } from "../../../auth/context/AuthContext";
-
-const STATUS_OPTIONS = [
-  { value: "PRESENT", label: "Có mặt" },
-  { value: "ABSENT", label: "Vắng" },
-  { value: "LATE", label: "Đi muộn" },
-  { value: "EXCUSED", label: "Có phép" },
-];
+import React, { useState, useEffect } from 'react';
+import api from '../../../../shared/lib/api';
+import './AttendanceManagement.css';
+import { Pencil, Trash2 } from 'lucide-react';
+import { useAuth } from '../../../auth/context/AuthContext';
 
 const AttendanceManagement = () => {
   const { user } = useAuth();
@@ -160,132 +154,91 @@ const AttendanceManagement = () => {
 
   if (loading) {
     return (
-      <div className="attendance-management">
-        <div className="loading">Đang tải...</div>
+      <div className="min-h-screen bg-slate-100 px-4 py-6">
+        <div className="mx-auto flex max-w-6xl items-center justify-center py-16">
+          <div className="flex flex-col items-center gap-3 text-slate-600">
+            <div className="h-10 w-10 rounded-full border-4 border-indigo-200 border-t-indigo-500 animate-spin" />
+            <p className="text-sm font-medium">Đang tải dữ liệu chuyên cần...</p>
+          </div>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="attendance-management">
-      <div className="common-page-header">
-        <h2>Quản lý điểm danh</h2>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          {canEdit && (
-            <>
-              <button className="btn btn-secondary" type="button" onClick={markAllPresent} disabled={items.length === 0}>
-                Mark all present
-              </button>
-              <button className="btn btn-primary" type="button" onClick={handleSave} disabled={saving || items.length === 0}>
-                {saving ? "Đang lưu..." : "Save"}
-              </button>
-            </>
-          )}
-        </div>
-      </div>
-
-      <div style={{ background: "rgba(255,255,255,0.95)", borderRadius: 12, padding: 16, marginBottom: 12 }}>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
-          <div className="common-form-group">
-            <label>Lớp *</label>
-            <select value={selectedClassId} onChange={(e) => setSelectedClassId(e.target.value)}>
-              <option value="">Chọn lớp</option>
-              {classes.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="common-form-group">
-            <label>Lớp học phần *</label>
-            <select
-              value={selectedClassSectionId}
-              onChange={(e) => setSelectedClassSectionId(e.target.value)}
-              disabled={!selectedClassId}
-            >
-              <option value="">{selectedClassId ? "Chọn lớp học phần" : "Chọn lớp trước"}</option>
-              {classSections.map((cs) => (
-                <option key={cs.id} value={cs.id}>
-                  {(cs.subject?.name || "Môn?")} - {(cs.teacher?.fullName || "GV?")} ({cs.semester || "HK?"} / {cs.schoolYear || "Năm?"})
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="common-form-group">
-            <label>Ngày *</label>
-            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-          </div>
+    <div className="min-h-screen bg-slate-100 px-4 py-6">
+      <div className="mx-auto max-w-6xl space-y-4">
+        <div className="rounded-2xl bg-white/95 px-4 py-3 shadow-lg shadow-slate-900/5 flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-2xl font-bold text-slate-800">Qu岷 l媒 chuy锚n c岷</h2>
+          <button
+            className="btn btn-primary"
+            onClick={() => setShowModal(true)}
+          >
+            鉃?膼i峄僲 danh
+          </button>
         </div>
 
-        {error && <div style={{ marginTop: 10, color: "#b91c1c", fontWeight: 700 }}>{error}</div>}
-        {message && <div style={{ marginTop: 10, color: "#065f46", fontWeight: 700 }}>{message}</div>}
-      </div>
-
-      <div className="common-table-container attendance-table-container">
-        {loadingRoster ? (
-          <div className="loading">Đang tải danh sách học sinh...</div>
-        ) : (
-          <table className="common-table attendance-table">
-            <thead>
-              <tr>
-                <th>Họ tên</th>
-                <th>Email</th>
-                <th>Vắng</th>
-                <th>Trạng thái</th>
-                <th>Ghi chú</th>
-              </tr>
-            </thead>
-            <tbody>
-              {items.length === 0 ? (
+        <div className="rounded-2xl border border-slate-200 bg-white/95 shadow-xl shadow-slate-900/5 overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="min-w-full border-collapse text-sm">
+              <thead className="bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
                 <tr>
-                  <td colSpan={5} style={{ padding: 16, color: "#6b7280" }}>
-                    Chọn lớp học phần và ngày để xem danh sách điểm danh.
-                  </td>
+                  <th className="px-4 py-3 text-left">ID</th>
+                  <th className="px-4 py-3 text-left">H峄峜 sinh</th>
+                  <th className="px-4 py-3 text-left">L峄沺</th>
+                  <th className="px-4 py-3 text-left">Tr岷g th谩i</th>
+                  <th className="px-4 py-3 text-left">Ghi ch煤</th>
+                  <th className="px-4 py-3 text-left">Ng脿y</th>
+                  <th className="px-4 py-3 text-center">Thao t谩c</th>
                 </tr>
-              ) : (
-                items.map((it) => (
-                  <tr key={it.studentId}>
-                    <td style={{ fontWeight: 700 }}>{it.fullName}</td>
-                    <td>{it.email}</td>
-                    <td>
-                      <input
-                        type="checkbox"
-                        checked={it.status === "ABSENT"}
-                        onChange={(e) => toggleAbsent(it.studentId, e.target.checked)}
-                        disabled={!canEdit}
-                      />
+              </thead>
+              <tbody className="text-sm text-slate-700">
+                {attendance.map((item) => (
+                  <tr key={item.id} className="border-t border-slate-100 hover:bg-slate-50/80 transition-colors">
+                    <td className="px-4 py-3">{item.id}</td>
+                    <td className="px-4 py-3">
+                      <div className="student-info">
+                        <span className="student-name">{item.student?.fullName}</span>
+                        <span className="student-email">{item.student?.email}</span>
+                      </div>
                     </td>
-                    <td>
-                      <select
-                        value={it.status || "PRESENT"}
-                        onChange={(e) => updateStatus(it.studentId, e.target.value)}
-                        disabled={!canEdit}
+                    <td className="px-4 py-3">{item.classEntity?.name}</td>
+                    <td className="px-4 py-3">
+                      <span
+                        className="inline-flex min-w-[96px] justify-center rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wide text-white"
+                        style={{ backgroundColor: getStatusColor(item.status) }}
                       >
-                        {STATUS_OPTIONS.map((o) => (
-                          <option key={o.value} value={o.value}>
-                            {o.label}
-                          </option>
-                        ))}
-                      </select>
+                        {getStatusText(item.status)}
+                      </span>
                     </td>
-                    <td>
-                      <input
-                        type="text"
-                        value={it.note || ""}
-                        onChange={(e) => updateNote(it.studentId, e.target.value)}
-                        placeholder="Ghi chú..."
-                        disabled={!canEdit}
-                      />
+                    <td className="px-4 py-3">{item.note || '-'}</td>
+                    <td className="px-4 py-3">{item.attendanceDate ? new Date(item.attendanceDate).toLocaleDateString('vi-VN') : (item.createdAt ? new Date(item.createdAt).toLocaleDateString('vi-VN') : '-')}</td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center justify-center gap-2">
+                        <button
+                          className="rounded-full bg-sky-100 px-3 py-1.5 text-xs font-semibold text-sky-700 hover:bg-sky-200"
+                          onClick={() => handleEdit(item)}
+                          aria-label="Sửa chuyên cần"
+                          title="Sửa"
+                        >
+                          <Pencil size={14} />
+                        </button>
+                        <button
+                          className="rounded-full bg-rose-100 px-3 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-200"
+                          onClick={() => handleDelete(item.id)}
+                          aria-label="Xóa chuyên cần"
+                          title="Xóa"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
                     </td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        )}
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
     </div>
   );

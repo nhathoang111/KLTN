@@ -1,7 +1,8 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import api from '../../../../shared/lib/api';
 import './AssignmentListPage.css';
 import { useAuth } from '../../../auth/context/AuthContext';
+import { Pencil, Trash2 } from 'lucide-react';
 
 const AssignmentListPage = () => {
   const { user } = useAuth();
@@ -639,16 +640,22 @@ const AssignmentListPage = () => {
 
   if (loading) {
     return (
-      <div className="assignment-list-page">
-        <div className="loading">Đang tải...</div>
+      <div className="min-h-screen bg-slate-100 px-4 py-6">
+        <div className="mx-auto flex max-w-6xl items-center justify-center py-16">
+          <div className="flex flex-col items-center gap-3 text-slate-600">
+            <div className="h-10 w-10 rounded-full border-4 border-indigo-200 border-t-indigo-500 animate-spin" />
+            <p className="text-sm font-medium">Đang tải dữ liệu bài tập...</p>
+          </div>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="assignment-list-page">
-      <div className="common-page-header">
-        <h1>{isStudent ? 'Bài tập' : 'Quản lý bài tập'}</h1>
+    <div className="min-h-screen bg-slate-100 px-4 py-6">
+      <div className="mx-auto max-w-6xl space-y-4">
+      <div className="rounded-2xl bg-white/95 px-4 py-3 shadow-lg shadow-slate-900/5 flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-2xl font-bold text-slate-800">{isStudent ? 'Bài tập' : 'Quản lý bài tập'}</h1>
         {!isStudent && (
           <button
             className="btn btn-primary"
@@ -677,34 +684,39 @@ const AssignmentListPage = () => {
         )}
       </div>
 
-      <div className="common-table-container assignments-table-container">
-        <table className="common-table assignments-table">
-          <thead>
+      <div className="rounded-2xl border border-slate-200 bg-white/95 shadow-xl shadow-slate-900/5 overflow-hidden">
+        <div className="overflow-x-auto">
+        <table className="min-w-full border-collapse text-sm">
+          <thead className="bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
             <tr>
-              <th>Tiêu đề</th>
-              <th>Lớp</th>
-              <th>Môn học</th>
-              <th>Giáo viên</th>
-              <th>Điểm tối đa</th>
-              <th>Trạng thái</th>
-              <th>Thao tác</th>
+              <th className="px-4 py-3 text-left">Tiêu đề</th>
+              <th className="px-4 py-3 text-left">Lớp</th>
+              <th className="px-4 py-3 text-left">Môn học</th>
+              <th className="px-4 py-3 text-left">Giáo viên</th>
+              <th className="px-4 py-3 text-left">Điểm tối đa</th>
+              <th className="px-4 py-3 text-left">Trạng thái</th>
+              <th className="px-4 py-3 text-center">Thao tác</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody className="text-sm text-slate-700">
             {assignments.map((assignment) => (
-              <tr key={assignment.id}>
-                <td>{assignment.title}</td>
-                <td>{getClassName(assignment.classEntity?.id)}</td>
-                <td>{getSubjectName(assignment.subject?.id)}</td>
-                <td>{getTeacherName(assignment.createdBy?.id, assignment)}</td>
-                <td>{assignment.maxScore}</td>
-                <td>
-                  <span className={`status-badge ${assignment.status?.toLowerCase()}`}>
+              <tr key={assignment.id} className="border-t border-slate-100 hover:bg-slate-50/80 transition-colors">
+                <td className="px-4 py-3">{assignment.title}</td>
+                <td className="px-4 py-3">{getClassName(assignment.classEntity?.id)}</td>
+                <td className="px-4 py-3">{getSubjectName(assignment.subject?.id)}</td>
+                <td className="px-4 py-3">{getTeacherName(assignment.createdBy?.id, assignment)}</td>
+                <td className="px-4 py-3">{assignment.maxScore}</td>
+                <td className="px-4 py-3">
+                  <span className={`inline-flex min-w-[84px] justify-center rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wide ${
+                    assignment.status?.toUpperCase() === 'ACTIVE'
+                      ? 'bg-sky-500 text-white'
+                      : 'bg-slate-300 text-slate-700'
+                  }`}>
                     {assignment.status}
                   </span>
                 </td>
-                <td>
-                  <div className="action-buttons">
+                <td className="px-4 py-3">
+                  <div className="flex flex-wrap items-center justify-center gap-2">
                     {isStudent ? (
                       assignment.status === 'ACTIVE' ? (
                         studentSubmissions[assignment.id] ? (
@@ -721,7 +733,7 @@ const AssignmentListPage = () => {
                               Đã nộp bài
                             </span>
                             <button
-                              className="btn btn-sm btn-secondary"
+                              className="rounded-full bg-sky-100 px-3 py-1.5 text-xs font-semibold text-sky-700 hover:bg-sky-200"
                               onClick={() => handleSubmitAssignment(assignment)}
                             >
                               Sửa
@@ -729,7 +741,7 @@ const AssignmentListPage = () => {
                           </>
                         ) : (
                           <button
-                            className="btn btn-sm btn-primary"
+                            className="rounded-full bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-500"
                             onClick={() => handleSubmitAssignment(assignment)}
                           >
                             Nộp bài
@@ -752,22 +764,26 @@ const AssignmentListPage = () => {
                     ) : (
                       <>
                         <button
-                          className="btn btn-sm btn-info"
+                          className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
                           onClick={() => handleViewSubmissions(assignment.id)}
                         >
                           Xem nộp bài
                         </button>
                         <button
-                          className="btn btn-sm btn-secondary"
+                          className="rounded-full bg-sky-100 px-3 py-1.5 text-xs font-semibold text-sky-700 hover:bg-sky-200"
                           onClick={() => handleEdit(assignment)}
+                          aria-label="Sửa bài tập"
+                          title="Sửa"
                         >
-                          Sửa
+                          <Pencil size={14} />
                         </button>
                         <button
-                          className="btn btn-sm btn-danger"
+                          className="rounded-full bg-rose-100 px-3 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-200"
                           onClick={() => handleDelete(assignment.id)}
+                          aria-label="Xóa bài tập"
+                          title="Xóa"
                         >
-                          Xóa
+                          <Trash2 size={14} />
                         </button>
                       </>
                     )}
@@ -777,6 +793,8 @@ const AssignmentListPage = () => {
             ))}
           </tbody>
         </table>
+        </div>
+      </div>
       </div>
 
       {/* Submit Assignment Modal */}

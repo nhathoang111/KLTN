@@ -59,51 +59,9 @@
   font-size: 0.8rem;
 }
 
-/* Table - Uses common styles but with custom container */
-.common-table-container {
-  background: rgba(255, 255, 255, 0.95);
-  backdrop-filter: blur(10px);
-  border-radius: 15px;
-  padding: 1.5rem;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  overflow: hidden;
-}
-
-.common-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 0.9rem;
-}
-
-.common-table th {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  padding: 1rem;
-  text-align: left;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-.common-table td {
-  padding: 1rem;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
-  vertical-align: middle;
-}
-
-.common-table tr:hover {
-  background: rgba(102, 126, 234, 0.05);
-}
-
 .role-name {
   font-weight: 600;
   color: #333;
-}
-
-.action-buttons {
-  display: flex;
-  gap: 0.5rem;
 }
 
 .loading {
@@ -125,16 +83,5 @@
     text-align: center;
   }
 
-  .common-table-container {
-    overflow-x: auto;
-  }
-
-  .common-table {
-    min-width: 700px;
-  }
-
-  .action-buttons {
-    flex-direction: column;
-  }
 }
 
