@@ -1,7 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import api from '../../../../shared/lib/api';
 import './ScheduleListPage.css';
 import { useAuth } from '../../../auth/context/AuthContext';
+import {
+  DAY_COLUMNS,
+  TIMELINE_MORNING,
+  TIMELINE_AFTERNOON,
+  formatTimeRange,
+} from './schoolScheduleTimeline';
+import { colorsForSubject } from './subjectColors';
 
 const ScheduleListPage = () => {
   const { user } = useAuth();
@@ -40,6 +47,13 @@ const ScheduleListPage = () => {
     subjectAssignments: [],
     numberOfWeeks: 1
   });
+
+  /** Cập nhật mỗi phút để highlight tiết hiện tại */
+  const [clock, setClock] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setClock(Date.now()), 60_000);
+    return () => clearInterval(id);
+  }, []);
 
   useEffect(() => {
     fetchData();
@@ -133,35 +147,62 @@ const ScheduleListPage = () => {
       const subjectsRes = await api.get('/subjects');
       setSubjects(subjectsRes.data.subjects || []);
 
-      // Fetch teachers
-      let teachersUrl = '/users';
-      if (userRole === 'ADMIN' && schoolId) {
-        teachersUrl += `?userRole=ADMIN&schoolId=${schoolId}`;
-      } else if (userRole === 'TEACHER' && schoolId) {
-        teachersUrl += `?userRole=TEACHER&schoolId=${schoolId}`;
-      } else {
-        teachersUrl += '?userRole=ADMIN';
-      }
+      /**
+       * BE UserService.getUsersFilteredAndEnriched:
+       * - STUDENT + ?userRole=ADMIN → Forbidden (403)
+       * - TEACHER/ADMIN thiếu schoolId trong query → rơi nhánh else → 403
+       * - SUPER_ADMIN + ?userRole=ADMIN → chỉ trả ADMIN, không phải giáo viên
+       * Dùng school từ user hoặc từ lớp đã lọc khi user chưa có school gắn.
+       */
+      const schoolIdForUsers =
+        schoolId ||
+        (allClasses[0]?.school?.id ?? allClasses[0]?.school_id) ||
+        null;
 
-      try {
-        const teachersRes = await api.get(teachersUrl);
-        const allUsers = teachersRes.data.users || [];
-        const teacherUsers = allUsers.filter(userItem => {
-          const roleName = userItem.role?.name?.toUpperCase();
-          const isTeacherRole = roleName === 'TEACHER' || roleName?.startsWith('TEACHER') || roleName === 'GIáO VIêN';
+      const buildTeachersUrl = () => {
+        if (userRole === 'SUPER_ADMIN') {
+          return '/users?userRole=TEACHER';
+        }
+        if (userRole === 'ADMIN' && schoolIdForUsers) {
+          return `/users?userRole=ADMIN&schoolId=${schoolIdForUsers}`;
+        }
+        if (userRole === 'TEACHER' && schoolIdForUsers) {
+          return `/users?userRole=TEACHER&schoolId=${schoolIdForUsers}`;
+        }
+        return null;
+      };
 
-          if (!isTeacherRole) return false;
-
-          if ((userRole === 'ADMIN' || userRole === 'TEACHER') && schoolId) {
-            return userItem.school?.id === schoolId;
-          }
-
-          return true;
-        });
-        setTeachers(teacherUsers);
-      } catch (teacherError) {
-        console.error('Error fetching teachers:', teacherError);
+      if (userRole === 'STUDENT') {
         setTeachers([]);
+      } else {
+        const teachersUrl = buildTeachersUrl();
+        if (!teachersUrl) {
+          setTeachers([]);
+        } else {
+          try {
+            const teachersRes = await api.get(teachersUrl);
+            const allUsers = teachersRes.data.users || [];
+            const teacherUsers = allUsers.filter((userItem) => {
+              const roleName = userItem.role?.name?.toUpperCase();
+              const isTeacherRole =
+                roleName === 'TEACHER' ||
+                roleName?.startsWith('TEACHER') ||
+                roleName === 'GIáO VIêN';
+
+              if (!isTeacherRole) return false;
+
+              if (schoolIdForUsers && (userRole === 'ADMIN' || userRole === 'TEACHER')) {
+                return userItem.school?.id === schoolIdForUsers;
+              }
+
+              return true;
+            });
+            setTeachers(teacherUsers);
+          } catch (teacherError) {
+            console.error('Error fetching teachers:', teacherError);
+            setTeachers([]);
+          }
+        }
       }
 
       if (allClasses.length > 0 && !selectedClassId) {
@@ -480,23 +521,10 @@ const ScheduleListPage = () => {
     setGenerateData({ ...generateData, subjectAssignments: updated });
   };
 
-  const getDayName = (dayOfWeek) => {
-    const days = ['', 'Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7'];
-    return days[dayOfWeek] || '';
-  };
-
   const formatDate = (dateString) => {
     if (!dateString) return '';
     const date = new Date(dateString);
     return date.toLocaleDateString('vi-VN');
-  };
-
-  const getDayOfWeekFromDate = (dateString) => {
-    if (!dateString) return null;
-    const date = new Date(dateString);
-    const day = date.getDay();
-    // Chuy?n t? 0-6 (CN-Sat) sang 1-6 (Mon-Sat)
-    return day === 0 ? 7 : day;
   };
 
   // Format date thành YYYY-MM-DD (kh?ng có timezone)
@@ -536,6 +564,20 @@ const ScheduleListPage = () => {
     const todayStr = formatDateToYYYYMMDD(new Date());
     return getDateStringForDayOfWeek(dayOfWeek) === todayStr;
   };
+
+  const nowMinutes = useMemo(() => {
+    const d = new Date();
+    return d.getHours() * 60 + d.getMinutes();
+  }, [clock]);
+
+  const hasTodayInGrid = DAY_COLUMNS.some((d) => isTodayColumn(d));
+
+  const isRowNow = (row) =>
+    hasTodayInGrid &&
+    typeof row.startMin === 'number' &&
+    typeof row.endMin === 'number' &&
+    nowMinutes >= row.startMin &&
+    nowMinutes < row.endMin;
 
   // Nhóm schedules theo ngày và ti?t h?c ?? hi?n th? d?ng timetable
   const getScheduleForDayAndPeriod = (dayOfWeek, period) => {
@@ -626,6 +668,27 @@ const ScheduleListPage = () => {
     return `${formatDate(formatDateToYYYYMMDD(currentWeekStart))} - ${formatDate(formatDateToYYYYMMDD(weekEnd))}`;
   };
 
+  /** Số ô tiết 1–5 có dữ liệu trong ngày — khớp logic getScheduleForDayAndPeriod */
+  const getLessonCountForDay = (dayOfWeek) => {
+    let n = 0;
+    for (let p = 1; p <= 5; p++) {
+      if (getScheduleForDayAndPeriod(dayOfWeek, p)) n++;
+    }
+    return n;
+  };
+
+  const dayHeaderMeta = useMemo(() => {
+    const short = ['', 'Hai', 'Ba', 'Tư', 'Năm', 'Sáu', 'Bảy'];
+    return DAY_COLUMNS.map((d) => {
+      const ymd = getDateStringForDayOfWeek(d);
+      let dayNum = '';
+      if (ymd) {
+        const parts = ymd.split('-').map(Number);
+        dayNum = String(parts[2]);
+      }
+      return { dayOfWeek: d, short: short[d], dayNum, count: getLessonCountForDay(d) };
+    });
+  }, [currentWeekStart, schedules]);
 
   const userRole = user?.role?.name?.toUpperCase();
   const isAdmin = userRole === 'ADMIN';
@@ -752,102 +815,205 @@ const ScheduleListPage = () => {
             </div>
           </div>
 
-          {schedules.length === 0 ? (
-            <div className="schedule-empty-state">
+          {schedules.length === 0 && (
+            <div className="schedule-empty-state schedule-empty-state--banner">
               {isStudent ? (
                 <>
-                  <p>Lớp của bạn hiện chưa có thời khóa biểu.</p>
-                  <p style={{ fontSize: '0.9em', color: '#666', marginTop: '10px' }}>
-                    Vui lòng liên hệ giáo viên chủ nhiệm để được hỗ trợ.
+                  <p>Lớp của bạn hiện chưa có tiết học nào được xếp trên lưới tuần này.</p>
+                  <p className="schedule-empty-state__hint">
+                    Vui lòng liên hệ giáo viên chủ nhiệm nếu cần hỗ trợ.
                   </p>
                 </>
               ) : isTeacher ? (
                 <>
-                  <p>Hiện bạn chưa được xếp lịch dạy.</p>
-                  <p style={{ fontSize: '0.9em', color: '#666', marginTop: '10px' }}>
-                    Vui lòng liên hệ quản trị viên để được phân công giảng dạy.
+                  <p>Chưa có tiết dạy trên tuần đang xem.</p>
+                  <p className="schedule-empty-state__hint">
+                    Liên hệ quản trị viên để được phân công.
                   </p>
                 </>
               ) : (
-                'Chưa có thời khóa biểu'
+                <p>Chưa có dữ liệu thời khóa biểu cho lớp / tuần đang chọn.</p>
               )}
             </div>
-          ) : (
-            <div className="schedule-timetable">
-              {/* Header v?i các th? trong tu?n */}
-              <div className="timetable-header">
-                <div className="timetable-corner"></div>
-                {[1, 2, 3, 4, 5, 6].map(dayOfWeek => (
-                  <div
-                    key={dayOfWeek}
-                    className={`timetable-day-header${isTodayColumn(dayOfWeek) ? ' timetable-day-header--today' : ''}`}
-                  >
-                    <div className="day-label">{getDayName(dayOfWeek)}</div>
-                    {getDateForDayOfWeek(dayOfWeek) && (
-                      <div className="day-date">{getDateForDayOfWeek(dayOfWeek)}</div>
-                    )}
-                  </div>
-                ))}
-              </div>
+          )}
 
-              {/* Các hàng ti?t h?c */}
-              {[1, 2, 3, 4, 5].map(period => (
-                <div key={period} className="timetable-row">
-                  <div className="timetable-period-label">
-                    <span className="period-number">{period}</span>
-                    <span className="period-text">Tiết</span>
+          <div className="schedule-timetable-v2">
+            <div className="tt-v2-header">
+              <div className="tt-v2-corner">
+                <span className="tt-v2-corner__label">Khung giờ</span>
+              </div>
+              {dayHeaderMeta.map(({ dayOfWeek, short, dayNum, count }) => {
+                const today = isTodayColumn(dayOfWeek);
+                const headClass = [
+                  'tt-v2-day-head',
+                  today && 'tt-v2-day-head--today',
+                  count > 0 && 'tt-v2-day-head--has-lessons',
+                  count === 0 && !today && 'tt-v2-day-head--sparse',
+                ]
+                  .filter(Boolean)
+                  .join(' ');
+                return (
+                  <div key={dayOfWeek} className={headClass}>
+                    <div className="tt-v2-day-head__num">{dayNum}</div>
+                    <div className="tt-v2-day-head__dow">THỨ {short}</div>
+                    <div className="tt-v2-day-head__sub">
+                      {count > 0 ? (
+                        <span className="tt-v2-day-head__badge">{count} tiết</span>
+                      ) : (
+                        <span className="tt-v2-day-head__pip" title="Không có tiết xếp" aria-label="Không có tiết" />
+                      )}
+                    </div>
                   </div>
-                  {[1, 2, 3, 4, 5, 6].map(dayOfWeek => {
-                    const schedule = getScheduleForDayAndPeriod(dayOfWeek, period);
+                );
+              })}
+            </div>
+
+            <div className="tt-v2-section-title">Buổi sáng</div>
+            {TIMELINE_MORNING.map((row) => {
+              const rowNow = isRowNow(row);
+              return (
+                <div
+                  key={row.id}
+                  className={['tt-v2-row', `tt-v2-row--${row.type}`, rowNow && 'tt-v2-row--now']
+                    .filter(Boolean)
+                    .join(' ')}
+                >
+                  <div className={['tt-v2-time-rail', rowNow && 'tt-v2-time-rail--now'].filter(Boolean).join(' ')}>
+                    <span className="tt-v2-time-range">{formatTimeRange(row.startMin, row.endMin)}</span>
+                    <span className="tt-v2-time-label">{row.label}</span>
+                  </div>
+                  {DAY_COLUMNS.map((dayOfWeek) => {
+                    if (row.type === 'homeroom' || row.type === 'short_break' || row.type === 'long_break') {
+                      return (
+                        <div
+                          key={dayOfWeek}
+                          className={`tt-v2-cell tt-v2-cell--meta${isTodayColumn(dayOfWeek) ? ' tt-v2-cell--today' : ''}`}
+                        />
+                      );
+                    }
+                    const schedule = getScheduleForDayAndPeriod(dayOfWeek, row.period);
+                    const sid = schedule?.subject?.id ?? schedule?.subject_id;
+                    const sname = schedule?.subject?.name;
+                    const palette = colorsForSubject(sid, sname);
+                    const emptyTitle = canManage
+                      ? 'Chưa có tiết — dùng nút Thêm lịch học để phân công.'
+                      : 'Chưa có tiết học trong khung giờ này.';
                     return (
                       <div
                         key={dayOfWeek}
-                        className={`timetable-slot${isTodayColumn(dayOfWeek) ? ' timetable-slot--today' : ''}`}
+                        className={[
+                          'tt-v2-cell',
+                          'tt-v2-cell--lesson',
+                          schedule ? 'tt-v2-cell--filled' : 'tt-v2-cell--empty',
+                          isTodayColumn(dayOfWeek) ? 'tt-v2-cell--today' : '',
+                        ]
+                          .filter(Boolean)
+                          .join(' ')}
                       >
                         {schedule ? (
-                          <div className="schedule-card">
-                            <div className="schedule-card-header">
-                              <span className="schedule-subject">{schedule.subject?.name || 'Không có'}</span>
+                          <div
+                            className="tt-lesson-card tt-lesson-card--filled"
+                            style={{
+                              background: palette.bg,
+                              borderLeft: `4px solid ${palette.accent}`,
+                            }}
+                          >
+                            <div className="tt-lesson-card__time">{formatTimeRange(row.startMin, row.endMin)}</div>
+                            <div className="tt-lesson-card__title" style={{ color: palette.title }}>
+                              {schedule.subject?.name || '—'}
                             </div>
-                            <div className="schedule-card-body">
-                              <div className="schedule-info-item">
-                                <span className="info-icon">GV:</span>
-                                <span className="info-text">{schedule.teacher?.fullName || 'Không có'}</span>
-                              </div>
-                              <div className="schedule-info-item">
-                                <span className="info-icon">Phòng:</span>
-                                <span className="info-text">{schedule.room || 'Không có'}</span>
-                              </div>
-                            </div>
+                            <div className="tt-lesson-card__meta">{schedule.teacher?.fullName || '—'}</div>
+                            <div className="tt-lesson-card__room">Phòng: {schedule.room || '—'}</div>
                             {canManage && (
-                              <div className="schedule-card-actions">
+                              <div className="tt-lesson-card__actions">
                                 <button
-                                  className="action-btn edit-btn"
+                                  type="button"
+                                  className="tt-lesson-card__btn tt-lesson-card__btn--edit"
                                   onClick={() => handleEdit(schedule)}
-                                  title="Sửa"
+                                  title="Sửa tiết học"
                                 >
-                                  E
+                                  Sửa
                                 </button>
                                 <button
-                                  className="action-btn delete-btn"
+                                  type="button"
+                                  className="tt-lesson-card__btn tt-lesson-card__btn--del"
                                   onClick={() => handleDelete(schedule.id)}
-                                  title="Xóa"
+                                  title="Xóa tiết học"
                                 >
-                                  D
+                                  Xóa
                                 </button>
                               </div>
                             )}
                           </div>
                         ) : (
-                          <div className="schedule-empty-slot"></div>
+                          <div
+                            className={`tt-lesson-card tt-lesson-card--empty${canManage ? ' tt-lesson-card--empty--manage' : ''}`}
+                            title={emptyTitle}
+                            aria-label={emptyTitle}
+                          />
                         )}
                       </div>
                     );
                   })}
                 </div>
-              ))}
+              );
+            })}
+
+            <div className="tt-v2-section-gap" aria-hidden="true" />
+            <div className="tt-v2-section-divider" role="separator" aria-label="Chuyển sang buổi chiều">
+              <span className="tt-v2-section-divider__line" aria-hidden="true" />
+              <span className="tt-v2-section-divider__label">Buổi chiều</span>
+              <span className="tt-v2-section-divider__line" aria-hidden="true" />
             </div>
-          )}
+            <p className="tt-v2-afternoon-note">
+              Khung giờ buổi chiều theo quy định trường. Phân công môn (tiết 1–5) hiện đồng bộ với buổi sáng trên máy chủ.
+            </p>
+            {TIMELINE_AFTERNOON.map((row) => {
+              const rowNow = isRowNow(row);
+              return (
+                <div
+                  key={row.id}
+                  className={['tt-v2-row', `tt-v2-row--${row.type}`, rowNow && 'tt-v2-row--now']
+                    .filter(Boolean)
+                    .join(' ')}
+                >
+                  <div className={['tt-v2-time-rail', rowNow && 'tt-v2-time-rail--now'].filter(Boolean).join(' ')}>
+                    <span className="tt-v2-time-range">{formatTimeRange(row.startMin, row.endMin)}</span>
+                    <span className="tt-v2-time-label">{row.label}</span>
+                  </div>
+                  {DAY_COLUMNS.map((dayOfWeek) => {
+                    if (row.type === 'long_break') {
+                      return (
+                        <div
+                          key={dayOfWeek}
+                          className={`tt-v2-cell tt-v2-cell--meta${isTodayColumn(dayOfWeek) ? ' tt-v2-cell--today' : ''}`}
+                        />
+                      );
+                    }
+                    return (
+                      <div
+                        key={dayOfWeek}
+                        className={[
+                          'tt-v2-cell',
+                          'tt-v2-cell--lesson',
+                          'tt-v2-cell--empty',
+                          isTodayColumn(dayOfWeek) ? 'tt-v2-cell--today' : '',
+                        ]
+                          .filter(Boolean)
+                          .join(' ')}
+                      >
+                        <div
+                          className="tt-lesson-card tt-lesson-card--empty tt-lesson-card--afternoon-placeholder"
+                          title="Khung chiều chỉ hiển thị — phân công tiết 6–9 khi hệ thống hỗ trợ."
+                          aria-label="Chưa phân công buổi chiều"
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
 

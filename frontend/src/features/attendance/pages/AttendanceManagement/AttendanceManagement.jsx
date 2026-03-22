@@ -1,7 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import api from '../../../../shared/lib/api';
 import './AttendanceManagement.css';
-import { Pencil, Trash2 } from 'lucide-react';
 import { useAuth } from '../../../auth/context/AuthContext';
 
 const AttendanceManagement = () => {
@@ -101,16 +100,6 @@ const AttendanceManagement = () => {
     setMessage("Đã đánh dấu tất cả có mặt (chưa lưu).");
   };
 
-  const toggleAbsent = (studentId, checked) => {
-    setItems((prev) =>
-      prev.map((it) =>
-        it.studentId === studentId
-          ? { ...it, status: checked ? "ABSENT" : "PRESENT" }
-          : it
-      )
-    );
-  };
-
   const updateStatus = (studentId, status) => {
     setItems((prev) => prev.map((it) => (it.studentId === studentId ? { ...it, status } : it)));
   };
@@ -165,73 +154,137 @@ const AttendanceManagement = () => {
     );
   }
 
+  const statusOptions = [
+    { value: 'PRESENT', label: 'Có mặt' },
+    { value: 'ABSENT', label: 'Vắng' },
+    { value: 'LATE', label: 'Muộn' },
+    { value: 'EXCUSED', label: 'Có phép' },
+  ];
+
   return (
     <div className="min-h-screen bg-slate-100 px-4 py-6">
       <div className="mx-auto max-w-6xl space-y-4">
-        <div className="rounded-2xl bg-white/95 px-4 py-3 shadow-lg shadow-slate-900/5 flex flex-wrap items-center justify-between gap-3">
-          <h2 className="text-2xl font-bold text-slate-800">Qu岷 l媒 chuy锚n c岷</h2>
-          <button
-            className="btn btn-primary"
-            onClick={() => setShowModal(true)}
-          >
-            鉃?膼i峄僲 danh
-          </button>
+        <h2 className="text-2xl font-bold text-slate-800">Quản lý điểm danh</h2>
+
+        {error && (
+          <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">{error}</div>
+        )}
+        {message && (
+          <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">{message}</div>
+        )}
+
+        <div className="flex flex-wrap items-end gap-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <label className="flex min-w-[200px] flex-col gap-1 text-sm">
+            <span className="font-medium text-slate-600">Lớp</span>
+            <select
+              className="rounded-lg border border-slate-300 px-3 py-2 text-slate-800"
+              value={selectedClassId}
+              onChange={(e) => setSelectedClassId(e.target.value)}
+            >
+              <option value="">-- Chọn lớp --</option>
+              {classes.map((c) => (
+                <option key={c.id} value={String(c.id)}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex min-w-[220px] flex-col gap-1 text-sm">
+            <span className="font-medium text-slate-600">Lớp học phần</span>
+            <select
+              className="rounded-lg border border-slate-300 px-3 py-2 text-slate-800"
+              value={selectedClassSectionId}
+              onChange={(e) => setSelectedClassSectionId(e.target.value)}
+              disabled={!classIdNum || classSections.length === 0}
+            >
+              <option value="">-- Chọn lớp học phần --</option>
+              {classSections.map((s) => (
+                <option key={s.id} value={String(s.id)}>
+                  {s.subject?.name || s.name || s.sectionName || `Học phần #${s.id}`}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex min-w-[160px] flex-col gap-1 text-sm">
+            <span className="font-medium text-slate-600">Ngày</span>
+            <input
+              type="date"
+              className="rounded-lg border border-slate-300 px-3 py-2 text-slate-800"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+            />
+          </label>
+          {canEdit && items.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                className="rounded-lg bg-slate-200 px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-300"
+                onClick={markAllPresent}
+              >
+                Tất cả có mặt
+              </button>
+              <button
+                type="button"
+                className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50"
+                onClick={handleSave}
+                disabled={saving}
+              >
+                {saving ? 'Đang lưu...' : 'Lưu điểm danh'}
+              </button>
+            </div>
+          )}
         </div>
 
-        <div className="rounded-2xl border border-slate-200 bg-white/95 shadow-xl shadow-slate-900/5 overflow-hidden">
+        {loadingRoster && (
+          <p className="text-sm text-slate-600">Đang tải danh sách điểm danh...</p>
+        )}
+
+        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
           <div className="overflow-x-auto">
             <table className="min-w-full border-collapse text-sm">
               <thead className="bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
                 <tr>
-                  <th className="px-4 py-3 text-left">ID</th>
-                  <th className="px-4 py-3 text-left">H峄峜 sinh</th>
-                  <th className="px-4 py-3 text-left">L峄沺</th>
-                  <th className="px-4 py-3 text-left">Tr岷g th谩i</th>
-                  <th className="px-4 py-3 text-left">Ghi ch煤</th>
-                  <th className="px-4 py-3 text-left">Ng脿y</th>
-                  <th className="px-4 py-3 text-center">Thao t谩c</th>
+                  <th className="px-4 py-3 text-left">Học sinh</th>
+                  <th className="px-4 py-3 text-left">Email</th>
+                  <th className="px-4 py-3 text-left">Trạng thái</th>
+                  <th className="px-4 py-3 text-left">Ghi chú</th>
                 </tr>
               </thead>
-              <tbody className="text-sm text-slate-700">
-                {attendance.map((item) => (
-                  <tr key={item.id} className="border-t border-slate-100 hover:bg-slate-50/80 transition-colors">
-                    <td className="px-4 py-3">{item.id}</td>
-                    <td className="px-4 py-3">
-                      <div className="student-info">
-                        <span className="student-name">{item.student?.fullName}</span>
-                        <span className="student-email">{item.student?.email}</span>
-                      </div>
+              <tbody className="text-slate-700">
+                {items.length === 0 && !loadingRoster && selectedClassSectionId && (
+                  <tr>
+                    <td colSpan={4} className="px-4 py-8 text-center text-slate-500">
+                      Không có học sinh trong lớp học phần hoặc chưa có dữ liệu cho ngày đã chọn.
                     </td>
-                    <td className="px-4 py-3">{item.classEntity?.name}</td>
+                  </tr>
+                )}
+                {items.map((it) => (
+                  <tr key={it.studentId} className="border-t border-slate-100 hover:bg-slate-50/80">
+                    <td className="px-4 py-3 font-medium">{it.fullName || '—'}</td>
+                    <td className="px-4 py-3 text-slate-600">{it.email || '—'}</td>
                     <td className="px-4 py-3">
-                      <span
-                        className="inline-flex min-w-[96px] justify-center rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wide text-white"
-                        style={{ backgroundColor: getStatusColor(item.status) }}
+                      <select
+                        className="w-full max-w-[180px] rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
+                        value={it.status || 'PRESENT'}
+                        onChange={(e) => updateStatus(it.studentId, e.target.value)}
+                        disabled={!canEdit}
                       >
-                        {getStatusText(item.status)}
-                      </span>
+                        {statusOptions.map((o) => (
+                          <option key={o.value} value={o.value}>
+                            {o.label}
+                          </option>
+                        ))}
+                      </select>
                     </td>
-                    <td className="px-4 py-3">{item.note || '-'}</td>
-                    <td className="px-4 py-3">{item.attendanceDate ? new Date(item.attendanceDate).toLocaleDateString('vi-VN') : (item.createdAt ? new Date(item.createdAt).toLocaleDateString('vi-VN') : '-')}</td>
                     <td className="px-4 py-3">
-                      <div className="flex items-center justify-center gap-2">
-                        <button
-                          className="rounded-full bg-sky-100 px-3 py-1.5 text-xs font-semibold text-sky-700 hover:bg-sky-200"
-                          onClick={() => handleEdit(item)}
-                          aria-label="Sửa chuyên cần"
-                          title="Sửa"
-                        >
-                          <Pencil size={14} />
-                        </button>
-                        <button
-                          className="rounded-full bg-rose-100 px-3 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-200"
-                          onClick={() => handleDelete(item.id)}
-                          aria-label="Xóa chuyên cần"
-                          title="Xóa"
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      </div>
+                      <input
+                        type="text"
+                        className="w-full min-w-[200px] rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
+                        value={it.note || ''}
+                        onChange={(e) => updateNote(it.studentId, e.target.value)}
+                        placeholder="Ghi chú"
+                        disabled={!canEdit}
+                      />
                     </td>
                   </tr>
                 ))}
@@ -239,6 +292,10 @@ const AttendanceManagement = () => {
             </table>
           </div>
         </div>
+
+        {!canEdit && (
+          <p className="text-sm text-slate-600">Chỉ giáo viên mới chỉnh sửa điểm danh.</p>
+        )}
       </div>
     </div>
   );
