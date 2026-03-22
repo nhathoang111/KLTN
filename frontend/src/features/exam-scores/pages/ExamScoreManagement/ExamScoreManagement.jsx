@@ -3,6 +3,7 @@ import api from '../../../../shared/lib/api';
 import './ExamScoreManagement.css';
 import { useAuth } from '../../../auth/context/AuthContext';
 import { Pencil, Trash2 } from 'lucide-react';
+import AdminXemDiemPanel from '../../components/AdminXemDiemPanel';
 
 const ExamScoreManagement = () => {
   const { user } = useAuth();
@@ -967,7 +968,7 @@ const ExamScoreManagement = () => {
 
   const userRole = user?.role?.name?.toUpperCase();
   const isStudent = userRole === 'STUDENT';
-  const isAdmin = userRole === 'ADMIN';
+  const isAdmin = userRole === 'ADMIN' || (userRole && userRole.startsWith('ADMIN'));
 
   const handleToggleLock = async () => {
     const userRole = user?.role?.name?.toUpperCase();
@@ -1001,9 +1002,14 @@ const ExamScoreManagement = () => {
 
   return (
     <div className="min-h-screen bg-slate-100 px-4 py-6">
-      <div className="mx-auto max-w-6xl space-y-4">
+      <div className={`mx-auto space-y-4 ${isAdmin ? 'max-w-[96rem]' : 'max-w-6xl'}`}>
       <div className="rounded-2xl bg-white/95 px-4 py-3 shadow-lg shadow-slate-900/5 flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-2xl font-bold text-slate-800">{isStudent ? 'Xem điểm và nhận xét' : 'Quản lý điểm số'}</h2>
+        {!isAdmin && (
+          <h2 className="text-2xl font-bold text-slate-800">
+            {isStudent ? 'Xem điểm và nhận xét' : 'Quản lý điểm số'}
+          </h2>
+        )}
+        {isAdmin && <span className="text-lg font-semibold text-slate-700">Điểm số</span>}
         <div className="header-actions">
           {isAdmin && (
             <button
@@ -1050,8 +1056,12 @@ const ExamScoreManagement = () => {
         </div>
       </div>
 
+      {isAdmin && (
+        <AdminXemDiemPanel examScores={examScores} classes={classes} subjects={subjects} user={user} />
+      )}
+
       {/* Filter lớp cho Teacher */}
-      {userRole === 'TEACHER' && (
+      {!isAdmin && userRole === 'TEACHER' && (
         <div style={{
           marginBottom: '20px',
           padding: '15px',
@@ -1102,7 +1112,8 @@ const ExamScoreManagement = () => {
         </div>
       )}
 
-      {/* Bảng điểm số - Admin có thể xem nhưng không thể sửa/xóa */}
+      {/* Bảng điểm số — giáo viên / học sinh (admin dùng AdminXemDiemPanel ở trên) */}
+      {isAdmin ? null : (
       <div className="rounded-2xl border border-slate-200 bg-white/95 shadow-xl shadow-slate-900/5 overflow-hidden">
         {groupScoresByStudentAndSubject().length === 0 ? (
           <div style={{
@@ -1221,6 +1232,7 @@ const ExamScoreManagement = () => {
           </div>
         )}
       </div>
+      )}
       </div>
 
 

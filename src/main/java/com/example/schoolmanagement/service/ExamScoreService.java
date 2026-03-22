@@ -122,6 +122,9 @@ public class ExamScoreService {
 
         String scoreType = (String) scoreData.get("scoreType");
         examScore.setScoreType(scoreType == null || scoreType.isEmpty() ? "15P" : scoreType);
+        Integer attempt = parseInteger(scoreData.get("attempt"));
+        if (attempt == null || attempt < 1) attempt = 1;
+        examScore.setAttempt(attempt);
         examScore.setNote((String) scoreData.get("note"));
         examScore.setStatus("ACTIVE");
 
@@ -172,6 +175,10 @@ public class ExamScoreService {
         if (scoreData.containsKey("scoreType")) {
             String scoreType = (String) scoreData.get("scoreType");
             if (scoreType != null && !scoreType.isEmpty()) examScore.setScoreType(scoreType);
+        }
+        if (scoreData.containsKey("attempt")) {
+            Integer attempt = parseInteger(scoreData.get("attempt"));
+            if (attempt != null && attempt >= 1) examScore.setAttempt(attempt);
         }
         if (scoreData.containsKey("note")) {
             examScore.setNote((String) scoreData.get("note"));

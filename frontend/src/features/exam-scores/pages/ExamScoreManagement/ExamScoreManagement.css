@@ -140,6 +140,45 @@
 
 /* Loading - Uses common styles from CommonPageStyles.css */
 
+/* Admin — bảng Xem điểm (Tóm điểm) */
+.admin-xem-diem .admin-grade-table {
+  font-size: 0.875rem;
+}
+
+.es-score-pill {
+  display: inline-block;
+  min-width: 2.5rem;
+  padding: 0.2rem 0.45rem;
+  border-radius: 0.35rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.es-cell-empty {
+  color: #94a3b8;
+  font-weight: 500;
+}
+
+.es-cell-low {
+  color: #b91c1c;
+  background: #fef2f2;
+}
+
+.es-cell-mid-low {
+  color: #c2410c;
+  background: #fff7ed;
+}
+
+.es-cell-mid {
+  color: #a16207;
+  background: #fffbeb;
+}
+
+.es-cell-high {
+  color: #15803d;
+  background: #f0fdf4;
+}
+
 /* Responsive */
 @media (max-width: 768px) {
   .page-header {
