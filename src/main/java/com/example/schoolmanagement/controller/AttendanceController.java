@@ -54,21 +54,23 @@ public class AttendanceController {
 
     @PostMapping("/bulk")
     public ResponseEntity<?> bulkSave(@RequestBody AttendanceBulkRequest request,
-                                      @RequestHeader(value = "X-User-Role", required = false) String userRole) {
+                                      @RequestHeader(value = "X-User-Role", required = false) String userRole,
+                                      @RequestHeader(value = "X-User-Id", required = false) Integer userId) {
         if (!isTeacher(userRole)) {
             return ResponseEntity.status(403).body(Map.of("error", "Chỉ giáo viên mới được điểm danh."));
         }
-        return ResponseEntity.ok(attendanceService.saveBulk(request));
+        return ResponseEntity.ok(attendanceService.saveBulk(request, userId));
     }
 
     @PutMapping("/{id}")
     public ResponseEntity<?> updateAttendance(@PathVariable Integer id,
                                               @RequestBody Map<String, Object> attendanceData,
-                                              @RequestHeader(value = "X-User-Role", required = false) String userRole) {
+                                              @RequestHeader(value = "X-User-Role", required = false) String userRole,
+                                              @RequestHeader(value = "X-User-Id", required = false) Integer userId) {
         if (!isTeacher(userRole)) {
             return ResponseEntity.status(403).body(Map.of("error", "Chỉ giáo viên mới được điểm danh."));
         }
-        Attendance updatedAttendance = attendanceService.updateAttendance(id, attendanceData);
+        Attendance updatedAttendance = attendanceService.updateAttendance(id, attendanceData, userId);
 
         return ResponseEntity.ok(Map.of(
             "message", "Attendance updated successfully",

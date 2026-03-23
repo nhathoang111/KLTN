@@ -9,6 +9,7 @@ import com.example.schoolmanagement.dto.attendance.AttendanceBulkResponse;
 import com.example.schoolmanagement.dto.attendance.AttendanceGetResponse;
 import com.example.schoolmanagement.dto.attendance.AttendanceItemDto;
 import com.example.schoolmanagement.exception.BadRequestException;
+import com.example.schoolmanagement.exception.ForbiddenException;
 import com.example.schoolmanagement.exception.ResourceNotFoundException;
 import com.example.schoolmanagement.repository.AttendanceRepository;
 import com.example.schoolmanagement.repository.ClassRepository;
@@ -142,7 +143,8 @@ public class AttendanceService {
      * - class_section tồn tại
      * - student thuộc lớp (enrollments ACTIVE)
      */
-    public AttendanceBulkResponse saveBulk(AttendanceBulkRequest req) {
+    @org.springframework.transaction.annotation.Transactional
+    public AttendanceBulkResponse saveBulk(AttendanceBulkRequest req, Integer markingTeacherId) {
         if (req == null) throw new BadRequestException("Request body is required");
         if (req.getClassSectionId() == null) throw new BadRequestException("classSectionId is required");
         LocalDate date = parseDateOnly(req.getAttendanceDate());
@@ -150,6 +152,10 @@ public class AttendanceService {
 
         ClassSection classSection = classSectionRepository.findByIdFetchClassRoomAndSchool(req.getClassSectionId())
                 .orElseThrow(() -> new ResourceNotFoundException("Class section not found with id: " + req.getClassSectionId()));
+        if (classSection.getTeacher() == null || classSection.getTeacher().getId() == null || markingTeacherId == null
+                || !markingTeacherId.equals(classSection.getTeacher().getId())) {
+            throw new ForbiddenException("Access denied");
+        }
         ClassEntity cls = classSection.getClassRoom();
         if (cls == null || cls.getId() == null) throw new BadRequestException("Class section is missing class");
 
@@ -295,8 +301,14 @@ public class AttendanceService {
         return savedAttendance;
     }
 
-    public Attendance updateAttendance(Integer id, Map<String, Object> attendanceData) {
+    @org.springframework.transaction.annotation.Transactional
+    public Attendance updateAttendance(Integer id, Map<String, Object> attendanceData, Integer markingTeacherId) {
         Attendance attendance = getAttendanceRecord(id);
+        if (attendance.getClassSection() == null || attendance.getClassSection().getTeacher() == null
+                || attendance.getClassSection().getTeacher().getId() == null || markingTeacherId == null
+                || !markingTeacherId.equals(attendance.getClassSection().getTeacher().getId())) {
+            throw new ForbiddenException("Access denied");
+        }
 
         if (attendanceData.containsKey("studentId")) {
             Object studentIdObj = attendanceData.get("studentId");

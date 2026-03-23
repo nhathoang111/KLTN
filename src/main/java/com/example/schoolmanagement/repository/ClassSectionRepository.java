@@ -17,6 +17,7 @@ public interface ClassSectionRepository extends JpaRepository<ClassSection, Inte
     @Query("SELECT cs FROM ClassSection cs " +
             "JOIN FETCH cs.classRoom cr " +
             "LEFT JOIN FETCH cr.school " +
+            "LEFT JOIN FETCH cs.teacher t " +
             "WHERE cs.id = :id")
     java.util.Optional<ClassSection> findByIdFetchClassRoomAndSchool(@Param("id") Integer id);
 

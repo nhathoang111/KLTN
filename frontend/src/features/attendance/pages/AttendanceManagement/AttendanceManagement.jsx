@@ -60,13 +60,29 @@ const AttendanceManagement = () => {
       if (!classIdNum) return;
       try {
         const res = await api.get(`/class-sections/class/${classIdNum}`);
-        setClassSections(res.data.classSections || []);
+        let list = res.data.classSections || [];
+
+        // Nghiệp vụ: giáo viên chỉ được điểm danh cho môn/lớp học phần mà họ phụ trách (classSection.teacher)
+        const teacherId = user?.id;
+        const isTeacherRole = userRole === "TEACHER" || userRole.startsWith("TEACHER") || userRole === "GIÁO VIÊN";
+        if (isTeacherRole && teacherId != null) {
+          list = (list || []).filter((cs) => String(cs.teacher?.id) === String(teacherId));
+        }
+
+        setClassSections(list);
       } catch (e) {
         setError("Không tải được danh sách lớp học phần.");
       }
     };
     fetchSections();
-  }, [classIdNum]);
+  }, [classIdNum, user?.id, userRole]);
+
+  const selectedClassSection = useMemo(() => {
+    if (!selectedClassSectionId) return null;
+    return (classSections || []).find((cs) => String(cs.id) === String(selectedClassSectionId)) || null;
+  }, [classSections, selectedClassSectionId]);
+
+  const attendanceTeacherName = selectedClassSection?.teacher?.fullName || "—";
 
   const loadRoster = useCallback(async () => {
     if (!selectedClassSectionId || !date) return;
@@ -102,6 +118,17 @@ const AttendanceManagement = () => {
 
   const updateStatus = (studentId, status) => {
     setItems((prev) => prev.map((it) => (it.studentId === studentId ? { ...it, status } : it)));
+  };
+
+  const updateStatusFromCheckbox = (studentId, statusValue, checked) => {
+    // Checkbox đóng vai trò "chọn 1 trong 4 trạng thái" (tương đương radio).
+    // Nếu người dùng bỏ tick checkbox đang chọn thì mặc định quay về PRESENT.
+    setItems((prev) =>
+      prev.map((it) => {
+        if (it.studentId !== studentId) return it;
+        return { ...it, status: checked ? statusValue : "PRESENT" };
+      })
+    );
   };
 
   const updateNote = (studentId, note) => {
@@ -158,7 +185,6 @@ const AttendanceManagement = () => {
     { value: 'PRESENT', label: 'Có mặt' },
     { value: 'ABSENT', label: 'Vắng' },
     { value: 'LATE', label: 'Muộn' },
-    { value: 'EXCUSED', label: 'Có phép' },
   ];
 
   return (
@@ -200,11 +226,21 @@ const AttendanceManagement = () => {
               <option value="">-- Chọn lớp học phần --</option>
               {classSections.map((s) => (
                 <option key={s.id} value={String(s.id)}>
-                  {s.subject?.name || s.name || s.sectionName || `Học phần #${s.id}`}
+                  {(s.subject?.name || s.name || s.sectionName || `Học phần #${s.id}`) +
+                    (s.teacher?.fullName ? ` - ${s.teacher.fullName}` : '')}
                 </option>
               ))}
             </select>
           </label>
+
+          {userRole === "ADMIN" && (
+            <label className="flex min-w-[240px] flex-col gap-1 text-sm">
+              <span className="font-medium text-slate-600">Giáo viên điểm danh</span>
+              <div className="rounded-lg border border-slate-300 px-3 py-2 text-slate-800">
+                {attendanceTeacherName}
+              </div>
+            </label>
+          )}
           <label className="flex min-w-[160px] flex-col gap-1 text-sm">
             <span className="font-medium text-slate-600">Ngày</span>
             <input
@@ -263,18 +299,19 @@ const AttendanceManagement = () => {
                     <td className="px-4 py-3 font-medium">{it.fullName || '—'}</td>
                     <td className="px-4 py-3 text-slate-600">{it.email || '—'}</td>
                     <td className="px-4 py-3">
-                      <select
-                        className="w-full max-w-[180px] rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
-                        value={it.status || 'PRESENT'}
-                        onChange={(e) => updateStatus(it.studentId, e.target.value)}
-                        disabled={!canEdit}
-                      >
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', alignItems: 'center' }}>
                         {statusOptions.map((o) => (
-                          <option key={o.value} value={o.value}>
-                            {o.label}
-                          </option>
+                          <label key={o.value} style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: canEdit ? 'pointer' : 'not-allowed' }}>
+                            <input
+                              type="checkbox"
+                              checked={(it.status || 'PRESENT') === o.value}
+                              onChange={(e) => updateStatusFromCheckbox(it.studentId, o.value, e.target.checked)}
+                              disabled={!canEdit}
+                            />
+                            <span style={{ fontSize: '0.85rem', color: '#0f172a' }}>{o.label}</span>
+                          </label>
                         ))}
-                      </select>
+                      </div>
                     </td>
                     <td className="px-4 py-3">
                       <input
