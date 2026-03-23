@@ -16,12 +16,20 @@ import com.example.schoolmanagement.repository.EnrollmentRepository;
 import com.example.schoolmanagement.repository.ClassSectionRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.util.*;
+import java.util.stream.Collectors;
 
 @Service
 public class ScheduleService {
+
+    /** Tiết 1–5 sáng, 6–10 chiều (đồng bộ FE). */
+    private static final int MIN_PERIOD = 1;
+    private static final int MAX_PERIOD = 10;
+    /** Số tiết chiều trong ngày (period 6…MAX_PERIOD). */
+    private static final int AFTERNOON_PERIOD_COUNT = MAX_PERIOD - 5;
     @Autowired
     private ScheduleRepository scheduleRepository;
     
@@ -45,7 +53,7 @@ public class ScheduleService {
     }
 
     public Schedule getScheduleById(Integer id) {
-        return scheduleRepository.findById(id)
+        return scheduleRepository.findByIdWithRelations(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Schedule not found with id: " + id));
     }
 
@@ -122,6 +130,7 @@ public class ScheduleService {
         return count;
     }
 
+    @Transactional
     public int generateSchedules(Integer classId, Integer schoolId, List<Map<String, Object>> subjectAssignments, Integer numberOfWeeks) {
         // Lấy class entity
         Optional<ClassEntity> classOpt = classRepository.findById(classId);
@@ -212,7 +221,7 @@ public class ScheduleService {
         
         // Lấy schedules của các giáo viên cho tuần đầu tiên
         for (Map<String, Object> assignment : subjectAssignments) {
-            Integer teacherId = (Integer) assignment.get("teacherId");
+            Integer teacherId = parseInt(assignment.get("teacherId"));
             if (teacherId != null) {
                 List<Schedule> teacherSchedules = scheduleRepository.findByTeacherId(teacherId);
                 for (Schedule s : teacherSchedules) {
@@ -230,21 +239,21 @@ public class ScheduleService {
         
         int createdCount = 0;
         
-        // Tạo pattern cho tuần đầu tiên (chỉ các slot của tuần đầu)
-        // Pattern sẽ được áp dụng cho tất cả các tuần
-        // Tạo danh sách slots và shuffle để random hóa
-        List<Object[]> patternSlots = new ArrayList<>();
-        for (int i = 0; i < 6; i++) { // 6 ngày: Thứ 2 đến Thứ 7
-            for (int period = 1; period <= 5; period++) { // Tiết 1 đến 5
-                patternSlots.add(new Object[]{i, period}); // Lưu dayOffset (0-5) và period
+        // Hai nhóm slot: sáng (1–5) và chiều (6–9), shuffle riêng — tránh trường hợp random chỉ trúng buổi sáng
+        List<Object[]> morningSlots = new ArrayList<>();
+        List<Object[]> afternoonSlots = new ArrayList<>();
+        for (int i = 0; i < 6; i++) {
+            for (int period = MIN_PERIOD; period <= 5; period++) {
+                morningSlots.add(new Object[]{i, period});
+            }
+            for (int period = 6; period <= MAX_PERIOD; period++) {
+                afternoonSlots.add(new Object[]{i, period});
             }
         }
+        Collections.shuffle(morningSlots);
+        Collections.shuffle(afternoonSlots);
         
-        // Shuffle để random hóa thứ tự phân bổ
-        Collections.shuffle(patternSlots);
-        
-        System.out.println("📊 Pattern slots: " + patternSlots.size() + " (6 days × 5 periods = 30)");
-        System.out.println("📊 Slots are RANDOMIZED (shuffled) for random schedule generation");
+        System.out.println("📊 Morning slots: " + morningSlots.size() + ", afternoon slots: " + afternoonSlots.size());
         
         // Lưu pattern: Map<dayOffset-period, subject-teacher>
         Map<String, Object[]> weekPattern = new HashMap<>();
@@ -255,69 +264,74 @@ public class ScheduleService {
         
         System.out.println("📚 Subject assignments shuffled for random distribution");
         
-        // Phân bổ các môn học vào pattern của tuần đầu tiên
+        List<GenAssign> batch = new ArrayList<>();
         for (Map<String, Object> assignment : shuffledAssignments) {
-            Integer subjectId = (Integer) assignment.get("subjectId");
-            Integer teacherId = (Integer) assignment.get("teacherId");
-            Integer periodsPerWeek = (Integer) assignment.get("periodsPerWeek");
-            
-            if (subjectId == null || teacherId == null || periodsPerWeek == null) {
+            Integer subjectId = parseInt(assignment.get("subjectId"));
+            Integer teacherId = parseInt(assignment.get("teacherId"));
+            Integer periodsPerWeek = parseInt(assignment.get("periodsPerWeek"));
+            if (subjectId == null || teacherId == null || periodsPerWeek == null || periodsPerWeek < 1) {
                 continue;
             }
-            
             Optional<Subject> subjectOpt = subjectRepository.findById(subjectId);
             Optional<User> teacherOpt = userRepository.findById(teacherId);
-            
             if (!subjectOpt.isPresent() || !teacherOpt.isPresent()) {
                 continue;
             }
-            
-            Subject subject = subjectOpt.get();
-            User teacher = teacherOpt.get();
-            
-            int periodsAssigned = 0;
-            
-            System.out.println("📚 ===== START Assigning " + periodsPerWeek + " periods for subject: " + subject.getName() + " =====");
-            
-            // Chỉ phân bổ vào tuần đầu tiên để tạo pattern
-            // Duyệt qua các slot đã shuffle để random hóa
-            for (Object[] slot : patternSlots) {
-                if (periodsAssigned >= periodsPerWeek) {
-                    break;
-                }
-                
-                Integer dayOffset = (Integer) slot[0]; // 0=Thứ 2, 1=Thứ 3, ..., 5=Thứ 7
-                Integer period = (Integer) slot[1];
-                LocalDate firstWeekDate = nextMonday.plusDays(dayOffset);
-                
-                // Chỉ tạo cho các ngày trong tương lai hoặc hôm nay
-                if (firstWeekDate.isBefore(today)) {
+            GenAssign g = new GenAssign();
+            g.subject = subjectOpt.get();
+            g.teacher = teacherOpt.get();
+            g.teacherId = teacherId;
+            g.periodsPerWeek = periodsPerWeek;
+            int afternoonCap = Math.min(AFTERNOON_PERIOD_COUNT, (periodsPerWeek + 1) / 2);
+            g.afternoonRemaining = afternoonCap;
+            g.morningRemaining = periodsPerWeek - afternoonCap;
+            batch.add(g);
+            System.out.println("📚 Queued " + g.subject.getName() + " P=" + periodsPerWeek
+                    + " (chiều " + g.afternoonRemaining + ", sáng " + g.morningRemaining + ")");
+        }
+        
+        // Round-robin chiều: mỗi vòng mỗi môn tối đa 1 tiết chiều — tránh một môn chiếm hết slot chiều
+        boolean progress;
+        do {
+            progress = false;
+            Collections.shuffle(afternoonSlots);
+            for (GenAssign g : batch) {
+                if (g.afternoonRemaining <= 0) {
                     continue;
                 }
-                
-                String patternKey = dayOffset + "-" + period;
-                
-                // Kiểm tra xem slot này đã được sử dụng trong pattern chưa
-                if (weekPattern.containsKey(patternKey)) {
-                    continue; // Slot đã được phân bổ cho môn khác
+                int n = tryAssignSlotsToPattern(afternoonSlots, 1, g.subject, g.teacher, g.teacherId,
+                        nextMonday, today, weekPattern, occupiedClassSlotsFirstWeek, occupiedTeacherSlotsFirstWeek);
+                if (n > 0) {
+                    g.afternoonRemaining--;
+                    progress = true;
                 }
-                
-                String classSlotKey = firstWeekDate.toString() + "-" + period;
-                String teacherSlotKey = teacherId + "-" + firstWeekDate.toString() + "-" + period;
-                
-                // Kiểm tra conflict chỉ cho tuần đầu
-                if (occupiedClassSlotsFirstWeek.contains(classSlotKey) || occupiedTeacherSlotsFirstWeek.contains(teacherSlotKey)) {
-                    continue;
-                }
-                
-                // Lưu vào pattern
-                weekPattern.put(patternKey, new Object[]{subject, teacher, period, dayOffset});
-                occupiedClassSlotsFirstWeek.add(classSlotKey);
-                occupiedTeacherSlotsFirstWeek.add(teacherSlotKey);
-                periodsAssigned++;
-                
-                System.out.println("✅ Pattern slot assigned: Day " + (dayOffset + 1) + " (offset=" + dayOffset + "), Period " + period + 
-                                 " -> " + subject.getName() + " (" + teacher.getFullName() + ")");
+            }
+        } while (progress);
+        
+        for (GenAssign g : batch) {
+            if (g.morningRemaining <= 0) {
+                continue;
+            }
+            Collections.shuffle(morningSlots);
+            int n = tryAssignSlotsToPattern(morningSlots, g.morningRemaining, g.subject, g.teacher, g.teacherId,
+                    nextMonday, today, weekPattern, occupiedClassSlotsFirstWeek, occupiedTeacherSlotsFirstWeek);
+            g.morningRemaining -= n;
+        }
+        
+        for (GenAssign g : batch) {
+            int have = countPatternSlotsForSubject(g.subject, weekPattern);
+            int need = g.periodsPerWeek - have;
+            if (need <= 0) {
+                continue;
+            }
+            Collections.shuffle(afternoonSlots);
+            int n = tryAssignSlotsToPattern(afternoonSlots, need, g.subject, g.teacher, g.teacherId,
+                    nextMonday, today, weekPattern, occupiedClassSlotsFirstWeek, occupiedTeacherSlotsFirstWeek);
+            need -= n;
+            if (need > 0) {
+                Collections.shuffle(morningSlots);
+                tryAssignSlotsToPattern(morningSlots, need, g.subject, g.teacher, g.teacherId,
+                        nextMonday, today, weekPattern, occupiedClassSlotsFirstWeek, occupiedTeacherSlotsFirstWeek);
             }
         }
         
@@ -351,7 +365,7 @@ public class ScheduleService {
         
         // Lấy schedules của các giáo viên
         for (Map<String, Object> assignment : subjectAssignments) {
-            Integer teacherId = (Integer) assignment.get("teacherId");
+            Integer teacherId = parseInt(assignment.get("teacherId"));
             if (teacherId != null) {
                 List<Schedule> teacherSchedules = scheduleRepository.findByTeacherId(teacherId);
                 for (Schedule s : teacherSchedules) {
@@ -367,9 +381,15 @@ public class ScheduleService {
             LocalDate weekStart = nextMonday.plusWeeks(week);
             System.out.println("📅 ===== Applying pattern to week " + (week + 1) + " (starting " + weekStart + ") =====");
             
-            // Duyệt pattern theo thứ tự deterministic (dayOffset, period)
+            // Duyệt pattern theo thứ tự deterministic (dayOffset, period) — không dùng sort chuỗi (tránh lỗi "10" < "2")
             List<String> sortedPatternKeys = new ArrayList<>(weekPattern.keySet());
-            Collections.sort(sortedPatternKeys); // Sắp xếp theo dayOffset-period
+            sortedPatternKeys.sort((ka, kb) -> {
+                String[] a = ka.split("-");
+                String[] b = kb.split("-");
+                int d = Integer.compare(Integer.parseInt(a[0]), Integer.parseInt(b[0]));
+                if (d != 0) return d;
+                return Integer.compare(Integer.parseInt(a[1]), Integer.parseInt(b[1]));
+            });
             
             for (String patternKey : sortedPatternKeys) {
                 Object[] patternValue = weekPattern.get(patternKey);
@@ -418,6 +438,8 @@ public class ScheduleService {
                 newSchedule.setTeacher(teacher);
                 newSchedule.setSchool(school);
                 newSchedule.setClassEntity(classEntity);
+                ClassSection linkedCs = resolveClassSection(classEntity, subject.getId(), teacher.getId(), null);
+                newSchedule.setClassSection(linkedCs);
                 
                 try {
                     scheduleRepository.save(newSchedule);
@@ -440,6 +462,74 @@ public class ScheduleService {
         return createdCount;
     }
 
+    private static final class GenAssign {
+        Subject subject;
+        User teacher;
+        Integer teacherId;
+        int periodsPerWeek;
+        int afternoonRemaining;
+        int morningRemaining;
+    }
+
+    private int countPatternSlotsForSubject(Subject subject, Map<String, Object[]> weekPattern) {
+        int c = 0;
+        for (Object[] v : weekPattern.values()) {
+            Subject s = (Subject) v[0];
+            if (s.getId() != null && subject.getId() != null && s.getId().equals(subject.getId())) {
+                c++;
+            }
+        }
+        return c;
+    }
+
+    /**
+     * Gán tối đa {@code maxToAssign} slot từ {@code slots} vào pattern (tuần đầu). Trả về số slot đã gán được.
+     */
+    private int tryAssignSlotsToPattern(
+            List<Object[]> slots,
+            int maxToAssign,
+            Subject subject,
+            User teacher,
+            Integer teacherId,
+            LocalDate nextMonday,
+            LocalDate today,
+            Map<String, Object[]> weekPattern,
+            Set<String> occupiedClassSlotsFirstWeek,
+            Set<String> occupiedTeacherSlotsFirstWeek) {
+        if (maxToAssign <= 0) {
+            return 0;
+        }
+        int assigned = 0;
+        for (Object[] slot : slots) {
+            if (assigned >= maxToAssign) {
+                break;
+            }
+            Integer dayOffset = (Integer) slot[0];
+            Integer period = (Integer) slot[1];
+            LocalDate firstWeekDate = nextMonday.plusDays(dayOffset);
+            if (firstWeekDate.isBefore(today)) {
+                continue;
+            }
+            String patternKey = dayOffset + "-" + period;
+            if (weekPattern.containsKey(patternKey)) {
+                continue;
+            }
+            String classSlotKey = firstWeekDate.toString() + "-" + period;
+            String teacherSlotKey = teacherId + "-" + firstWeekDate.toString() + "-" + period;
+            if (occupiedClassSlotsFirstWeek.contains(classSlotKey)
+                    || occupiedTeacherSlotsFirstWeek.contains(teacherSlotKey)) {
+                continue;
+            }
+            weekPattern.put(patternKey, new Object[]{subject, teacher, period, dayOffset});
+            occupiedClassSlotsFirstWeek.add(classSlotKey);
+            occupiedTeacherSlotsFirstWeek.add(teacherSlotKey);
+            assigned++;
+            System.out.println("✅ Pattern slot assigned: Day " + (dayOffset + 1) + " (offset=" + dayOffset + "), Period "
+                    + period + " -> " + subject.getName() + " (" + teacher.getFullName() + ")");
+        }
+        return assigned;
+    }
+
     private static Integer parseInt(Object obj) {
         if (obj == null) return null;
         if (obj instanceof Integer) return (Integer) obj;
@@ -456,6 +546,46 @@ public class ScheduleService {
         return null;
     }
 
+    /**
+     * Gắn học phần (class_section): ưu tiên id gửi từ FE; nếu không có thì khớp lớp–môn–GV
+     * và năm học của lớp khi có nhiều bản ghi (HK1/HK2).
+     */
+    private ClassSection resolveClassSection(ClassEntity classEntity, Integer subjectId, Integer teacherId,
+                                             Integer explicitClassSectionId) {
+        if (classEntity == null || subjectId == null || teacherId == null) return null;
+        if (explicitClassSectionId != null) {
+            ClassSection cs = classSectionRepository.findByIdFetchClassRoomAndSchool(explicitClassSectionId)
+                    .orElseThrow(() -> new BadRequestException("classSection not found"));
+            if (!Objects.equals(cs.getClassRoom().getId(), classEntity.getId())) {
+                throw new BadRequestException("classSection does not belong to this class");
+            }
+            if (cs.getSubject() == null || cs.getTeacher() == null
+                    || !subjectId.equals(cs.getSubject().getId())
+                    || !teacherId.equals(cs.getTeacher().getId())) {
+                throw new BadRequestException("classSection does not match subject/teacher");
+            }
+            return cs;
+        }
+        List<ClassSection> sections = classSectionRepository.findByClassRoomId(classEntity.getId());
+        List<ClassSection> matches = sections.stream()
+                .filter(cs -> cs.getSubject() != null && cs.getTeacher() != null
+                        && subjectId.equals(cs.getSubject().getId())
+                        && teacherId.equals(cs.getTeacher().getId()))
+                .collect(Collectors.toList());
+        if (matches.isEmpty()) return null;
+        if (matches.size() == 1) return matches.get(0);
+
+        String syName = classEntity.getSchoolYear() != null ? classEntity.getSchoolYear().getName() : null;
+        if (syName != null) {
+            Optional<ClassSection> byYear = matches.stream()
+                    .filter(cs -> syName.equals(cs.getSchoolYear()))
+                    .findFirst();
+            if (byYear.isPresent()) return byYear.get();
+        }
+        return matches.get(0);
+    }
+
+    @Transactional
     public Schedule createSchedule(Map<String, Object> scheduleData) {
         Schedule schedule = new Schedule();
         Integer classId = parseInt(scheduleData.get("classId"));
@@ -478,29 +608,35 @@ public class ScheduleService {
         }
 
         Integer period = parseInt(scheduleData.get("period"));
-        if (period == null || period < 1 || period > 5) {
-            throw new BadRequestException("Period must be between 1 and 5");
+        if (period == null || period < MIN_PERIOD || period > MAX_PERIOD) {
+            throw new BadRequestException("Period must be between " + MIN_PERIOD + " and " + MAX_PERIOD);
         }
         schedule.setPeriod(period);
 
         LocalDate date = parseDate(scheduleData.get("date"));
-        if (date == null) {
-            Integer dayOfWeek = parseInt(scheduleData.get("dayOfWeek"));
-            if (dayOfWeek != null && dayOfWeek >= 1 && dayOfWeek <= 6) {
-                schedule.setDayOfWeek(dayOfWeek);
+        Integer explicitDayOfWeek = parseInt(scheduleData.get("dayOfWeek"));
+        LocalDate weekStart = parseDate(scheduleData.get("weekStart"));
+
+        if (date != null) {
+            schedule.setDate(date);
+            schedule.setDayOfWeek(null);
+        } else if (explicitDayOfWeek != null && explicitDayOfWeek >= 1 && explicitDayOfWeek <= 6) {
+            schedule.setDayOfWeek(explicitDayOfWeek);
+            if (weekStart != null) {
+                schedule.setDate(weekStart.plusDays(explicitDayOfWeek - 1L));
+            } else {
                 LocalDate today = LocalDate.now();
                 int currentDayOfWeek = today.getDayOfWeek().getValue();
-                int daysToAdd = dayOfWeek - currentDayOfWeek;
+                int daysToAdd = explicitDayOfWeek - currentDayOfWeek;
                 if (daysToAdd < 0) daysToAdd += 7;
-                date = today.plusDays(daysToAdd);
+                schedule.setDate(today.plusDays(daysToAdd));
             }
+        } else {
+            throw new BadRequestException("Either date or dayOfWeek is required");
         }
+
+        date = schedule.getDate();
         if (date == null) throw new BadRequestException("Either date or dayOfWeek is required");
-        LocalDate today = LocalDate.now();
-        if (date.isBefore(today)) {
-            throw new BadRequestException("Cannot create schedule for past dates. Selected date: " + date + ", Today: " + today);
-        }
-        schedule.setDate(date);
 
         String room = (String) scheduleData.get("room");
         if (room == null || room.trim().isEmpty()) {
@@ -509,25 +645,17 @@ public class ScheduleService {
         }
         schedule.setRoom(room);
 
-        // Auto-link to class section if possible (class + subject + teacher)
+        Integer explicitCsId = parseInt(scheduleData.get("classSectionId"));
         if (subjectId != null && teacherId != null) {
-            List<ClassSection> sections = classSectionRepository.findByClassRoomId(classId);
-            ClassSection matched = sections.stream()
-                    .filter(cs -> cs.getSubject() != null && cs.getSubject().getId() != null
-                            && cs.getTeacher() != null && cs.getTeacher().getId() != null
-                            && cs.getSubject().getId().equals(subjectId)
-                            && cs.getTeacher().getId().equals(teacherId))
-                    .findFirst()
-                    .orElse(null);
-            if (matched != null) {
-                schedule.setClassSection(matched);
-            }
+            ClassSection matched = resolveClassSection(classEntity, subjectId, teacherId, explicitCsId);
+            schedule.setClassSection(matched);
         }
 
         List<Schedule> conflicts = findConflictsByDate(date, period, teacherId, classId);
         if (!conflicts.isEmpty()) throw new BadRequestException("Schedule conflict detected");
 
-        return scheduleRepository.save(schedule);
+        Schedule saved = scheduleRepository.save(schedule);
+        return scheduleRepository.findByIdWithRelations(saved.getId()).orElse(saved);
     }
 
     private static LocalDate parseDate(Object dateObj) {
@@ -543,6 +671,7 @@ public class ScheduleService {
         return null;
     }
 
+    @Transactional
     public Schedule updateSchedule(Integer id, Map<String, Object> scheduleData) {
         Schedule schedule = getScheduleById(id);
 
@@ -580,7 +709,7 @@ public class ScheduleService {
         Object periodObj = scheduleData.get("period");
         if (periodObj != null) {
             Integer period = parseInt(periodObj);
-            if (period != null && period >= 1 && period <= 5) schedule.setPeriod(period);
+            if (period != null && period >= MIN_PERIOD && period <= MAX_PERIOD) schedule.setPeriod(period);
         }
 
         Object dateObj = scheduleData.get("date");
@@ -590,17 +719,22 @@ public class ScheduleService {
                 schedule.setDate(parsed);
                 schedule.setDayOfWeek(null);
             }
-        } else {
+        } else if (scheduleData.containsKey("dayOfWeek") || scheduleData.containsKey("weekStart")) {
             Object dayOfWeekObj = scheduleData.get("dayOfWeek");
             if (dayOfWeekObj != null && !dayOfWeekObj.toString().trim().isEmpty()) {
                 Integer dayOfWeek = parseInt(dayOfWeekObj);
                 if (dayOfWeek != null && dayOfWeek >= 1 && dayOfWeek <= 6) {
                     schedule.setDayOfWeek(dayOfWeek);
-                    LocalDate today = LocalDate.now();
-                    int currentDayOfWeek = today.getDayOfWeek().getValue();
-                    int daysToAdd = dayOfWeek - currentDayOfWeek;
-                    if (daysToAdd < 0) daysToAdd += 7;
-                    schedule.setDate(today.plusDays(daysToAdd));
+                    LocalDate weekStart = parseDate(scheduleData.get("weekStart"));
+                    if (weekStart != null) {
+                        schedule.setDate(weekStart.plusDays(dayOfWeek - 1L));
+                    } else {
+                        LocalDate today = LocalDate.now();
+                        int currentDayOfWeek = today.getDayOfWeek().getValue();
+                        int daysToAdd = dayOfWeek - currentDayOfWeek;
+                        if (daysToAdd < 0) daysToAdd += 7;
+                        schedule.setDate(today.plusDays(daysToAdd));
+                    }
                 }
             }
         }
@@ -608,24 +742,20 @@ public class ScheduleService {
         String room = (String) scheduleData.get("room");
         if (room != null) schedule.setRoom(room);
 
-        // Re-link to class section when class/subject/teacher changed
-        Integer effectiveClassId = schedule.getClassEntity() != null ? schedule.getClassEntity().getId() : null;
-        if (effectiveClassId != null && subjectId != null && teacherId != null) {
-            List<ClassSection> sections = classSectionRepository.findByClassRoomId(effectiveClassId);
-            ClassSection matched = null;
-            for (ClassSection cs : sections) {
-                if (cs.getSubject() != null && cs.getSubject().getId() != null
-                        && cs.getTeacher() != null && cs.getTeacher().getId() != null
-                        && cs.getSubject().getId().equals(subjectId)
-                        && cs.getTeacher().getId().equals(teacherId)) {
-                    matched = cs;
-                    break;
-                }
-            }
+        ClassEntity effectiveClass = schedule.getClassEntity();
+        Integer effectiveSubjectId = subjectId != null ? subjectId
+                : (schedule.getSubject() != null ? schedule.getSubject().getId() : null);
+        Integer effectiveTeacherId = teacherId != null ? teacherId
+                : (schedule.getTeacher() != null ? schedule.getTeacher().getId() : null);
+        Integer explicitCsId = parseInt(scheduleData.get("classSectionId"));
+
+        if (effectiveClass != null && effectiveSubjectId != null && effectiveTeacherId != null) {
+            ClassSection matched = resolveClassSection(effectiveClass, effectiveSubjectId, effectiveTeacherId, explicitCsId);
             schedule.setClassSection(matched);
         }
 
-        return scheduleRepository.save(schedule);
+        Schedule saved = scheduleRepository.save(schedule);
+        return scheduleRepository.findByIdWithRelations(saved.getId()).orElse(saved);
     }
 }
 

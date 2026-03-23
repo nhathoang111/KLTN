@@ -27,7 +27,16 @@ public class ExamScoreController {
         return ResponseEntity.ok(Map.of("examScores", scores));
     }
 
-    @GetMapping("/{id}")
+    /** Phải đặt trước GET /{id} để không bị coi là id. */
+    @GetMapping("/tbm-summary")
+    public ResponseEntity<?> getTbmSummary(
+            @RequestParam Integer classId,
+            @RequestParam Integer subjectId) {
+        return ResponseEntity.ok(examScoreService.getTbmSummary(classId, subjectId));
+    }
+
+    /** Chỉ số — tránh trùng path chữ (vd. /tbm-summary) với /{id}. */
+    @GetMapping("/{id:\\d+}")
     public ResponseEntity<?> getExamScore(@PathVariable Integer id) {
         ExamScore score = examScoreService.getExamScore(id);
         return ResponseEntity.ok(score);
@@ -45,7 +54,7 @@ public class ExamScoreController {
         ));
     }
 
-    @PutMapping("/{id}")
+    @PutMapping("/{id:\\d+}")
     public ResponseEntity<?> updateExamScore(
             @PathVariable Integer id,
             @RequestBody Map<String, Object> scoreData,
@@ -58,7 +67,7 @@ public class ExamScoreController {
         ));
     }
 
-    @DeleteMapping("/{id}")
+    @DeleteMapping("/{id:\\d+}")
     public ResponseEntity<?> deleteExamScore(@PathVariable Integer id) {
         examScoreService.deleteExamScore(id);
         return ResponseEntity.ok(Map.of("message", "Exam score deleted successfully"));

@@ -1,8 +1,10 @@
 /**
- * Khung giờ trường học (chỉ dùng FE hiển thị — không đổi logic BE).
- * Tiết 1–5 map với period 1–5 trong API (buổi sáng).
- * Buổi chiều: hiển thị khung giờ chuẩn; hệ thống hiện chưa có period 6–9 trên BE.
+ * Khung giờ trường học (FE hiển thị + đồng bộ với API schedules.period).
+ * Buổi sáng: period 1–5.
+ * Buổi chiều: period 6–10.
  */
+
+export const MAX_PERIOD = 10;
 
 export const DAY_COLUMNS = [1, 2, 3, 4, 5, 6]; // Thứ 2 → Thứ 7
 
@@ -17,13 +19,13 @@ export const TIMELINE_MORNING = [
   { id: 'am-p5', type: 'lesson', label: 'Tiết 5', period: 5, startMin: 10 * 60 + 40, endMin: 11 * 60 + 25 },
 ];
 
-/** Buổi chiều: không có field period (BE chưa có tiết 6–9) — chỉ hiển thị */
+/** Buổi chiều: period 6–10 (không xen giải lao — khớp lưới 10 tiết/ngày) */
 export const TIMELINE_AFTERNOON = [
-  { id: 'pm-p1', type: 'lesson', label: 'Tiết 1 (chiều)', startMin: 13 * 60 + 30, endMin: 14 * 60 + 15, period: null },
-  { id: 'pm-p2', type: 'lesson', label: 'Tiết 2 (chiều)', startMin: 14 * 60 + 15, endMin: 15 * 60, period: null },
-  { id: 'pm-long', type: 'long_break', label: 'Giải lao', startMin: 15 * 60, endMin: 15 * 60 + 15 },
-  { id: 'pm-p3', type: 'lesson', label: 'Tiết 3 (chiều)', startMin: 15 * 60 + 15, endMin: 16 * 60, period: null },
-  { id: 'pm-p4', type: 'lesson', label: 'Tiết 4 (chiều)', startMin: 16 * 60, endMin: 16 * 60 + 45, period: null },
+  { id: 'pm-p6', type: 'lesson', label: 'Tiết 6', period: 6, startMin: 13 * 60, endMin: 13 * 60 + 45 },
+  { id: 'pm-p7', type: 'lesson', label: 'Tiết 7', period: 7, startMin: 13 * 60 + 50, endMin: 14 * 60 + 35 },
+  { id: 'pm-p8', type: 'lesson', label: 'Tiết 8', period: 8, startMin: 14 * 60 + 40, endMin: 15 * 60 + 25 },
+  { id: 'pm-p9', type: 'lesson', label: 'Tiết 9', period: 9, startMin: 15 * 60 + 30, endMin: 16 * 60 + 15 },
+  { id: 'pm-p10', type: 'lesson', label: 'Tiết 10', period: 10, startMin: 16 * 60 + 20, endMin: 17 * 60 + 5 },
 ];
 
 export function formatTimeRange(startMin, endMin) {

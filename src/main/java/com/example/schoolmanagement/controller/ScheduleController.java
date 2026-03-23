@@ -7,6 +7,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -72,10 +73,11 @@ public class ScheduleController {
         String warning = (savedSchedule.getClassSection() == null)
                 ? "Chưa có phân công chính thức cho lớp–môn–giáo viên này (class_section)."
                 : null;
-        return ResponseEntity.ok(Map.of(
-                "schedule", savedSchedule,
-                "warning", warning
-        ));
+        // Map.of không cho phép value null — warning=null khi đã có class_section sẽ gây NPE → 500
+        Map<String, Object> body = new HashMap<>();
+        body.put("schedule", savedSchedule);
+        body.put("warning", warning);
+        return ResponseEntity.ok(body);
     }
 
     @PutMapping("/{id}")
@@ -84,10 +86,10 @@ public class ScheduleController {
         String warning = (updatedSchedule.getClassSection() == null)
                 ? "Chưa có phân công chính thức cho lớp–môn–giáo viên này (class_section)."
                 : null;
-        return ResponseEntity.ok(Map.of(
-                "schedule", updatedSchedule,
-                "warning", warning
-        ));
+        Map<String, Object> body = new HashMap<>();
+        body.put("schedule", updatedSchedule);
+        body.put("warning", warning);
+        return ResponseEntity.ok(body);
     }
 
     @DeleteMapping("/{id}")
@@ -99,15 +101,20 @@ public class ScheduleController {
     @PostMapping("/generate")
     public ResponseEntity<?> generateSchedules(@RequestBody Map<String, Object> request) {
         Object classIdObj = request.get("classId");
-        Integer classId = classIdObj instanceof Integer ? (Integer) classIdObj : null;
-        if (classId == null && classIdObj instanceof Number) {
+        Integer classId = null;
+        if (classIdObj instanceof Number) {
             classId = ((Number) classIdObj).intValue();
         }
-        Integer schoolId = request.get("schoolId") instanceof Integer ? (Integer) request.get("schoolId") : null;
+        Object schoolIdObj = request.get("schoolId");
+        Integer schoolId = schoolIdObj instanceof Number ? ((Number) schoolIdObj).intValue() : null;
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> subjectAssignments = (List<Map<String, Object>>) request.get("subjectAssignments");
-        Integer numberOfWeeks = request.get("numberOfWeeks") instanceof Integer
-                ? (Integer) request.get("numberOfWeeks") : 1;
+        Object numberOfWeeksObj = request.get("numberOfWeeks");
+        Integer numberOfWeeks = numberOfWeeksObj instanceof Number
+                ? ((Number) numberOfWeeksObj).intValue() : 1;
+        if (numberOfWeeks == null || numberOfWeeks < 1) {
+            numberOfWeeks = 1;
+        }
 
         if (classId == null || subjectAssignments == null || subjectAssignments.isEmpty()) {
             throw new BadRequestException("classId and subjectAssignments are required");

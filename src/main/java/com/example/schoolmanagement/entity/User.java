@@ -1,5 +1,6 @@
 package com.example.schoolmanagement.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 
 import java.time.LocalDate;
@@ -84,6 +85,7 @@ public class User {
     public String getDepartment() { return department; }
     public void setDepartment(String department) { this.department = department; }
 
+    @JsonIgnore
     public Subject getSubject() { return subject; }
     public void setSubject(Subject subject) { this.subject = subject; }
 

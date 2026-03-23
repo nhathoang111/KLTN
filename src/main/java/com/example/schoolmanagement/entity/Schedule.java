@@ -36,7 +36,7 @@ public class Schedule {
     @Column(name = "date")
     private LocalDate date; // Ngày cụ thể (ưu tiên hơn dayOfWeek)
 
-    private Integer period; // Tiết học (1-5)
+    private Integer period; // Tiết học: 1–5 buổi sáng, 6–10 buổi chiều (theo FE)
     private String room; // Phòng học
 
     // Getters and Setters

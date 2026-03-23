@@ -1,9 +1,390 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import api from '../../../../shared/lib/api';
 import './ExamScoreManagement.css';
 import { useAuth } from '../../../auth/context/AuthContext';
-import { Pencil, Trash2 } from 'lucide-react';
-import AdminXemDiemPanel from '../../components/AdminXemDiemPanel';
+import { Pencil, Trash2, Search, Download } from 'lucide-react';
+import { scoreCellClass } from '../../utils/scoreGridHelpers';
+import { normalizeSemesterCode } from '../../utils/semesterNormalize';
+
+const ADMIN_VIEW_SEMESTERS = [
+  { value: '1', label: 'Học kỳ 1' },
+  { value: '2', label: 'Học kỳ 2' },
+];
+
+function adminScheduleMatchesClassSemester(schedule, semesterUi, classSchoolYearName) {
+  const cs = schedule.classSection;
+  if (!cs) return false;
+  const code = normalizeSemesterCode(cs.semester);
+  if (code == null || code !== semesterUi) return false;
+  const syClass = classSchoolYearName ? String(classSchoolYearName).trim() : '';
+  const syCs = cs.schoolYear != null ? String(cs.schoolYear).trim() : '';
+  if (syClass && syCs && syClass !== syCs) return false;
+  return true;
+}
+
+function adminUniqueSubjectsFromSchedules(schedules) {
+  const map = new Map();
+  schedules.forEach((sch) => {
+    const sub = sch.subject;
+    if (!sub?.id) return;
+    if (!map.has(sub.id)) map.set(sub.id, { id: sub.id, name: sub.name || `Môn #${sub.id}` });
+  });
+  return Array.from(map.values()).sort((a, b) => (a.name || '').localeCompare(b.name || '', 'vi'));
+}
+
+/** Khối "Xem điểm" admin: điểm + TBM từ GET /api/exam-scores/tbm-summary */
+function AdminXemDiemSection({ classes, subjects, user }) {
+  const [selectedClassId, setSelectedClassId] = useState('');
+  const [semester, setSemester] = useState('1');
+  const [selectedSubjectId, setSelectedSubjectId] = useState('');
+  const [studentSearch, setStudentSearch] = useState('');
+  const [tbmRows, setTbmRows] = useState([]);
+  const [loadingTbm, setLoadingTbm] = useState(false);
+  const [schedulesForClass, setSchedulesForClass] = useState([]);
+  const [loadingSchedules, setLoadingSchedules] = useState(false);
+  const [teacherLabel, setTeacherLabel] = useState('');
+
+  const [showOral, setShowOral] = useState(true);
+  const [show15, setShow15] = useState(true);
+  const [show1T, setShow1T] = useState(true);
+  const [showCk, setShowCk] = useState(true);
+
+  const classIdNum = selectedClassId ? Number(selectedClassId) : null;
+  const subjectIdNum = selectedSubjectId ? Number(selectedSubjectId) : null;
+
+  const schoolSubjects = useMemo(() => {
+    if (!user?.school?.id) return subjects || [];
+    return (subjects || []).filter((s) => s.school?.id === user.school.id);
+  }, [subjects, user?.school?.id]);
+
+  const selectedClass = useMemo(
+    () => (selectedClassId ? classes.find((c) => String(c.id) === String(selectedClassId)) : null),
+    [classes, selectedClassId]
+  );
+  const classSchoolYearName = selectedClass?.schoolYear?.name || selectedClass?.school_year?.name || '';
+
+  const schedulesForSemester = useMemo(() => {
+    return schedulesForClass.filter((sch) =>
+      adminScheduleMatchesClassSemester(sch, semester, classSchoolYearName)
+    );
+  }, [schedulesForClass, semester, classSchoolYearName]);
+
+  const subjectsForSemester = useMemo(
+    () => adminUniqueSubjectsFromSchedules(schedulesForSemester),
+    [schedulesForSemester]
+  );
+
+  useEffect(() => {
+    if (!classIdNum || !subjectIdNum) {
+      setTbmRows([]);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      setLoadingTbm(true);
+      try {
+        const res = await api.get('/exam-scores/tbm-summary', {
+          params: { classId: classIdNum, subjectId: subjectIdNum },
+        });
+        if (!cancelled) setTbmRows(res.data.rows || []);
+      } catch {
+        if (!cancelled) setTbmRows([]);
+      } finally {
+        if (!cancelled) setLoadingTbm(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [classIdNum, subjectIdNum]);
+
+  useEffect(() => {
+    if (!classIdNum) {
+      setSchedulesForClass([]);
+      setTeacherLabel('');
+      return;
+    }
+    const loadTk = async () => {
+      setLoadingSchedules(true);
+      try {
+        const res = await api.get(`/schedules/class/${classIdNum}`);
+        setSchedulesForClass(res.data.schedules || []);
+      } catch {
+        setSchedulesForClass([]);
+      } finally {
+        setLoadingSchedules(false);
+      }
+    };
+    loadTk();
+  }, [classIdNum]);
+
+  useEffect(() => {
+    if (!selectedSubjectId) return;
+    const ok = subjectsForSemester.some((s) => String(s.id) === String(selectedSubjectId));
+    if (!ok) setSelectedSubjectId('');
+  }, [subjectsForSemester, selectedSubjectId]);
+
+  useEffect(() => {
+    if (!subjectIdNum || !schedulesForSemester.length) {
+      setTeacherLabel('');
+      return;
+    }
+    const match = schedulesForSemester.find(
+      (sch) => (sch.subject?.id || sch.subject_id) === subjectIdNum
+    );
+    setTeacherLabel(match?.teacher?.fullName || '—');
+  }, [subjectIdNum, schedulesForSemester]);
+
+  const filteredRows = useMemo(() => {
+    const q = studentSearch.trim().toLowerCase();
+    if (!q) return tbmRows;
+    return tbmRows.filter((row) => {
+      const name = (row.fullName || '').toLowerCase();
+      const idStr = String(row.studentId ?? '');
+      return name.includes(q) || idStr.includes(q);
+    });
+  }, [tbmRows, studentSearch]);
+
+  const downloadCsv = () => {
+    if (!classIdNum || !subjectIdNum || !filteredRows.length) {
+      alert('Chọn lớp, môn và đảm bảo có danh sách học sinh.');
+      return;
+    }
+    const cls = classes.find((c) => c.id === classIdNum);
+    const sub =
+      subjectsForSemester.find((s) => s.id === subjectIdNum) ||
+      schoolSubjects.find((s) => s.id === subjectIdNum);
+    const headers = ['STT', 'Họ tên'];
+    if (showOral) headers.push('Miệng 1');
+    if (show15) headers.push('15P-1');
+    if (show1T) headers.push('1T-1');
+    if (showCk) headers.push('CK-1');
+    headers.push('TBM');
+
+    const lines = [headers.join(',')];
+    filteredRows.forEach((r, idx) => {
+      const cells = [idx + 1, `"${(r.fullName || '').replace(/"/g, '""')}"`];
+      if (showOral) cells.push(r.oral1 ?? '');
+      if (show15) cells.push(r.p151 ?? '');
+      if (show1T) cells.push(r.t1 ?? '');
+      if (showCk) cells.push(r.ck1 ?? '');
+      cells.push(r.tbm ?? '');
+      lines.push(cells.join(','));
+    });
+
+    const blob = new Blob(['\uFEFF' + lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `tom_diem_${cls?.name || 'lop'}_${sub?.name || 'mon'}_${semester}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const renderScoreCell = (val) => {
+    if (val == null) return <span className="text-slate-400">—</span>;
+    return <span className={`es-score-pill ${scoreCellClass(val)}`}>{val.toFixed(1)}</span>;
+  };
+
+  return (
+    <div className="admin-xem-diem space-y-4">
+      <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm flex flex-wrap items-end gap-4">
+        <div className="min-w-[140px]">
+          <label className="block text-xs font-semibold text-slate-600 mb-1">Lớp</label>
+          <select
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            value={selectedClassId}
+            onChange={(e) => {
+              setSelectedClassId(e.target.value);
+              setSelectedSubjectId('');
+            }}
+          >
+            <option value="">— Chọn lớp —</option>
+            {classes.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="min-w-[140px]">
+          <label className="block text-xs font-semibold text-slate-600 mb-1">Học kỳ</label>
+          <select
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            value={semester}
+            onChange={(e) => {
+              setSemester(e.target.value);
+              setSelectedSubjectId('');
+            }}
+          >
+            {ADMIN_VIEW_SEMESTERS.map((s) => (
+              <option key={s.value} value={s.value}>
+                {s.label}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="min-w-[160px]">
+          <label className="block text-xs font-semibold text-slate-600 mb-1">Môn học</label>
+          <select
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            value={selectedSubjectId}
+            onChange={(e) => setSelectedSubjectId(e.target.value)}
+            disabled={!selectedClassId || loadingSchedules}
+          >
+            <option value="">
+              {loadingSchedules ? 'Đang tải môn...' : '— Chọn môn —'}
+            </option>
+            {subjectsForSemester.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
+            ))}
+          </select>
+        </div>
+        {selectedClassId && !loadingSchedules && subjectsForSemester.length === 0 && (
+          <p className="w-full text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+            Không có môn nào được phân công (TKB / học phần) cho lớp và học kỳ đã chọn. Kiểm tra TKB và học phần có trường học kỳ, năm học khớp với lớp.
+          </p>
+        )}
+        <div className="min-w-[220px] flex-1">
+          <label className="block text-xs font-semibold text-slate-600 mb-1">Tìm kiếm học sinh</label>
+          <div className="relative">
+            <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <input
+              type="search"
+              className="w-full rounded-lg border border-slate-300 py-2 pl-9 pr-3 text-sm"
+              placeholder="Tìm kiếm học sinh..."
+              value={studentSearch}
+              onChange={(e) => setStudentSearch(e.target.value)}
+            />
+          </div>
+        </div>
+        <div className="min-w-[200px]">
+          <label className="block text-xs font-semibold text-slate-600 mb-1">Giáo viên phụ trách (môn đã chọn)</label>
+          <div className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+            {teacherLabel || '—'}
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={downloadCsv}
+          className="inline-flex items-center gap-2 rounded-lg bg-orange-500 px-4 py-2 text-sm font-semibold text-white shadow hover:bg-orange-600"
+        >
+          <Download className="h-4 w-4" />
+          Tải xuống
+        </button>
+      </div>
+
+      <div className="flex flex-wrap gap-6 rounded-lg border border-blue-100 bg-blue-50/50 px-4 py-3">
+        <label className="inline-flex items-center gap-2 text-sm text-blue-900 cursor-pointer">
+          <input type="checkbox" checked={showOral} onChange={(e) => setShowOral(e.target.checked)} className="rounded border-blue-400 text-blue-600" />
+          Điểm miệng
+        </label>
+        <label className="inline-flex items-center gap-2 text-sm text-blue-900 cursor-pointer">
+          <input type="checkbox" checked={show15} onChange={(e) => setShow15(e.target.checked)} className="rounded border-blue-400 text-blue-600" />
+          Điểm 15 phút
+        </label>
+        <label className="inline-flex items-center gap-2 text-sm text-blue-900 cursor-pointer">
+          <input type="checkbox" checked={show1T} onChange={(e) => setShow1T(e.target.checked)} className="rounded border-blue-400 text-blue-600" />
+          Điểm 1 tiết
+        </label>
+        <label className="inline-flex items-center gap-2 text-sm text-blue-900 cursor-pointer">
+          <input type="checkbox" checked={showCk} onChange={(e) => setShowCk(e.target.checked)} className="rounded border-blue-400 text-blue-600" />
+          Điểm cuối kỳ
+        </label>
+      </div>
+
+      <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+        <div className="border-b border-slate-200 bg-slate-50 px-4 py-2">
+          <h3 className="text-sm font-semibold text-slate-700">Toàn bộ điểm</h3>
+        </div>
+        <div className="overflow-x-auto">
+          {loadingTbm ? (
+            <div className="flex justify-center py-12 text-slate-500">Đang tải điểm...</div>
+          ) : !classIdNum || !subjectIdNum ? (
+            <div className="py-12 text-center text-slate-500">Chọn lớp và môn học để xem bảng điểm.</div>
+          ) : (
+            <table className="admin-grade-table min-w-full border-collapse text-sm">
+              <thead>
+                <tr className="bg-slate-100 text-xs font-semibold uppercase tracking-wide text-slate-600">
+                  <th rowSpan={2} className="border border-slate-200 px-2 py-2">
+                    STT
+                  </th>
+                  <th rowSpan={2} className="border border-slate-200 px-2 py-2 text-left min-w-[160px]">
+                    Họ tên
+                  </th>
+                  {showOral && (
+                    <th colSpan={1} className="border border-slate-200 px-2 py-2 text-center bg-sky-50">
+                      Điểm miệng
+                    </th>
+                  )}
+                  {show15 && (
+                    <th colSpan={1} className="border border-slate-200 px-2 py-2 text-center bg-sky-50">
+                      Điểm 15 phút
+                    </th>
+                  )}
+                  {show1T && (
+                    <th colSpan={1} className="border border-slate-200 px-2 py-2 text-center bg-sky-50">
+                      Điểm 1 tiết
+                    </th>
+                  )}
+                  {showCk && (
+                    <th colSpan={1} className="border border-slate-200 px-2 py-2 text-center bg-sky-50">
+                      Điểm cuối kỳ
+                    </th>
+                  )}
+                  <th rowSpan={2} className="border border-slate-200 px-2 py-2 text-center bg-emerald-50">
+                    TBM
+                  </th>
+                </tr>
+                <tr className="bg-white text-[11px] text-slate-600">
+                  {showOral && <th className="border border-slate-200 px-1 py-1">Miệng 1</th>}
+                  {show15 && <th className="border border-slate-200 px-1 py-1">15P-1</th>}
+                  {show1T && <th className="border border-slate-200 px-1 py-1">1T-1</th>}
+                  {showCk && <th className="border border-slate-200 px-1 py-1">CK-1</th>}
+                </tr>
+              </thead>
+              <tbody>
+                {filteredRows.length === 0 ? (
+                  <tr>
+                    <td colSpan={15} className="border border-slate-200 px-4 py-8 text-center text-slate-500">
+                      Không có học sinh hoặc không khớp bộ lọc tìm kiếm.
+                    </td>
+                  </tr>
+                ) : (
+                  filteredRows.map((r, index) => {
+                    return (
+                      <tr key={r.studentId} className="odd:bg-white even:bg-slate-50/80 hover:bg-amber-50/30">
+                        <td className="border border-slate-200 px-2 py-2 text-center">{index + 1}</td>
+                        <td className="border border-slate-200 px-2 py-2 font-medium text-slate-800">{r.fullName}</td>
+                        {showOral && (
+                          <td className="border border-slate-200 px-1 py-1 text-center">{renderScoreCell(r?.oral1)}</td>
+                        )}
+                        {show15 && (
+                          <td className="border border-slate-200 px-1 py-1 text-center">{renderScoreCell(r?.p151)}</td>
+                        )}
+                        {show1T && (
+                          <td className="border border-slate-200 px-1 py-1 text-center">{renderScoreCell(r?.t1)}</td>
+                        )}
+                        {showCk && (
+                          <td className="border border-slate-200 px-1 py-1 text-center">{renderScoreCell(r?.ck1)}</td>
+                        )}
+                        <td className="border border-slate-200 px-1 py-1 text-center font-semibold">
+                          {renderScoreCell(r?.tbm)}
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 const ExamScoreManagement = () => {
   const { user } = useAuth();
@@ -17,10 +398,20 @@ const ExamScoreManagement = () => {
   const [selectedClassForScore, setSelectedClassForScore] = useState('');
   const [selectedSubjectForScore, setSelectedSubjectForScore] = useState('');
   const [classStudents, setClassStudents] = useState([]);
-  const [classScoreData, setClassScoreData] = useState({}); // {studentId: {score15P, score1Tiet, scoreCuoiKi, note15P, note1Tiet, noteCuoiKi}}
-  const [filteredSubjectsForClass, setFilteredSubjectsForClass] = useState([]); // Subjects được phân công cho lớp đã chọn
+  const [classScoreData, setClassScoreData] = useState({}); // {studentId: {scoreMieng, score15P, ...}}
+  const [filteredSubjectsForClass, setFilteredSubjectsForClass] = useState([]); // Môn theo TKB + học kỳ (GV)
   const [displayFilterClassId, setDisplayFilterClassId] = useState(''); // Lớp đã chọn để filter hiển thị (cho Teacher)
   const [isEditMode, setIsEditMode] = useState(false); // Phân biệt giữa nhập điểm mới và sửa điểm
+  /** Học kỳ trong modal nhập điểm (lọc môn theo TKB, khớp admin) */
+  const [teacherModalSemester, setTeacherModalSemester] = useState('1');
+  /** Map studentId -> row từ GET /exam-scores/tbm-summary (TBM chỉ hiển thị, không tính FE) */
+  const [teacherTbmByStudentId, setTeacherTbmByStudentId] = useState({});
+  /** Bảng ngoài GV/HS: TBM theo cặp lớp-môn */
+  const [outerTbmByPair, setOuterTbmByPair] = useState({});
+  const [teacherOuterShowOral, setTeacherOuterShowOral] = useState(true);
+  const [teacherOuterShow15, setTeacherOuterShow15] = useState(true);
+  const [teacherOuterShow1T, setTeacherOuterShow1T] = useState(true);
+  const [teacherOuterShowCk, setTeacherOuterShowCk] = useState(true);
 
   useEffect(() => {
     fetchExamScores();
@@ -257,69 +648,6 @@ const ExamScoreManagement = () => {
     }
   };
 
-
-  const handleEdit = async (group) => {
-    if (isScoreLocked) {
-      alert('Điểm số đã bị khóa. Không thể chỉnh sửa điểm.');
-      return;
-    }
-
-    // Mở modal nhập điểm theo lớp với lớp và môn học đã được chọn
-    const classId = group.classEntity?.id?.toString() || '';
-    const subjectId = group.subject?.id?.toString() || '';
-
-    setSelectedClassForScore(classId);
-    setSelectedSubjectForScore(subjectId);
-    setIsEditMode(true); // Đặt chế độ sửa
-
-    // Fetch schedules của lớp để lấy danh sách môn học được phân công
-    if (classId) {
-      try {
-        const schedulesResponse = await api.get(`/schedules/class/${classId}`);
-        const classSchedules = schedulesResponse.data.schedules || [];
-
-        // Lấy danh sách subject IDs từ schedules
-        const assignedSubjectIds = new Set();
-        classSchedules.forEach(schedule => {
-          const scheduleSubjectId = schedule.subject?.id || schedule.subject_id;
-          if (scheduleSubjectId) {
-            assignedSubjectIds.add(scheduleSubjectId);
-          }
-        });
-
-        // Filter subjects để chỉ hiển thị các môn được phân công cho lớp này
-        const userRole = user?.role?.name?.toUpperCase();
-        let filteredSubjects = subjects.filter(subject => {
-          const subjectId = subject.id;
-          const isAssignedToClass = assignedSubjectIds.has(subjectId);
-
-          // Nếu là teacher, cũng cần kiểm tra xem teacher có dạy môn này không
-          if (userRole === 'TEACHER' && user?.id) {
-            const isTaughtByTeacher = classSchedules.some(schedule => {
-              const scheduleTeacherId = schedule.teacher?.id || schedule.teacher_id;
-              const scheduleSubjectId = schedule.subject?.id || schedule.subject_id;
-              return scheduleTeacherId === user.id && scheduleSubjectId === subjectId;
-            });
-            return isAssignedToClass && isTaughtByTeacher;
-          }
-
-          return isAssignedToClass;
-        });
-
-        setFilteredSubjectsForClass(filteredSubjects);
-      } catch (error) {
-        console.error('Error fetching schedules for class:', error);
-        setFilteredSubjectsForClass(subjects);
-      }
-    }
-
-    // Load danh sách học sinh và điểm hiện có
-    // Refresh examScores trước để đảm bảo có dữ liệu mới nhất
-    await fetchExamScores();
-    await fetchStudentsByClass(classId);
-    setShowClassModal(true);
-  };
-
   const handleDelete = async (scoreId) => {
     if (isScoreLocked) {
       alert('Điểm số đã bị khóa. Không thể xóa điểm.');
@@ -342,6 +670,9 @@ const ExamScoreManagement = () => {
     }
 
     const scoresToDelete = [];
+    if (group.scoreMieng) {
+      scoresToDelete.push({ type: 'miệng', id: group.scoreMieng.id });
+    }
     if (group.score15P) {
       scoresToDelete.push({ type: '15 phút', id: group.score15P.id });
     }
@@ -390,99 +721,84 @@ const ExamScoreManagement = () => {
   };
 
 
-  // Lấy danh sách học sinh theo lớp
-  const fetchStudentsByClass = async (classId) => {
+  // Lấy danh sách học sinh theo lớp (subjectIdOverride: sau khi đổi môn, state có thể chưa kịp cập nhật)
+  const fetchStudentsByClass = async (classId, subjectIdOverride = null) => {
     if (!classId) {
       setClassStudents([]);
       setClassScoreData({});
       return;
     }
 
-    try {
-      console.log('=== FETCH STUDENTS BY CLASS ===');
-      console.log('Class ID:', classId);
-      console.log('Selected Subject:', selectedSubjectForScore);
+    const subjectIdResolved = subjectIdOverride != null && subjectIdOverride !== ''
+      ? subjectIdOverride
+      : selectedSubjectForScore;
 
+    try {
       let studentsInClass = [];
 
-      // Thử lấy học sinh từ API theo lớp
       try {
-        console.log('Calling API: /classes/' + classId + '/students');
         const response = await api.get(`/classes/${classId}/students`);
-        console.log('✅ API Response received:', response);
-        console.log('Response data:', response.data);
         studentsInClass = response.data.students || [];
-        console.log('✅ Fetched students by class:', studentsInClass.length);
-        console.log('✅ Students data:', studentsInClass);
-
-        if (studentsInClass.length === 0) {
-          console.warn('⚠️ API returned empty students array. This class may have no enrolled students.');
-        }
       } catch (apiError) {
-        console.error('❌ API error when fetching students by class:', apiError);
-        console.error('Error status:', apiError.response?.status);
-        console.error('Error message:', apiError.message);
-        console.error('Error response data:', apiError.response?.data);
-
-        // Nếu API trả về 404, class không tồn tại hoặc route không được match
-        if (apiError.response?.status === 404) {
-          console.error('❌ Class not found (404). Route may not be matched correctly.');
-          console.error('Please check backend logs to see if endpoint was called.');
-        }
         studentsInClass = [];
-      }
-
-      // Chỉ hiển thị học sinh từ enrollments của lớp đã chọn
-      if (studentsInClass.length === 0) {
-        console.log('⚠️ No students enrolled in this class. Only students enrolled in the selected class will be displayed.');
-      } else {
-        console.log('✅ Successfully fetched', studentsInClass.length, 'students enrolled in class from API');
       }
 
       setClassStudents(studentsInClass);
 
-      // Khởi tạo classScoreData với các học sinh
+      const classIdNum = parseInt(classId, 10);
       const initialScoreData = {};
-      studentsInClass.forEach(student => {
-        // Tìm điểm hiện có của học sinh này cho môn học đã chọn
-        const subjectId = selectedSubjectForScore ? parseInt(selectedSubjectForScore) : null;
-        let existing15P = '', existing1Tiet = '', existingCuoiKi = '';
-        let note15P = '', note1Tiet = '', noteCuoiKi = '';
+      studentsInClass.forEach((student) => {
+        const subjectId = subjectIdResolved ? parseInt(subjectIdResolved, 10) : null;
+        let existingMieng = '', existing15P = '', existing1Tiet = '', existingCuoiKi = '';
+        let noteMieng = '', note15P = '', note1Tiet = '', noteCuoiKi = '';
 
         if (subjectId) {
-          const existingScores = examScores.filter(score =>
-            score.student?.id === student.id &&
-            score.subject?.id === subjectId
-          );
+          const existingScores = examScores.filter((score) => {
+            const scid = score.classEntity?.id ?? score.class_id;
+            const sameClass = scid === classIdNum || parseInt(scid, 10) === classIdNum;
+            return (
+              score.student?.id === student.id &&
+              score.subject?.id === subjectId &&
+              sameClass
+            );
+          });
 
-          const score15P = existingScores.find(s => {
+          const scoreMieng = existingScores.find((s) => {
+            const st = (s.scoreType || s.score_type || '').toUpperCase();
+            return st === 'MIENG';
+          });
+          const score15P = existingScores.find((s) => {
             const st = (s.scoreType || s.score_type || '15P').toUpperCase();
             return st === '15P';
           });
-          const score1Tiet = existingScores.find(s => {
+          const score1Tiet = existingScores.find((s) => {
             const st = (s.scoreType || s.score_type || '').toUpperCase();
             return st === '1TIET';
           });
-          const scoreCuoiKi = existingScores.find(s => {
+          const scoreCuoiKi = existingScores.find((s) => {
             const st = (s.scoreType || s.score_type || '').toUpperCase();
             return st === 'CUOIKI';
           });
 
+          existingMieng = scoreMieng?.score?.toString() || '';
           existing15P = score15P?.score?.toString() || '';
           existing1Tiet = score1Tiet?.score?.toString() || '';
           existingCuoiKi = scoreCuoiKi?.score?.toString() || '';
+          noteMieng = scoreMieng?.note || '';
           note15P = score15P?.note || '';
           note1Tiet = score1Tiet?.note || '';
           noteCuoiKi = scoreCuoiKi?.note || '';
         }
 
         initialScoreData[student.id] = {
+          scoreMieng: existingMieng,
           score15P: existing15P,
           score1Tiet: existing1Tiet,
           scoreCuoiKi: existingCuoiKi,
+          noteMieng: noteMieng,
           note15P: note15P,
           note1Tiet: note1Tiet,
-          noteCuoiKi: noteCuoiKi
+          noteCuoiKi: noteCuoiKi,
         };
       });
       setClassScoreData(initialScoreData);
@@ -493,62 +809,58 @@ const ExamScoreManagement = () => {
     }
   };
 
+  /** Môn học theo TKB + học kỳ (cùng logic lọc như admin Xem điểm) */
+  const loadSubjectsForTeacherClass = async (classId, semesterUi) => {
+    if (!classId) {
+      setFilteredSubjectsForClass([]);
+      return;
+    }
+    try {
+      const schedulesResponse = await api.get(`/schedules/class/${classId}`);
+      const classSchedules = schedulesResponse.data.schedules || [];
+      const selectedCls = classes.find((c) => String(c.id) === String(classId));
+      const classSchoolYearName = selectedCls?.schoolYear?.name || selectedCls?.school_year?.name || '';
+      const schedulesForSem = classSchedules.filter((sch) =>
+        adminScheduleMatchesClassSemester(sch, semesterUi, classSchoolYearName)
+      );
+
+      const assignedSubjectIds = new Set();
+      schedulesForSem.forEach((schedule) => {
+        const sid = schedule.subject?.id || schedule.subject_id;
+        if (sid) assignedSubjectIds.add(sid);
+      });
+
+      const userRole = user?.role?.name?.toUpperCase();
+      const filteredSubjects = subjects.filter((subject) => {
+        const subjectId = subject.id;
+        const isAssignedToClass = assignedSubjectIds.has(subjectId);
+        if (userRole === 'TEACHER' && user?.id) {
+          const isTaughtByTeacher = schedulesForSem.some((schedule) => {
+            const scheduleTeacherId = schedule.teacher?.id || schedule.teacher_id;
+            const scheduleSubjectId = schedule.subject?.id || schedule.subject_id;
+            return scheduleTeacherId === user.id && scheduleSubjectId === subjectId;
+          });
+          return isAssignedToClass && isTaughtByTeacher;
+        }
+        return isAssignedToClass;
+      });
+
+      setFilteredSubjectsForClass(filteredSubjects);
+    } catch (error) {
+      console.error('Error fetching schedules for class:', error);
+      setFilteredSubjectsForClass(subjects);
+    }
+  };
+
   // Xử lý khi chọn lớp
   const handleClassSelect = async (classId) => {
     setSelectedClassForScore(classId);
-    setSelectedSubjectForScore(''); // Reset môn học khi đổi lớp
-    setFilteredSubjectsForClass([]); // Reset filtered subjects
+    setSelectedSubjectForScore('');
+    setFilteredSubjectsForClass([]);
 
-    // Fetch schedules của lớp để lấy danh sách môn học được phân công
     if (classId) {
-      try {
-        console.log('Fetching schedules for class ID:', classId);
-        const schedulesResponse = await api.get(`/schedules/class/${classId}`);
-        const classSchedules = schedulesResponse.data.schedules || [];
-
-        console.log('Schedules for class:', classSchedules);
-
-        // Lấy danh sách subject IDs từ schedules
-        const assignedSubjectIds = new Set();
-        classSchedules.forEach(schedule => {
-          const subjectId = schedule.subject?.id || schedule.subject_id;
-          if (subjectId) {
-            assignedSubjectIds.add(subjectId);
-          }
-        });
-
-        console.log('Assigned subject IDs for class:', Array.from(assignedSubjectIds));
-
-        // Filter subjects để chỉ hiển thị các môn được phân công cho lớp này
-        // Nếu là teacher, cũng cần filter theo môn mà teacher đó dạy
-        const userRole = user?.role?.name?.toUpperCase();
-        let filteredSubjects = subjects.filter(subject => {
-          const subjectId = subject.id;
-          const isAssignedToClass = assignedSubjectIds.has(subjectId);
-
-          // Nếu là teacher, cũng cần kiểm tra xem teacher có dạy môn này không
-          if (userRole === 'TEACHER' && user?.id) {
-            // Kiểm tra xem schedule có teacher_id trùng với user.id không
-            const isTaughtByTeacher = classSchedules.some(schedule => {
-              const scheduleTeacherId = schedule.teacher?.id || schedule.teacher_id;
-              const scheduleSubjectId = schedule.subject?.id || schedule.subject_id;
-              return scheduleTeacherId === user.id && scheduleSubjectId === subjectId;
-            });
-            return isAssignedToClass && isTaughtByTeacher;
-          }
-
-          return isAssignedToClass;
-        });
-
-        console.log('Filtered subjects for class:', filteredSubjects);
-        setFilteredSubjectsForClass(filteredSubjects);
-      } catch (error) {
-        console.error('Error fetching schedules for class:', error);
-        // Nếu lỗi, hiển thị tất cả subjects (fallback)
-        setFilteredSubjectsForClass(subjects);
-      }
+      await loadSubjectsForTeacherClass(classId, teacherModalSemester);
     } else {
-      // Nếu không chọn lớp, hiển thị tất cả subjects
       setFilteredSubjectsForClass(subjects);
     }
 
@@ -559,8 +871,86 @@ const ExamScoreManagement = () => {
   const handleSubjectSelectForClass = async (subjectId) => {
     setSelectedSubjectForScore(subjectId);
     if (selectedClassForScore) {
-      await fetchStudentsByClass(selectedClassForScore);
+      await fetchStudentsByClass(selectedClassForScore, subjectId);
     }
+  };
+
+  useEffect(() => {
+    if (!showClassModal || !selectedClassForScore) return;
+    loadSubjectsForTeacherClass(selectedClassForScore, teacherModalSemester);
+  }, [teacherModalSemester, showClassModal, selectedClassForScore]);
+
+  useEffect(() => {
+    if (!selectedSubjectForScore || !filteredSubjectsForClass.length) return;
+    const ok = filteredSubjectsForClass.some((s) => String(s.id) === String(selectedSubjectForScore));
+    if (!ok) setSelectedSubjectForScore('');
+  }, [filteredSubjectsForClass, selectedSubjectForScore]);
+
+  useEffect(() => {
+    if (!showClassModal || !selectedClassForScore || !selectedSubjectForScore) {
+      setTeacherTbmByStudentId({});
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await api.get('/exam-scores/tbm-summary', {
+          params: {
+            classId: parseInt(selectedClassForScore, 10),
+            subjectId: parseInt(selectedSubjectForScore, 10),
+          },
+        });
+        const rows = res.data.rows || [];
+        const m = {};
+        rows.forEach((r) => {
+          m[r.studentId] = r;
+        });
+        if (!cancelled) setTeacherTbmByStudentId(m);
+      } catch {
+        if (!cancelled) setTeacherTbmByStudentId({});
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [showClassModal, selectedClassForScore, selectedSubjectForScore]);
+
+  const handleEdit = async (group) => {
+    if (isScoreLocked) {
+      alert('Điểm số đã bị khóa. Không thể chỉnh sửa điểm.');
+      return;
+    }
+
+    const classId = group.classEntity?.id?.toString() || '';
+    const subjectId = group.subject?.id?.toString() || '';
+
+    setSelectedClassForScore(classId);
+    setSelectedSubjectForScore(subjectId);
+    setIsEditMode(true);
+
+    let sem = '1';
+    if (classId) {
+      try {
+        const schedulesResponse = await api.get(`/schedules/class/${classId}`);
+        const classSchedules = schedulesResponse.data.schedules || [];
+        const subNum = parseInt(subjectId, 10);
+        const matchSch = classSchedules.find((s) => {
+          const sid = s.subject?.id || s.subject_id;
+          const tid = s.teacher?.id || s.teacher_id;
+          return sid === subNum && user?.id && tid === user.id;
+        });
+        const code = matchSch?.classSection ? normalizeSemesterCode(matchSch.classSection.semester) : null;
+        if (code) sem = code;
+      } catch (_) {
+        /* giữ HK1 */
+      }
+      setTeacherModalSemester(sem);
+      await loadSubjectsForTeacherClass(classId, sem);
+    }
+
+    await fetchExamScores();
+    await fetchStudentsByClass(classId, subjectId);
+    setShowClassModal(true);
   };
 
   // Xử lý submit điểm theo lớp
@@ -690,6 +1080,10 @@ const ExamScoreManagement = () => {
           console.log(`⚠️ No existing scores found for student ${studentIdInt}, subject ${subjectId}, class ${classId}`);
         }
 
+        const existingMieng = existingScores.find((s) => {
+          const st = (s.scoreType || s.score_type || '').toUpperCase();
+          return st === 'MIENG';
+        });
         const existing15P = existingScores.find(s => {
           const st = (s.scoreType || s.score_type || '15P').toUpperCase();
           return st === '15P';
@@ -702,6 +1096,39 @@ const ExamScoreManagement = () => {
           const st = (s.scoreType || s.score_type || '').toUpperCase();
           return st === 'CUOIKI';
         });
+
+        // Điểm miệng (MIENG)
+        const scoreMiengInput = studentData.scoreMieng ? studentData.scoreMieng.trim() : '';
+        if (scoreMiengInput !== '') {
+          const scoreMiengValue = parseFloat(scoreMiengInput);
+          if (!isNaN(scoreMiengValue) && scoreMiengValue >= 0 && scoreMiengValue <= 10) {
+            const scoreData = {
+              studentId: studentIdInt,
+              subjectId: subjectId,
+              classId: classId,
+              score: scoreMiengValue,
+              scoreType: 'MIENG',
+              attempt: 1,
+              note: studentData.noteMieng || ''
+            };
+
+            if (existingMieng) {
+              promises.push(api.put(`/exam-scores/${existingMieng.id}`, scoreData, {
+                headers: {
+                  'X-User-Id': user?.id,
+                  'X-User-Role': user?.role?.name
+                }
+              }));
+            } else {
+              promises.push(api.post('/exam-scores', scoreData, {
+                headers: {
+                  'X-User-Id': user?.id,
+                  'X-User-Role': user?.role?.name
+                }
+              }));
+            }
+          }
+        }
 
         // Xử lý điểm 15p
         const score15PInput = studentData.score15P ? studentData.score15P.trim() : '';
@@ -863,6 +1290,7 @@ const ExamScoreManagement = () => {
         setClassStudents([]);
         setClassScoreData({});
         setIsEditMode(false);
+        setTeacherModalSemester('1');
         setShowClassModal(false);
 
         alert(currentEditMode ? 'Sửa điểm thành công!' : 'Nhập điểm theo lớp thành công!');
@@ -876,15 +1304,10 @@ const ExamScoreManagement = () => {
     }
   };
 
-  const getScoreColor = (score) => {
-    if (score >= 8) return '#28a745';
-    if (score >= 6.5) return '#ffc107';
-    if (score >= 5) return '#fd7e14';
-    return '#dc3545';
-  };
-
   const getScoreTypeLabel = (scoreType) => {
     switch (scoreType) {
+      case 'MIENG':
+        return 'Miệng';
       case '15P':
         return '15 phút';
       case '1TIET':
@@ -920,7 +1343,8 @@ const ExamScoreManagement = () => {
           student: score.student,
           subject: score.subject,
           classEntity: score.classEntity,
-          score15P: null, // Chỉ lưu 1 điểm 15p (điểm đầu tiên)
+          scoreMieng: null,
+          score15P: null,
           score1Tiet: null,
           scoreCuoiKi: null,
           allScores: []
@@ -929,11 +1353,13 @@ const ExamScoreManagement = () => {
 
       grouped[key].allScores.push(score);
 
-      // Phân loại điểm - chuyển sang uppercase để so sánh nhất quán
       const scoreType = (score.scoreType || score.score_type || '15P').toUpperCase();
 
-      if (scoreType === '15P') {
-        // Chỉ lưu điểm 15p đầu tiên (không tính trung bình)
+      if (scoreType === 'MIENG') {
+        if (grouped[key].scoreMieng === null) {
+          grouped[key].scoreMieng = score;
+        }
+      } else if (scoreType === '15P') {
         if (grouped[key].score15P === null) {
           grouped[key].score15P = score;
         }
@@ -941,17 +1367,70 @@ const ExamScoreManagement = () => {
         grouped[key].score1Tiet = score;
       } else if (scoreType === 'CUOIKI') {
         grouped[key].scoreCuoiKi = score;
-      } else {
-        // Nếu không xác định được, mặc định là 15P
-        if (grouped[key].score15P === null) {
-          grouped[key].score15P = score;
-        }
       }
     });
 
     return Object.values(grouped);
   };
 
+  const scoreGroups = useMemo(() => groupScoresByStudentAndSubject(), [examScores, displayFilterClassId, user]);
+
+  useEffect(() => {
+    const role = user?.role?.name?.toUpperCase();
+    if (role === 'ADMIN' || (role && role.startsWith('ADMIN'))) {
+      setOuterTbmByPair({});
+      return;
+    }
+    const seen = new Set();
+    const pairs = [];
+    scoreGroups.forEach((g) => {
+      const cid = g.classEntity?.id ?? g.class_id;
+      const sid = g.subject?.id;
+      if (cid == null || sid == null) return;
+      const key = `${cid}-${sid}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      pairs.push({ classId: cid, subjectId: sid });
+    });
+    if (pairs.length === 0) {
+      setOuterTbmByPair({});
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const next = {};
+      await Promise.all(
+        pairs.map(async ({ classId, subjectId }) => {
+          const key = `${classId}-${subjectId}`;
+          try {
+            const res = await api.get('/exam-scores/tbm-summary', {
+              params: { classId, subjectId },
+            });
+            const rows = res.data.rows || [];
+            const m = {};
+            rows.forEach((r) => {
+              m[r.studentId] = r;
+            });
+            next[key] = m;
+          } catch {
+            next[key] = {};
+          }
+        })
+      );
+      if (!cancelled) setOuterTbmByPair(next);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [scoreGroups, user]);
+
+  const renderOuterScoreCell = (val) => {
+    if (val == null || Number.isNaN(Number(val))) {
+      return <span className="text-slate-400">—</span>;
+    }
+    const n = Number(val);
+    return <span className={`es-score-pill ${scoreCellClass(n)}`}>{n.toFixed(1)}</span>;
+  };
 
   if (loading) {
     return (
@@ -1002,7 +1481,7 @@ const ExamScoreManagement = () => {
 
   return (
     <div className="min-h-screen bg-slate-100 px-4 py-6">
-      <div className={`mx-auto space-y-4 ${isAdmin ? 'max-w-[96rem]' : 'max-w-6xl'}`}>
+      <div className={`mx-auto space-y-4 ${isAdmin || !isStudent ? 'max-w-[96rem]' : 'max-w-6xl'}`}>
       <div className="rounded-2xl bg-white/95 px-4 py-3 shadow-lg shadow-slate-900/5 flex flex-wrap items-center justify-between gap-3">
         {!isAdmin && (
           <h2 className="text-2xl font-bold text-slate-800">
@@ -1045,7 +1524,8 @@ const ExamScoreManagement = () => {
                 setClassStudents([]);
                 setClassScoreData({});
                 setFilteredSubjectsForClass([]);
-                setIsEditMode(false); // Đặt chế độ nhập mới
+                setIsEditMode(false);
+                setTeacherModalSemester('1');
                 setShowClassModal(true);
               }}
               disabled={isScoreLocked}
@@ -1057,7 +1537,7 @@ const ExamScoreManagement = () => {
       </div>
 
       {isAdmin && (
-        <AdminXemDiemPanel examScores={examScores} classes={classes} subjects={subjects} user={user} />
+        <AdminXemDiemSection classes={classes} subjects={subjects} user={user} />
       )}
 
       {/* Filter lớp cho Teacher */}
@@ -1112,124 +1592,202 @@ const ExamScoreManagement = () => {
         </div>
       )}
 
-      {/* Bảng điểm số — giáo viên / học sinh (admin dùng AdminXemDiemPanel ở trên) */}
+      {/* Bảng điểm — GV/HS: cùng kiểu bảng admin (header 2 cấp, es-score-pill, TBM từ API) */}
       {isAdmin ? null : (
-      <div className="rounded-2xl border border-slate-200 bg-white/95 shadow-xl shadow-slate-900/5 overflow-hidden">
-        {groupScoresByStudentAndSubject().length === 0 ? (
-          <div style={{
-            padding: '40px',
-            textAlign: 'center',
-            backgroundColor: '#f5f5f5',
-            borderRadius: '8px',
-            marginTop: '20px'
-          }}>
-            <p style={{ fontSize: '18px', color: '#666' }}>
-              Chưa có điểm số nào
-            </p>
+      <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+        {scoreGroups.length === 0 ? (
+          <div className="px-4 py-16 text-center text-slate-500">
+            <p className="text-lg">Chưa có điểm số nào</p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-          <table className="min-w-full border-collapse text-sm">
-            <thead className="bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
-              <tr>
-                <th className="px-4 py-3 text-left">STT</th>
-                <th className="px-4 py-3 text-left">Học sinh</th>
-                <th className="px-4 py-3 text-left">Môn học</th>
-                <th className="px-4 py-3 text-left">Lớp</th>
-                <th className="px-4 py-3 text-left">Điểm 15p</th>
-                <th className="px-4 py-3 text-left">Điểm 1 tiết</th>
-                <th className="px-4 py-3 text-left">Điểm cuối kỳ</th>
-                {/* Chỉ hiển thị cột "Thao tác" cho TEACHER, không hiển thị cho ADMIN và STUDENT */}
-                {!isStudent && !isAdmin && <th className="px-4 py-3 text-center">Thao tác</th>}
-              </tr>
-            </thead>
-            <tbody className="text-sm text-slate-700">
-              {groupScoresByStudentAndSubject().map((group, index) => {
-                const score15P = group.score15P?.score;
-                const score1Tiet = group.score1Tiet?.score;
-                const scoreCuoiKi = group.scoreCuoiKi?.score;
-
-                return (
-                  <tr key={`${group.student?.id}-${group.subject?.id}`} className="border-t border-slate-100 hover:bg-slate-50/80 transition-colors">
-                    <td className="px-4 py-3">{index + 1}</td>
-                    <td className="px-4 py-3">
-                      <div className="student-info">
-                        <span className="student-name">{group.student?.fullName}</span>
-                        <span className="student-email">{group.student?.email}</span>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">{group.subject?.name}</td>
-                    <td className="px-4 py-3">{group.classEntity?.name}</td>
-                    <td className="px-4 py-3">
-                      {score15P !== null && score15P !== undefined ? (
-                        <span
-                          className="score-badge"
-                          style={{ backgroundColor: getScoreColor(score15P) }}
-                        >
-                          {score15P.toFixed(1)}
-                        </span>
-                      ) : (
-                        <span style={{ color: '#999' }}>-</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      {score1Tiet !== null && score1Tiet !== undefined ? (
-                        <span
-                          className="score-badge"
-                          style={{ backgroundColor: getScoreColor(score1Tiet) }}
-                        >
-                          {score1Tiet.toFixed(1)}
-                        </span>
-                      ) : (
-                        <span style={{ color: '#999' }}>-</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      {scoreCuoiKi !== null && scoreCuoiKi !== undefined ? (
-                        <span
-                          className="score-badge"
-                          style={{ backgroundColor: getScoreColor(scoreCuoiKi) }}
-                        >
-                          {scoreCuoiKi.toFixed(1)}
-                        </span>
-                      ) : (
-                        <span style={{ color: '#999' }}>-</span>
-                      )}
-                    </td>
-                    {/* Chỉ hiển thị nút Sửa/Xóa cho TEACHER, không hiển thị cho ADMIN */}
+          <>
+            {!isStudent && !isAdmin && (
+              <div className="flex flex-wrap gap-6 border-b border-blue-100 bg-blue-50/50 px-4 py-3">
+                <label className="inline-flex cursor-pointer items-center gap-2 text-sm text-blue-900">
+                  <input
+                    type="checkbox"
+                    checked={teacherOuterShowOral}
+                    onChange={(e) => setTeacherOuterShowOral(e.target.checked)}
+                    className="rounded border-blue-400 text-blue-600"
+                  />
+                  Điểm miệng
+                </label>
+                <label className="inline-flex cursor-pointer items-center gap-2 text-sm text-blue-900">
+                  <input
+                    type="checkbox"
+                    checked={teacherOuterShow15}
+                    onChange={(e) => setTeacherOuterShow15(e.target.checked)}
+                    className="rounded border-blue-400 text-blue-600"
+                  />
+                  Điểm 15 phút
+                </label>
+                <label className="inline-flex cursor-pointer items-center gap-2 text-sm text-blue-900">
+                  <input
+                    type="checkbox"
+                    checked={teacherOuterShow1T}
+                    onChange={(e) => setTeacherOuterShow1T(e.target.checked)}
+                    className="rounded border-blue-400 text-blue-600"
+                  />
+                  Điểm 1 tiết
+                </label>
+                <label className="inline-flex cursor-pointer items-center gap-2 text-sm text-blue-900">
+                  <input
+                    type="checkbox"
+                    checked={teacherOuterShowCk}
+                    onChange={(e) => setTeacherOuterShowCk(e.target.checked)}
+                    className="rounded border-blue-400 text-blue-600"
+                  />
+                  Điểm cuối kỳ
+                </label>
+              </div>
+            )}
+            <div className="border-b border-slate-200 bg-slate-50 px-4 py-2">
+              <h3 className="text-sm font-semibold text-slate-700">Tóm điểm</h3>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="admin-grade-table min-w-full border-collapse text-sm">
+                <thead>
+                  <tr className="bg-slate-100 text-xs font-semibold uppercase tracking-wide text-slate-600">
+                    <th rowSpan={2} className="border border-slate-200 px-2 py-2">
+                      STT
+                    </th>
+                    <th rowSpan={2} className="border border-slate-200 px-2 py-2 text-left min-w-[140px]">
+                      Học sinh
+                    </th>
+                    <th rowSpan={2} className="border border-slate-200 px-2 py-2 text-left min-w-[100px]">
+                      Môn học
+                    </th>
+                    <th rowSpan={2} className="border border-slate-200 px-2 py-2 text-left min-w-[80px]">
+                      Lớp
+                    </th>
+                    {(isStudent || teacherOuterShowOral) && (
+                      <th colSpan={1} className="border border-slate-200 px-2 py-2 text-center bg-sky-50">
+                        Điểm miệng
+                      </th>
+                    )}
+                    {(isStudent || teacherOuterShow15) && (
+                      <th colSpan={1} className="border border-slate-200 px-2 py-2 text-center bg-sky-50">
+                        Điểm 15 phút
+                      </th>
+                    )}
+                    {(isStudent || teacherOuterShow1T) && (
+                      <th colSpan={1} className="border border-slate-200 px-2 py-2 text-center bg-sky-50">
+                        Điểm 1 tiết
+                      </th>
+                    )}
+                    {(isStudent || teacherOuterShowCk) && (
+                      <th colSpan={1} className="border border-slate-200 px-2 py-2 text-center bg-sky-50">
+                        Điểm cuối kỳ
+                      </th>
+                    )}
+                    <th rowSpan={2} className="border border-slate-200 px-2 py-2 text-center bg-emerald-50">
+                      TBM
+                    </th>
                     {!isStudent && !isAdmin && (
-                      <td className="px-4 py-3">
-                        <div className="flex items-center justify-center gap-2">
-                          <button
-                            className="rounded-full bg-sky-100 px-3 py-1.5 text-xs font-semibold text-sky-700 hover:bg-sky-200 disabled:opacity-60"
-                            onClick={() => {
-                              // Mở modal với group để sửa tất cả điểm
-                              handleEdit(group);
-                            }}
-                            disabled={isScoreLocked}
-                            title={isScoreLocked ? 'Điểm số đã bị khóa' : 'Sửa điểm'}
-                            aria-label="Sửa điểm"
-                          >
-                            <Pencil size={14} />
-                          </button>
-                          <button
-                            className="rounded-full bg-rose-100 px-3 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-200 disabled:opacity-60"
-                            onClick={() => handleDeleteAll(group)}
-                            disabled={isScoreLocked}
-                            title={isScoreLocked ? 'Điểm số đã bị khóa' : 'Xóa tất cả điểm'}
-                            aria-label="Xóa điểm"
-                          >
-                            <Trash2 size={14} />
-                          </button>
-                        </div>
-                      </td>
+                      <th rowSpan={2} className="border border-slate-200 px-2 py-2 text-center">
+                        Thao tác
+                      </th>
                     )}
                   </tr>
-                );
-              })}
-            </tbody>
-          </table>
-          </div>
+                  <tr className="bg-white text-[11px] text-slate-600">
+                    {(isStudent || teacherOuterShowOral) && (
+                      <th className="border border-slate-200 px-1 py-1">Miệng 1</th>
+                    )}
+                    {(isStudent || teacherOuterShow15) && (
+                      <th className="border border-slate-200 px-1 py-1">15P-1</th>
+                    )}
+                    {(isStudent || teacherOuterShow1T) && (
+                      <th className="border border-slate-200 px-1 py-1">1T-1</th>
+                    )}
+                    {(isStudent || teacherOuterShowCk) && (
+                      <th className="border border-slate-200 px-1 py-1">CK-1</th>
+                    )}
+                  </tr>
+                </thead>
+                <tbody>
+                  {scoreGroups.map((group, index) => {
+                    const scoreMieng = group.scoreMieng?.score;
+                    const score15P = group.score15P?.score;
+                    const score1Tiet = group.score1Tiet?.score;
+                    const scoreCuoiKi = group.scoreCuoiKi?.score;
+                    const cid = group.classEntity?.id ?? group.class_id;
+                    const sid = group.subject?.id;
+                    const pairKey = cid != null && sid != null ? `${cid}-${sid}` : '';
+                    const tbmVal =
+                      pairKey && group.student?.id != null
+                        ? outerTbmByPair[pairKey]?.[group.student.id]?.tbm
+                        : null;
+
+                    return (
+                      <tr
+                        key={`${group.student?.id}-${group.subject?.id}-${cid ?? ''}`}
+                        className="odd:bg-white even:bg-slate-50/80 hover:bg-amber-50/30"
+                      >
+                        <td className="border border-slate-200 px-2 py-2 text-center">{index + 1}</td>
+                        <td className="border border-slate-200 px-2 py-2 font-medium text-slate-800">
+                          <div className="flex flex-col">
+                            <span>{group.student?.fullName}</span>
+                            <span className="text-xs font-normal text-slate-500">{group.student?.email}</span>
+                          </div>
+                        </td>
+                        <td className="border border-slate-200 px-2 py-2">{group.subject?.name}</td>
+                        <td className="border border-slate-200 px-2 py-2">{group.classEntity?.name}</td>
+                        {(isStudent || teacherOuterShowOral) && (
+                          <td className="border border-slate-200 px-1 py-1 text-center">
+                            {renderOuterScoreCell(scoreMieng)}
+                          </td>
+                        )}
+                        {(isStudent || teacherOuterShow15) && (
+                          <td className="border border-slate-200 px-1 py-1 text-center">
+                            {renderOuterScoreCell(score15P)}
+                          </td>
+                        )}
+                        {(isStudent || teacherOuterShow1T) && (
+                          <td className="border border-slate-200 px-1 py-1 text-center">
+                            {renderOuterScoreCell(score1Tiet)}
+                          </td>
+                        )}
+                        {(isStudent || teacherOuterShowCk) && (
+                          <td className="border border-slate-200 px-1 py-1 text-center">
+                            {renderOuterScoreCell(scoreCuoiKi)}
+                          </td>
+                        )}
+                        <td className="border border-slate-200 px-1 py-1 text-center font-semibold">
+                          {renderOuterScoreCell(tbmVal)}
+                        </td>
+                        {!isStudent && !isAdmin && (
+                          <td className="border border-slate-200 px-2 py-2">
+                            <div className="flex items-center justify-center gap-2">
+                              <button
+                                type="button"
+                                className="rounded-full bg-sky-100 px-3 py-1.5 text-xs font-semibold text-sky-700 hover:bg-sky-200 disabled:opacity-60"
+                                onClick={() => handleEdit(group)}
+                                disabled={isScoreLocked}
+                                title={isScoreLocked ? 'Điểm số đã bị khóa' : 'Sửa điểm'}
+                                aria-label="Sửa điểm"
+                              >
+                                <Pencil size={14} />
+                              </button>
+                              <button
+                                type="button"
+                                className="rounded-full bg-rose-100 px-3 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-200 disabled:opacity-60"
+                                onClick={() => handleDeleteAll(group)}
+                                disabled={isScoreLocked}
+                                title={isScoreLocked ? 'Điểm số đã bị khóa' : 'Xóa tất cả điểm'}
+                                aria-label="Xóa điểm"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </div>
+                          </td>
+                        )}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </div>
       )}
@@ -1245,6 +1803,7 @@ const ExamScoreManagement = () => {
           setClassStudents([]);
           setClassScoreData({});
           setIsEditMode(false);
+          setTeacherModalSemester('1');
         }}>
           <div className="common-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '90%', width: '1200px', maxHeight: '90vh', overflow: 'auto' }}>
             <div className="common-modal-header">
@@ -1256,11 +1815,12 @@ const ExamScoreManagement = () => {
                 setClassStudents([]);
                 setClassScoreData({});
                 setIsEditMode(false);
+                setTeacherModalSemester('1');
               }}>✕</button>
             </div>
             <form onSubmit={handleClassScoreSubmit} className="common-modal-form">
-              <div style={{ display: 'flex', gap: '20px', marginBottom: '20px' }}>
-                <div className="common-form-group" style={{ flex: 1 }}>
+              <div style={{ display: 'flex', gap: '20px', marginBottom: '20px', flexWrap: 'wrap' }}>
+                <div className="common-form-group" style={{ flex: 1, minWidth: '180px' }}>
                   <label>Lớp *</label>
                   <select
                     value={selectedClassForScore}
@@ -1275,7 +1835,24 @@ const ExamScoreManagement = () => {
                     ))}
                   </select>
                 </div>
-                <div className="common-form-group" style={{ flex: 1 }}>
+                <div className="common-form-group" style={{ flex: 1, minWidth: '140px' }}>
+                  <label>Học kỳ *</label>
+                  <select
+                    value={teacherModalSemester}
+                    onChange={(e) => {
+                      setTeacherModalSemester(e.target.value);
+                      setSelectedSubjectForScore('');
+                    }}
+                    disabled={!selectedClassForScore}
+                  >
+                    {ADMIN_VIEW_SEMESTERS.map((s) => (
+                      <option key={s.value} value={s.value}>
+                        {s.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="common-form-group" style={{ flex: 1, minWidth: '180px' }}>
                   <label>Môn học *</label>
                   <select
                     value={selectedSubjectForScore}
@@ -1294,7 +1871,7 @@ const ExamScoreManagement = () => {
                   </select>
                   {selectedClassForScore && filteredSubjectsForClass.length === 0 && (
                     <p style={{ fontSize: '12px', color: '#999', marginTop: '5px' }}>
-                      Lớp này chưa được phân công môn học nào
+                      Không có môn nào trong TKB cho học kỳ và lớp đã chọn (hoặc bạn không phụ trách).
                     </p>
                   )}
                 </div>
@@ -1304,28 +1881,37 @@ const ExamScoreManagement = () => {
                 <div style={{ marginTop: '20px' }}>
                   {(() => {
                     const subjectId = selectedSubjectForScore ? parseInt(selectedSubjectForScore) : null;
+                    const modalClassIdNum = selectedClassForScore ? parseInt(selectedClassForScore, 10) : null;
+
+                    const scoresMatchModalClass = (score) => {
+                      if (modalClassIdNum == null || Number.isNaN(modalClassIdNum)) return true;
+                      const scid = score.classEntity?.id ?? score.class_id;
+                      return scid === modalClassIdNum || parseInt(scid, 10) === modalClassIdNum;
+                    };
 
                     // Nếu ở chế độ nhập mới, chỉ hiển thị học sinh chưa có điểm
                     // Nếu ở chế độ sửa, hiển thị tất cả học sinh (cho phép sửa cả học sinh đã có điểm)
                     let studentsToShow = classStudents;
                     if (!isEditMode) {
-                      // Chế độ nhập mới: chỉ hiển thị học sinh chưa có điểm
-                      studentsToShow = classStudents.filter(student => {
+                      studentsToShow = classStudents.filter((student) => {
                         if (!subjectId) return true;
-                        const existingScores = examScores.filter(score =>
-                          score.student?.id === student.id &&
-                          score.subject?.id === subjectId
+                        const existingScores = examScores.filter(
+                          (score) =>
+                            score.student?.id === student.id &&
+                            score.subject?.id === subjectId &&
+                            scoresMatchModalClass(score)
                         );
                         return existingScores.length === 0;
                       });
                     }
 
-                    // Hàm kiểm tra học sinh đã có điểm chưa (chỉ để hiển thị thông tin)
                     const studentHasScore = (studentId) => {
                       if (!subjectId) return false;
-                      const existingScores = examScores.filter(score =>
-                        score.student?.id === studentId &&
-                        score.subject?.id === subjectId
+                      const existingScores = examScores.filter(
+                        (score) =>
+                          score.student?.id === studentId &&
+                          score.subject?.id === subjectId &&
+                          scoresMatchModalClass(score)
                       );
                       return existingScores.length > 0;
                     };
@@ -1355,14 +1941,18 @@ const ExamScoreManagement = () => {
                               <tr>
                                 <th style={{ padding: '10px', border: '1px solid #ddd', textAlign: 'left', backgroundColor: '#f8f9fa' }}>STT</th>
                                 <th style={{ padding: '10px', border: '1px solid #ddd', textAlign: 'left', backgroundColor: '#f8f9fa' }}>Học sinh</th>
+                                <th style={{ padding: '10px', border: '1px solid #ddd', textAlign: 'center', backgroundColor: '#f8f9fa' }}>Miệng</th>
                                 <th style={{ padding: '10px', border: '1px solid #ddd', textAlign: 'center', backgroundColor: '#f8f9fa' }}>Điểm 15p</th>
                                 <th style={{ padding: '10px', border: '1px solid #ddd', textAlign: 'center', backgroundColor: '#f8f9fa' }}>Điểm 1 tiết</th>
                                 <th style={{ padding: '10px', border: '1px solid #ddd', textAlign: 'center', backgroundColor: '#f8f9fa' }}>Điểm cuối kỳ</th>
+                                <th style={{ padding: '10px', border: '1px solid #ddd', textAlign: 'center', backgroundColor: '#e8f5e9', fontSize: '12px' }} title="TBM do hệ thống tính từ API">TBM</th>
                               </tr>
                             </thead>
                             <tbody>
                               {studentsToShow.map((student, index) => {
                                 const hasScore = studentHasScore(student.id);
+                                const tbmRow = teacherTbmByStudentId[student.id];
+                                const tbmVal = tbmRow != null ? tbmRow.tbm : null;
 
                                 return (
                                   <tr key={student.id}>
@@ -1375,6 +1965,30 @@ const ExamScoreManagement = () => {
                                         </div>
                                         <div style={{ fontSize: '12px', color: '#666' }}>{student.email}</div>
                                       </div>
+                                    </td>
+                                    <td style={{ padding: '8px', border: '1px solid #ddd' }}>
+                                      <input
+                                        type="number"
+                                        min="0"
+                                        max="10"
+                                        step="0.1"
+                                        value={classScoreData[student.id]?.scoreMieng || ''}
+                                        onChange={(e) => {
+                                          setClassScoreData({
+                                            ...classScoreData,
+                                            [student.id]: {
+                                              ...classScoreData[student.id],
+                                              scoreMieng: e.target.value
+                                            }
+                                          });
+                                        }}
+                                        placeholder="0-10"
+                                        style={{
+                                          width: '80px',
+                                          padding: '5px',
+                                          textAlign: 'center'
+                                        }}
+                                      />
                                     </td>
                                     <td style={{ padding: '8px', border: '1px solid #ddd' }}>
                                       <input
@@ -1448,6 +2062,15 @@ const ExamScoreManagement = () => {
                                         }}
                                       />
                                     </td>
+                                    <td style={{ padding: '8px', border: '1px solid #ddd', textAlign: 'center', backgroundColor: '#f9fff9' }}>
+                                      {tbmVal != null && !Number.isNaN(Number(tbmVal)) ? (
+                                        <span className={`es-score-pill ${scoreCellClass(Number(tbmVal))}`}>
+                                          {Number(tbmVal).toFixed(1)}
+                                        </span>
+                                      ) : (
+                                        <span style={{ color: '#999' }}>—</span>
+                                      )}
+                                    </td>
                                   </tr>
                                 )
                               })}
@@ -1497,6 +2120,7 @@ const ExamScoreManagement = () => {
                     setClassStudents([]);
                     setClassScoreData({});
                     setFilteredSubjectsForClass([]);
+                    setTeacherModalSemester('1');
                   }}
                 >
                   Hủy
@@ -1511,13 +2135,18 @@ const ExamScoreManagement = () => {
                     // Ở chế độ sửa, luôn enable (vì mục đích là sửa điểm đã có)
                     if (isEditMode) return false;
 
-                    // Ở chế độ nhập mới, disable nếu tất cả học sinh đã có điểm
-                    const subjectId = parseInt(selectedSubjectForScore);
-                    const studentsWithoutScores = classStudents.filter(student => {
-                      const existingScores = examScores.filter(score =>
-                        score.student?.id === student.id &&
-                        score.subject?.id === subjectId
-                      );
+                    const subjectId = parseInt(selectedSubjectForScore, 10);
+                    const cid = parseInt(selectedClassForScore, 10);
+                    const studentsWithoutScores = classStudents.filter((student) => {
+                      const existingScores = examScores.filter((score) => {
+                        const scid = score.classEntity?.id ?? score.class_id;
+                        const sameClass = scid === cid || parseInt(scid, 10) === cid;
+                        return (
+                          score.student?.id === student.id &&
+                          score.subject?.id === subjectId &&
+                          sameClass
+                        );
+                      });
                       return existingScores.length === 0;
                     });
                     return studentsWithoutScores.length === 0;

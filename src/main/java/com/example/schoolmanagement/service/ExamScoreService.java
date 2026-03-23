@@ -1,7 +1,9 @@
 package com.example.schoolmanagement.service;
 
+import com.example.schoolmanagement.entity.Enrollment;
 import com.example.schoolmanagement.entity.ExamScore;
 import com.example.schoolmanagement.entity.School;
+import com.example.schoolmanagement.entity.User;
 import com.example.schoolmanagement.exception.BadRequestException;
 import com.example.schoolmanagement.exception.ForbiddenException;
 import com.example.schoolmanagement.exception.ResourceNotFoundException;
@@ -9,8 +11,12 @@ import com.example.schoolmanagement.repository.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.stream.Collectors;
 
 @Service
 public class ExamScoreService {
@@ -27,6 +33,8 @@ public class ExamScoreService {
     private SchoolRepository schoolRepository;
     @Autowired
     private ScheduleRepository scheduleRepository;
+    @Autowired
+    private EnrollmentRepository enrollmentRepository;
 
     private static Integer parseInteger(Object obj) {
         if (obj == null) return null;
@@ -216,5 +224,120 @@ public class ExamScoreService {
                 "schoolId", schoolId,
                 "scoreLocked", updated.getScoreLocked()
         );
+    }
+
+    /**
+     * Bảng điểm thành phần + TBM cho admin (một lớp, một môn). TBM chỉ tính trên server.
+     */
+    public Map<String, Object> getTbmSummary(Integer classId, Integer subjectId) {
+        if (classId == null || subjectId == null) {
+            throw new BadRequestException("classId và subjectId là bắt buộc");
+        }
+        classRepository.findById(classId)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy lớp id=" + classId));
+        subjectRepository.findById(subjectId)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy môn id=" + subjectId));
+
+        List<Enrollment> enrollments = enrollmentRepository.findByClassEntityIdWithStudents(classId);
+        enrollments = enrollments.stream()
+                .filter(e -> e.getStatus() != null && "ACTIVE".equalsIgnoreCase(e.getStatus()))
+                .collect(Collectors.toList());
+        List<User> students = enrollments.stream()
+                .map(Enrollment::getStudent)
+                .filter(Objects::nonNull)
+                .filter(u -> u.getRole() != null && studentRole(u.getRole().getName()))
+                .collect(Collectors.toMap(User::getId, u -> u, (a, b) -> a, LinkedHashMap::new))
+                .values()
+                .stream()
+                .sorted((a, b) -> {
+                    String na = a.getFullName() != null ? a.getFullName() : "";
+                    String nb = b.getFullName() != null ? b.getFullName() : "";
+                    return na.compareToIgnoreCase(nb);
+                })
+                .collect(Collectors.toList());
+
+        List<ExamScore> scoresForSubject = examScoreRepository.findByClassEntityId(classId).stream()
+                .filter(e -> e.getSubject() != null && e.getSubject().getId().equals(subjectId))
+                .collect(Collectors.toList());
+
+        List<Map<String, Object>> rows = new ArrayList<>();
+        for (User st : students) {
+            Integer sid = st.getId();
+            Double oral = findComponentScore(scoresForSubject, sid, "MIENG", 1);
+            Double p15 = findComponentScore(scoresForSubject, sid, "15P", 1);
+            Double t1 = findComponentScore(scoresForSubject, sid, "1TIET", 1);
+            Double ck = findComponentScore(scoresForSubject, sid, "CUOIKI", 1);
+            Double tbm = computeTbmFromStandardComponents(oral, p15, t1, ck);
+            Map<String, Object> row = new LinkedHashMap<>();
+            row.put("studentId", sid);
+            row.put("fullName", st.getFullName());
+            row.put("email", st.getEmail());
+            row.put("oral1", oral);
+            row.put("p151", p15);
+            row.put("t1", t1);
+            row.put("ck1", ck);
+            row.put("tbm", tbm);
+            rows.add(row);
+        }
+        return Map.of("rows", rows);
+    }
+
+    private static boolean studentRole(String roleName) {
+        if (roleName == null) return false;
+        String u = roleName.toUpperCase();
+        return "STUDENT".equals(u) || u.startsWith("STUDENT");
+    }
+
+    private static Double findComponentScore(List<ExamScore> scores, Integer studentId, String scoreType, int attempt) {
+        String want = scoreType.trim().toUpperCase();
+        for (ExamScore e : scores) {
+            if (e.getStudent() == null || !e.getStudent().getId().equals(studentId)) continue;
+            String st = e.getScoreType() == null ? "15P" : e.getScoreType().trim().toUpperCase();
+            int att = e.getAttempt() == null ? 1 : e.getAttempt();
+            if (st.equals(want) && att == attempt) {
+                return e.getScore();
+            }
+        }
+        return null;
+    }
+
+    /**
+     * TBM — công thức duy nhất (server); frontend không tự tính.
+     * <p>
+     * {@code TBM = (Miệng×1 + 15P×1 + 1T×2 + CK×3) / tổng hệ số các thành phần có điểm}
+     * (hệ số 1+1+2+3 = 7 khi đủ cả bốn loại).
+     * </p>
+     *
+     * @param mieng1 MIENG attempt 1, 15P attempt 1, 1TIET attempt 1, CUOIKI attempt 1
+     * @return null nếu không có điểm thành phần nào
+     */
+    public static Double computeTbmFromStandardComponents(Double mieng1, Double diem15pLan1, Double motTietLan1, Double cuoiKyLan1) {
+        double numerator = 0;
+        double denominator = 0;
+        if (isScorePresent(mieng1)) {
+            numerator += mieng1 * 1;
+            denominator += 1;
+        }
+        if (isScorePresent(diem15pLan1)) {
+            numerator += diem15pLan1 * 1;
+            denominator += 1;
+        }
+        if (isScorePresent(motTietLan1)) {
+            numerator += motTietLan1 * 2;
+            denominator += 2;
+        }
+        if (isScorePresent(cuoiKyLan1)) {
+            numerator += cuoiKyLan1 * 3;
+            denominator += 3;
+        }
+        if (denominator <= 0) {
+            return null;
+        }
+        double tbm = numerator / denominator;
+        return Math.round(tbm * 10.0) / 10.0;
+    }
+
+    private static boolean isScorePresent(Double d) {
+        return d != null && !d.isNaN();
     }
 }

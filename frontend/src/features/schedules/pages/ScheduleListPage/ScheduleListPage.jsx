@@ -7,6 +7,7 @@ import {
   TIMELINE_MORNING,
   TIMELINE_AFTERNOON,
   formatTimeRange,
+  MAX_PERIOD,
 } from './schoolScheduleTimeline';
 import { colorsForSubject } from './subjectColors';
 
@@ -328,6 +329,8 @@ const ScheduleListPage = () => {
         const dayOfWeekValue = parseInt(formData.dayOfWeek);
         if (dayOfWeekValue >= 1 && dayOfWeekValue <= 6) {
           schedulePayload.dayOfWeek = dayOfWeekValue;
+          // Thứ 2 của tuần đang xem trên lưới — BE tính đúng ngày theo tuần admin chọn (không phải tuần hiện tại)
+          schedulePayload.weekStart = formatDateToYYYYMMDD(currentWeekStart);
         } else {
           alert('Thứ trong tuần không hợp lệ. Vui lòng chọn từ Thứ 2 đến Thứ 7.');
           return;
@@ -668,10 +671,10 @@ const ScheduleListPage = () => {
     return `${formatDate(formatDateToYYYYMMDD(currentWeekStart))} - ${formatDate(formatDateToYYYYMMDD(weekEnd))}`;
   };
 
-  /** Số ô tiết 1–5 có dữ liệu trong ngày — khớp logic getScheduleForDayAndPeriod */
+  /** Số ô tiết (sáng + chiều) có dữ liệu trong ngày — khớp logic getScheduleForDayAndPeriod */
   const getLessonCountForDay = (dayOfWeek) => {
     let n = 0;
-    for (let p = 1; p <= 5; p++) {
+    for (let p = 1; p <= MAX_PERIOD; p++) {
       if (getScheduleForDayAndPeriod(dayOfWeek, p)) n++;
     }
     return n;
@@ -966,7 +969,7 @@ const ScheduleListPage = () => {
               <span className="tt-v2-section-divider__line" aria-hidden="true" />
             </div>
             <p className="tt-v2-afternoon-note">
-              Khung giờ buổi chiều theo quy định trường. Phân công môn (tiết 1–5) hiện đồng bộ với buổi sáng trên máy chủ.
+              Buổi chiều: tiết 6–10 trên lưới khớp số tiết 6–10 trên máy chủ.
             </p>
             {TIMELINE_AFTERNOON.map((row) => {
               const rowNow = isRowNow(row);
@@ -990,23 +993,69 @@ const ScheduleListPage = () => {
                         />
                       );
                     }
+                    const schedule = row.period != null
+                      ? getScheduleForDayAndPeriod(dayOfWeek, row.period)
+                      : null;
+                    const sid = schedule?.subject?.id ?? schedule?.subject_id;
+                    const sname = schedule?.subject?.name;
+                    const palette = colorsForSubject(sid, sname);
+                    const emptyTitle = canManage
+                      ? 'Chưa có tiết — dùng nút Thêm lịch học, chọn tiết 6–10 (buổi chiều).'
+                      : 'Chưa có tiết học trong khung giờ này.';
                     return (
                       <div
                         key={dayOfWeek}
                         className={[
                           'tt-v2-cell',
                           'tt-v2-cell--lesson',
-                          'tt-v2-cell--empty',
+                          schedule ? 'tt-v2-cell--filled' : 'tt-v2-cell--empty',
                           isTodayColumn(dayOfWeek) ? 'tt-v2-cell--today' : '',
                         ]
                           .filter(Boolean)
                           .join(' ')}
                       >
-                        <div
-                          className="tt-lesson-card tt-lesson-card--empty tt-lesson-card--afternoon-placeholder"
-                          title="Khung chiều chỉ hiển thị — phân công tiết 6–9 khi hệ thống hỗ trợ."
-                          aria-label="Chưa phân công buổi chiều"
-                        />
+                        {schedule ? (
+                          <div
+                            className="tt-lesson-card tt-lesson-card--filled"
+                            style={{
+                              background: palette.bg,
+                              borderLeft: `4px solid ${palette.accent}`,
+                            }}
+                          >
+                            <div className="tt-lesson-card__time">{formatTimeRange(row.startMin, row.endMin)}</div>
+                            <div className="tt-lesson-card__title" style={{ color: palette.title }}>
+                              {schedule.subject?.name || '—'}
+                            </div>
+                            <div className="tt-lesson-card__meta">{schedule.teacher?.fullName || '—'}</div>
+                            <div className="tt-lesson-card__room">Phòng: {schedule.room || '—'}</div>
+                            {canManage && (
+                              <div className="tt-lesson-card__actions">
+                                <button
+                                  type="button"
+                                  className="tt-lesson-card__btn tt-lesson-card__btn--edit"
+                                  onClick={() => handleEdit(schedule)}
+                                  title="Sửa tiết học"
+                                >
+                                  Sửa
+                                </button>
+                                <button
+                                  type="button"
+                                  className="tt-lesson-card__btn tt-lesson-card__btn--del"
+                                  onClick={() => handleDelete(schedule.id)}
+                                  title="Xóa tiết học"
+                                >
+                                  Xóa
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <div
+                            className={`tt-lesson-card tt-lesson-card--empty${canManage ? ' tt-lesson-card--empty--manage' : ''}`}
+                            title={emptyTitle}
+                            aria-label={emptyTitle}
+                          />
+                        )}
                       </div>
                     );
                   })}
@@ -1095,11 +1144,20 @@ const ScheduleListPage = () => {
                   required
                 >
                   <option value="">-- Chọn tiết --</option>
-                  <option value="1">Tiết 1</option>
-                  <option value="2">Tiết 2</option>
-                  <option value="3">Tiết 3</option>
-                  <option value="4">Tiết 4</option>
-                  <option value="5">Tiết 5</option>
+                  <optgroup label="Buổi sáng">
+                    <option value="1">Tiết 1</option>
+                    <option value="2">Tiết 2</option>
+                    <option value="3">Tiết 3</option>
+                    <option value="4">Tiết 4</option>
+                    <option value="5">Tiết 5</option>
+                  </optgroup>
+                  <optgroup label="Buổi chiều">
+                    <option value="6">Tiết 6</option>
+                    <option value="7">Tiết 7</option>
+                    <option value="8">Tiết 8</option>
+                    <option value="9">Tiết 9</option>
+                    <option value="10">Tiết 10</option>
+                  </optgroup>
                 </select>
               </div>
 
@@ -1196,7 +1254,7 @@ const ScheduleListPage = () => {
                     onChange={(e) => updateSubjectAssignment(index, 'periodsPerWeek', e.target.value)}
                     placeholder="Tiết/tuần"
                     min="1"
-                    max="5"
+                    max="10"
                     style={{ width: '100px' }}
                   />
                   <button
