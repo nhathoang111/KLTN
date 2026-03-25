@@ -402,17 +402,6 @@ const UserListPage = () => {
     if (el) el.indeterminate = someSelected && !allSelected;
   }, [someSelected, allSelected]);
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-slate-100 px-4 py-6 flex items-center justify-center">
-        <div className="flex flex-col items-center gap-3 text-slate-600">
-          <div className="h-10 w-10 rounded-full border-4 border-indigo-200 border-t-indigo-500 animate-spin" />
-          <p className="text-sm font-medium">Đang tải danh sách người dùng...</p>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="min-h-screen bg-slate-100 px-4 py-6">
       <div className="mx-auto max-w-6xl space-y-4">

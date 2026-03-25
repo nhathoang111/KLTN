@@ -59,7 +59,7 @@ public class SubjectService {
     }
 
     public List<Subject> getSubjectsBySchool(Integer schoolId) {
-        return subjectRepository.findBySchoolId(schoolId);
+        return subjectRepository.findBySchoolIdOrderBySortIndex(schoolId);
     }
 
     public Subject getSubjectById(Integer id) {

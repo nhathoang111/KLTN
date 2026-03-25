@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import api from "../../../../shared/lib/api";
+import { useAuth } from "../../../auth/context/AuthContext";
 
 const tabs = [
   { id: "overview", label: "Thông tin lớp" },
@@ -22,6 +23,7 @@ const isTeacherRole = (name) => {
 const ClassDetailPage = () => {
   const { id } = useParams();
   const classId = useMemo(() => Number(id), [id]);
+  const { user } = useAuth();
 
   const [activeTab, setActiveTab] = useState("overview");
   const [loading, setLoading] = useState(true);
@@ -34,6 +36,7 @@ const ClassDetailPage = () => {
   const [subjects, setSubjects] = useState([]);
   const [teachers, setTeachers] = useState([]);
   const [creating, setCreating] = useState(false);
+  const [deletingId, setDeletingId] = useState(null);
   const [createError, setCreateError] = useState("");
   const [createForm, setCreateForm] = useState({
     subjectId: "",
@@ -42,6 +45,9 @@ const ClassDetailPage = () => {
     schoolYear: "",
     status: "ACTIVE",
   });
+
+  const userRole = user?.role?.name?.toUpperCase();
+  const canManageSections = userRole === "ADMIN" || userRole === "SUPER_ADMIN";
 
   useEffect(() => {
     let cancelled = false;
@@ -154,6 +160,24 @@ const ClassDetailPage = () => {
       }
     } finally {
       setCreating(false);
+    }
+  };
+
+  const handleDeleteSection = async (sectionId) => {
+    if (!canManageSections) return;
+    if (!sectionId) return;
+
+    if (!window.confirm("Bạn có chắc muốn xóa lớp học phần này không?")) return;
+    try {
+      setDeletingId(sectionId);
+      await api.delete(`/class-sections/${sectionId}`);
+      await refreshSections();
+    } catch (err) {
+      const msg =
+        err?.response?.data?.error || err?.response?.data?.message || "Xóa thất bại";
+      alert(String(msg));
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -391,12 +415,13 @@ const ClassDetailPage = () => {
                 <th>Học kỳ</th>
                 <th>Năm học</th>
                 <th>Trạng thái</th>
+                {canManageSections && <th>Thao tác</th>}
               </tr>
             </thead>
             <tbody>
               {classSections.length === 0 ? (
                 <tr>
-                  <td colSpan={5} style={{ padding: 16, color: "#6b7280" }}>
+                  <td colSpan={canManageSections ? 6 : 5} style={{ padding: 16, color: "#6b7280" }}>
                     Chưa có lớp học phần cho lớp này.
                   </td>
                 </tr>
@@ -408,6 +433,18 @@ const ClassDetailPage = () => {
                     <td>{safeText(cs.semester)}</td>
                     <td>{safeText(cs.schoolYear)}</td>
                     <td>{safeText(cs.status)}</td>
+                    {canManageSections && (
+                      <td>
+                        <button
+                          type="button"
+                          className="btn btn-danger"
+                          disabled={deletingId === cs.id}
+                          onClick={() => handleDeleteSection(cs.id)}
+                        >
+                          {deletingId === cs.id ? "Đang xóa..." : "Xóa"}
+                        </button>
+                      </td>
+                    )}
                   </tr>
                 ))
               )}

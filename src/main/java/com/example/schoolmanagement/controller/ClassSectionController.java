@@ -90,4 +90,20 @@ public class ClassSectionController {
                 "classSection", saved
         ));
     }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<?> delete(
+            @PathVariable Integer id,
+            @RequestHeader(value = "X-User-Role", required = false) String userRole
+    ) {
+        if (userRole != null) {
+            String roleUpper = userRole.toUpperCase();
+            if ("TEACHER".equals(roleUpper) || roleUpper.startsWith("TEACHER")) {
+                return ResponseEntity.status(403).body(Map.of("error", "Giáo viên không có quyền xóa lớp học phần"));
+            }
+        }
+
+        classSectionService.deleteById(id);
+        return ResponseEntity.ok(Map.of("message", "Class section deleted successfully"));
+    }
 }

@@ -125,59 +125,81 @@ const ImportUsersExcelModal = ({ open, onClose, user, onImported }) => {
 
           {importResult && (
             <div style={{ marginTop: '1rem' }}>
-              {importResult.successCount > 0 && (
-                <div
-                  style={{
-                    padding: '0.75rem 1rem',
-                    background: '#f0fdf4',
-                    border: '1px solid #86efac',
-                    color: '#166534',
-                    borderRadius: '8px',
-                    fontSize: '0.9rem',
-                    marginBottom: importResult.failCount > 0 ? '0.75rem' : 0
-                  }}
-                >
-                  <strong>✅ Thành công:</strong> Đã thêm {importResult.successCount} người dùng.
-                </div>
-              )}
-              {importResult.failCount > 0 && (
-                <div
-                  style={{
-                    padding: '0.75rem 1rem',
-                    background: importResult.successCount > 0 ? '#fffbeb' : '#fef2f2',
-                    border: `1px solid ${importResult.successCount > 0 ? '#fde68a' : '#fecaca'}`,
-                    color: importResult.successCount > 0 ? '#92400e' : '#b91c1c',
-                    borderRadius: '8px',
-                    fontSize: '0.9rem'
-                  }}
-                >
-                  <p style={{ margin: 0 }}>
-                    <strong>{importResult.successCount > 0 ? '⚠️ Một số dòng lỗi' : '❌ Lỗi'}:</strong>{' '}
-                    {importResult.failCount} dòng không thêm được.
-                  </p>
-                  {importResult.errors?.length > 0 && (
-                    <ul style={{ marginTop: '0.5rem', paddingLeft: '1.25rem', maxHeight: '180px', overflow: 'auto', marginBottom: 0 }}>
-                      {importResult.errors.map((err, i) => (
-                        <li key={i}>
-                          Dòng {err.row}: {err.email || '(trống)'} – {err.message}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-              )}
-              {importResult.successCount === 0 && importResult.failCount === 0 && (
-                <div
-                  style={{
-                    padding: '0.75rem 1rem',
-                    background: '#f5f5f5',
-                    borderRadius: '8px',
-                    fontSize: '0.9rem'
-                  }}
-                >
-                  Không có dòng dữ liệu nào để xử lý (file trống hoặc không có dòng hợp lệ).
-                </div>
-              )}
+              {(() => {
+                const successCount = Number(importResult?.successCount ?? 0);
+                const failCount = Number(importResult?.failCount ?? 0);
+                const errorsCount = importResult?.errors?.length ?? 0;
+
+                return (
+                  <>
+                    {successCount > 0 && (
+                      <div
+                        style={{
+                          padding: '0.75rem 1rem',
+                          background: '#f0fdf4',
+                          border: '1px solid #86efac',
+                          color: '#166534',
+                          borderRadius: '8px',
+                          fontSize: '0.9rem',
+                          marginBottom: failCount > 0 ? '0.75rem' : 0
+                        }}
+                      >
+                        <strong>✅ Thành công:</strong> Đã thêm {successCount} người dùng.
+                      </div>
+                    )}
+
+                    {(failCount > 0 || errorsCount > 0) && (
+                      <div
+                        style={{
+                          padding: '0.75rem 1rem',
+                          background: successCount > 0 ? '#fffbeb' : '#fef2f2',
+                          border: `1px solid ${successCount > 0 ? '#fde68a' : '#fecaca'}`,
+                          color: successCount > 0 ? '#92400e' : '#b91c1c',
+                          borderRadius: '8px',
+                          fontSize: '0.9rem'
+                        }}
+                      >
+                        <p style={{ margin: 0 }}>
+                          <strong>
+                            {successCount > 0 ? '⚠️ Một số dòng lỗi' : '❌ Lỗi'}:
+                          </strong>{' '}
+                          {failCount > 0 ? failCount : errorsCount} dòng không thêm được.
+                        </p>
+                        {importResult.errors?.length > 0 && (
+                          <ul
+                            style={{
+                              marginTop: '0.5rem',
+                              paddingLeft: '1.25rem',
+                              maxHeight: '180px',
+                              overflow: 'auto',
+                              marginBottom: 0
+                            }}
+                          >
+                            {importResult.errors.map((err, i) => (
+                              <li key={i}>
+                                Dòng {err.row}: {err.email || '(trống)'} – {err.message}
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                    )}
+
+                    {successCount === 0 && failCount === 0 && errorsCount === 0 && (
+                      <div
+                        style={{
+                          padding: '0.75rem 1rem',
+                          background: '#f5f5f5',
+                          borderRadius: '8px',
+                          fontSize: '0.9rem'
+                        }}
+                      >
+                        Không có dòng dữ liệu nào để xử lý (file trống hoặc không có dòng hợp lệ).
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
             </div>
           )}
         </div>

@@ -3,9 +3,22 @@ import { MoreVertical, Edit3, Lock, Unlock, Trash2 } from 'lucide-react';
 
 const SchoolTable = ({ schools, onEdit, onToggleLock, onDeleteClick }) => {
   const [actionMenuOpenId, setActionMenuOpenId] = useState(null);
+  const [menuPos, setMenuPos] = useState({ top: 0, left: 0 });
+  const isAnyMenuOpen = actionMenuOpenId !== null;
 
-  const handleToggleMenu = (id) => {
-    setActionMenuOpenId((prev) => (prev === id ? null : id));
+  const handleToggleMenu = (id, event) => {
+    const nextOpen = actionMenuOpenId !== id;
+    if (nextOpen) {
+      const rect = event.currentTarget.getBoundingClientRect();
+      // Match CSS min-width (~140px) + padding/rounding
+      setMenuPos({
+        top: rect.bottom + 6,
+        left: rect.right - 150,
+      });
+      setActionMenuOpenId(id);
+    } else {
+      setActionMenuOpenId(null);
+    }
   };
 
   // Đóng menu khi click ra ngoài (bất kỳ đâu trong document)
@@ -13,9 +26,10 @@ const SchoolTable = ({ schools, onEdit, onToggleLock, onDeleteClick }) => {
     const handleDocumentClick = (event) => {
       const target = event.target;
       if (!target) return;
-      // Nếu click không nằm trong cụm .schools-row-actions thì đóng menu
-      const inActions = target.closest('.schools-row-actions');
-      if (!inActions) {
+      // Nếu click không nằm trong menu hoặc nút trigger thì đóng menu
+      const inMenu = target.closest('.schools-row-actions-menu');
+      const inTrigger = target.closest('.schools-row-actions-trigger');
+      if (!inMenu && !inTrigger) {
         setActionMenuOpenId(null);
       }
     };
@@ -30,8 +44,8 @@ const SchoolTable = ({ schools, onEdit, onToggleLock, onDeleteClick }) => {
   }, [actionMenuOpenId]);
 
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white/95 shadow-xl shadow-slate-900/5 overflow-hidden">
-      <div className="overflow-x-auto">
+    <div className="rounded-2xl border border-slate-200 bg-white/95 shadow-xl shadow-slate-900/5 overflow-visible">
+      <div className="overflow-x-auto overflow-y-visible">
         <table className="min-w-full border-collapse text-sm">
         <thead className="bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
           <tr>
@@ -85,12 +99,16 @@ const SchoolTable = ({ schools, onEdit, onToggleLock, onDeleteClick }) => {
                     <button
                       type="button"
                       className="schools-row-actions-trigger"
-                      onClick={() => handleToggleMenu(school.id)}
+                      onClick={(e) => handleToggleMenu(school.id, e)}
+                      style={isAnyMenuOpen ? { visibility: "hidden" } : undefined}
                     >
                       <MoreVertical size={16} />
                     </button>
                     {actionMenuOpenId === school.id && (
-                      <div className="schools-row-actions-menu">
+                      <div
+                        className="schools-row-actions-menu"
+                        style={{ position: 'fixed', top: menuPos.top, left: menuPos.left, right: 'auto' }}
+                      >
                         <button
                           type="button"
                           onClick={() => {

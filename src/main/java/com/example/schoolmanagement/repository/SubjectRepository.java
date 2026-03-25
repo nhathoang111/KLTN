@@ -9,9 +9,15 @@ import com.example.schoolmanagement.entity.Subject;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+import java.util.Optional;
 import java.util.List;
 
 public interface SubjectRepository extends JpaRepository<Subject, Integer> {
     @Query("SELECT s FROM Subject s WHERE s.school.id = :schoolId")
     List<Subject> findBySchoolId(@Param("schoolId") Integer schoolId);
+
+    Optional<Subject> findBySchoolIdAndCode(Integer schoolId, String code);
+
+    @Query("SELECT s FROM Subject s WHERE s.school.id = :schoolId ORDER BY COALESCE(s.sortIndex, 9999) ASC, s.id ASC")
+    List<Subject> findBySchoolIdOrderBySortIndex(@Param("schoolId") Integer schoolId);
 }

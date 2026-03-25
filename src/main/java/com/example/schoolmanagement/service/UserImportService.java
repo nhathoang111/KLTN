@@ -20,6 +20,7 @@ public class UserImportService {
 
     private static final String DEFAULT_PASSWORD = "Password@123";
     private static final int MAX_IMPORT = 500;
+    private static final DataFormatter DATA_FORMATTER = new DataFormatter();
 
     @Autowired
     private UserService userService;
@@ -50,8 +51,8 @@ public class UserImportService {
         if (file == null || file.isEmpty()) {
             throw new BadRequestException("Vui lòng chọn file Excel");
         }
-        String roleUpper = currentUserRole != null ? currentUserRole.toUpperCase() : "";
-        if (!"SUPER_ADMIN".equals(roleUpper) && !"ADMIN".equals(roleUpper)) {
+        String normalizedRole = normalizeUserRole(currentUserRole);
+        if (!"SUPER_ADMIN".equals(normalizedRole) && !"ADMIN".equals(normalizedRole)) {
             throw new com.example.schoolmanagement.exception.ForbiddenException("Chỉ Admin hoặc Super Admin mới được nhập người dùng từ Excel");
         }
         String name = file.getOriginalFilename();
@@ -95,7 +96,21 @@ public class UserImportService {
                 if (row == null) continue;
 
                 String email = getCellString(row, colIndex.get("email"));
-                if (email == null || email.trim().isEmpty()) continue;
+                boolean anyDataInRow = hasAnyData(row);
+
+                if (email == null || email.trim().isEmpty()) {
+                    // Nếu dòng có dữ liệu mà thiếu Email, báo lỗi rõ ràng thay vì skip im lặng
+                    if (anyDataInRow) {
+                        Map<String, Object> err = new HashMap<>();
+                        err.put("row", i + 1);
+                        err.put("email", "");
+                        err.put("message", "Thiếu Email");
+                        errors.add(err);
+                        result.setFailCount(result.getFailCount() + 1);
+                        rowCount++;
+                    }
+                    continue;
+                }
 
                 Map<String, Object> userData = new HashMap<>();
                 userData.put("email", email.trim());
@@ -155,7 +170,7 @@ public class UserImportService {
                 if (schoolId == null && currentUserSchoolId != null) {
                     userData.put("schoolId", currentUserSchoolId);
                 }
-                if (schoolId == null && currentUserSchoolId == null && "ADMIN".equals(roleUpper)) {
+                if (schoolId == null && currentUserSchoolId == null && "ADMIN".equals(normalizedRole)) {
                     Map<String, Object> err = new HashMap<>();
                     err.put("row", i + 1);
                     err.put("email", email);
@@ -175,7 +190,8 @@ public class UserImportService {
                 }
 
                 try {
-                    userService.createUser(userData, currentUserRole, currentUserSchoolId);
+                    // Dùng schoolId hiệu lực theo từng dòng để tránh lỗi "own school" khi file có cột Mã trường
+                    userService.createUser(userData, normalizedRole, effSchoolId != null ? effSchoolId : currentUserSchoolId);
                     result.setSuccessCount(result.getSuccessCount() + 1);
                     rowCount++;
                 } catch (Exception e) {
@@ -196,6 +212,15 @@ public class UserImportService {
 
         result.setErrors(errors);
         return result;
+    }
+
+    private String normalizeUserRole(String currentUserRole) {
+        if (currentUserRole == null) return "";
+        String r = currentUserRole.trim().toUpperCase();
+        // chấp nhận các format phổ biến: "ADMIN", "ROLE_ADMIN", "SCHOOL_ADMIN", ...
+        if (r.contains("SUPER_ADMIN")) return "SUPER_ADMIN";
+        if (r.equals("ADMIN") || r.contains("ADMIN")) return "ADMIN";
+        return r;
     }
 
     private Map<String, Integer> mapHeaderToIndex(Row headerRow) {
@@ -236,14 +261,15 @@ public class UserImportService {
         if (cellIndex < 0) return null;
         Cell cell = row.getCell(cellIndex);
         if (cell == null) return null;
-        CellType type = cell.getCellType();
-        if (type == CellType.STRING) return cell.getStringCellValue();
-        if (type == CellType.NUMERIC) {
-            double n = cell.getNumericCellValue();
-            return (n == Math.floor(n)) ? String.valueOf((long) n) : String.valueOf(n);
+        try {
+            // DataFormatter đọc được STRING/NUMERIC/DATE/FORMULA và trả ra đúng text người dùng thấy trong Excel
+            String s = DATA_FORMATTER.formatCellValue(cell);
+            if (s == null) return null;
+            String t = s.trim();
+            return t.isEmpty() ? null : t;
+        } catch (Exception e) {
+            return null;
         }
-        if (type == CellType.BOOLEAN) return String.valueOf(cell.getBooleanCellValue());
-        return null;
     }
 
     private Integer getCellInt(Row row, int cellIndex) {
@@ -254,12 +280,28 @@ public class UserImportService {
             if (cell.getCellType() == CellType.NUMERIC) {
                 return (int) cell.getNumericCellValue();
             }
-            String s = cell.getStringCellValue();
+            String s = DATA_FORMATTER.formatCellValue(cell);
             if (s == null || s.trim().isEmpty()) return null;
             return Integer.parseInt(s.trim());
         } catch (Exception e) {
             return null;
         }
+    }
+
+    private boolean hasAnyData(Row row) {
+        if (row == null) return false;
+        short last = row.getLastCellNum();
+        if (last <= 0) return false;
+        for (int i = 0; i < last; i++) {
+            Cell c = row.getCell(i);
+            if (c == null) continue;
+            String s = null;
+            try {
+                s = DATA_FORMATTER.formatCellValue(c);
+            } catch (Exception ignored) {}
+            if (s != null && !s.trim().isEmpty()) return true;
+        }
+        return false;
     }
 
     private String trimOrNull(String s) {
@@ -279,6 +321,7 @@ public class UserImportService {
         var list = roleRepository.findBySchoolIdAndNamePattern(schoolId, pattern);
         return list.isEmpty() ? null : list.get(0).getId();
     }
+
 
     private List<Integer> resolveSubjectIdsFromNames(String namesCell, Integer schoolId) {
         if (namesCell == null || namesCell.trim().isEmpty() || schoolId == null) return Collections.emptyList();

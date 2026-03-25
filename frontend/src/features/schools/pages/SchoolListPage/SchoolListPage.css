@@ -351,6 +351,8 @@
   position: relative;
   display: flex;
   justify-content: flex-end;
+  /* Make sure dropdown can stack above other table/content layers */
+  z-index: 30;
 }
 
 .schools-row-actions-trigger {
@@ -373,15 +375,18 @@
 }
 
 .schools-row-actions-menu {
-  position: absolute;
-  top: 36px;
-  right: 0;
+  position: fixed;
+  top: auto;
+  right: auto;
   min-width: 140px;
   padding: 4px;
   border-radius: 10px;
   background: #ffffff;
   box-shadow: 0 10px 25px rgba(15, 23, 42, 0.15);
-  z-index: 20;
+  z-index: 9999;
+  /* Ensure dropdown never becomes scrollable/clipped */
+  max-height: none;
+  overflow: visible;
 }
 
 .schools-row-actions-menu button {

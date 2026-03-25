@@ -24,6 +24,9 @@ public class Subject {
     @Column(name = "deleted_at")
     private LocalDateTime deletedAt;
 
+    @Column(name = "sort_index")
+    private Integer sortIndex;
+
     // Getters and Setters
     public Integer getId() { return id; }
     public void setId(Integer id) { this.id = id; }
@@ -42,4 +45,12 @@ public class Subject {
 
     public LocalDateTime getDeletedAt() { return deletedAt; }
     public void setDeletedAt(LocalDateTime deletedAt) { this.deletedAt = deletedAt; }
+
+    public Integer getSortIndex() {
+        return sortIndex;
+    }
+
+    public void setSortIndex(Integer sortIndex) {
+        this.sortIndex = sortIndex;
+    }
 }

@@ -6,6 +6,7 @@ import com.example.schoolmanagement.repository.SchoolRepository;
 import com.example.schoolmanagement.repository.UserRepository;
 import com.example.schoolmanagement.repository.RoleRepository;
 import com.example.schoolmanagement.repository.ClassRepository;
+import com.example.schoolmanagement.repository.DefaultSubjectRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -81,6 +82,9 @@ public class SchoolService {
 
     @Autowired
     private com.example.schoolmanagement.repository.TeacherSubjectRepository teacherSubjectRepository;
+
+    @Autowired
+    private DefaultSubjectRepository defaultSubjectRepository;
 
     public List<School> getAllSchools() {
         return schoolRepository.findAll();
@@ -160,7 +164,39 @@ public class SchoolService {
         if (school.getStatus() == null || school.getStatus().isEmpty()) {
             school.setStatus("ACTIVE");
         }
-        return saveSchool(school);
+        School saved = saveSchool(school);
+        seedDefaultSubjectsForSchool(saved.getId());
+        return saved;
+    }
+
+    /**
+     * Copy môn mặc định (default_subjects) sang bảng subjects cho trường mới.
+     * - Giữ thứ tự theo sort_index.
+     * - Chống trùng theo (school_id, code).
+     */
+    private void seedDefaultSubjectsForSchool(Integer newSchoolId) {
+        if (newSchoolId == null) return;
+
+        List<com.example.schoolmanagement.entity.DefaultSubject> templates =
+                defaultSubjectRepository.findAllByOrderBySortIndexAsc();
+        if (templates == null || templates.isEmpty()) return;
+
+        School schoolRef = getSchoolById(newSchoolId);
+
+        for (com.example.schoolmanagement.entity.DefaultSubject t : templates) {
+            if (t == null || t.getCode() == null) continue;
+
+            boolean exists = subjectRepository.findBySchoolIdAndCode(newSchoolId, t.getCode()).isPresent();
+            if (exists) continue;
+
+            com.example.schoolmanagement.entity.Subject subject = new com.example.schoolmanagement.entity.Subject();
+            subject.setSchool(schoolRef);
+            subject.setCode(t.getCode());
+            subject.setName(t.getName());
+            subject.setStatus(t.getStatus());
+            subject.setSortIndex(t.getSortIndex());
+            subjectRepository.save(subject);
+        }
     }
 
     public School updateSchool(Integer id, School school) {

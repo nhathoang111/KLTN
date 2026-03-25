@@ -111,6 +111,18 @@ public class ClassSectionService {
         }
     }
 
+    public void deleteById(Integer id) {
+        if (id == null) throw new BadRequestException("Thiếu id lớp học phần");
+        // Check tồn tại để trả lỗi 404 thay vì silent fail
+        getById(id);
+        try {
+            classSectionRepository.deleteById(id);
+        } catch (org.springframework.dao.DataIntegrityViolationException e) {
+            // Thường do FK (ví dụ lịch học / quan hệ khác) đang trỏ tới class_section này
+            throw new BadRequestException("Không thể xóa lớp học phần này vì dữ liệu đang được sử dụng ở nơi khác.");
+        }
+    }
+
     private Integer toInt(Object v) {
         if (v == null) return null;
         if (v instanceof Number) return ((Number) v).intValue();

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import api from '../../../../shared/lib/api';
 import './ClassListPage.css';
 import { useAuth } from '../../../auth/context/AuthContext';
@@ -402,7 +403,16 @@ const ClassListPage = () => {
 
                   return (
                     <tr key={classItem.id} className="border-t border-slate-100 hover:bg-slate-50/80 transition-colors">
-                      <td className="px-4 py-3">{classItem.name}</td>
+                      <td className="px-4 py-3">
+                        <Link
+                          to={`/classes/${classItem.id}`}
+                          className="text-indigo-700 font-semibold hover:text-indigo-900 hover:underline"
+                          aria-label={`Xem chi tiết lớp ${classItem.name}`}
+                          title="Click để xem thông tin lớp học"
+                        >
+                          {classItem.name}
+                        </Link>
+                      </td>
                       <td className="px-4 py-3">{(classItem.studentCount ?? 0)}/{(classItem.capacity ?? 0)}</td>
                       <td className="px-4 py-3">
                         <span style={{
