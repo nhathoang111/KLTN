@@ -320,6 +320,30 @@ const ClassListPage = () => {
     return teacher ? teacher.fullName : 'N/A';
   };
 
+  const availableHomeroomTeachers = React.useMemo(() => {
+    const schoolId = parseInt(formData.schoolId, 10);
+    if (!schoolId) return [];
+
+    const currentEditingClassId = editingClass?.id ?? null;
+    const selectedTeacherId = formData.homeroomTeacherId ? parseInt(formData.homeroomTeacherId, 10) : null;
+
+    // Những giáo viên đã là GVCN của lớp khác trong cùng trường sẽ bị loại khỏi dropdown.
+    const assignedTeacherIds = new Set(
+      (classes || [])
+        .filter((cls) => (cls?.school?.id ?? cls?.school_id) === schoolId)
+        .filter((cls) => (currentEditingClassId == null ? true : cls.id !== currentEditingClassId))
+        .map((cls) => cls?.homeroomTeacher?.id ?? cls?.homeroomTeacherId)
+        .filter(Boolean)
+    );
+
+    return (teachers || []).filter((teacher) => {
+      const tSchoolId = teacher?.school?.id ?? teacher?.school_id;
+      if (tSchoolId !== schoolId) return false;
+      if (selectedTeacherId != null && teacher.id === selectedTeacherId) return true;
+      return !assignedTeacherIds.has(teacher.id);
+    });
+  }, [teachers, classes, formData.schoolId, formData.homeroomTeacherId, editingClass]);
+
   if (loading) {
     return (
       <div className="min-h-screen bg-slate-100 px-4 py-6">
@@ -562,13 +586,11 @@ const ClassListPage = () => {
                   disabled={!formData.schoolId}
                 >
                   <option value="">{formData.schoolId ? "Chọn giáo viên" : "Chọn trường trước"}</option>
-                  {teachers
-                    .filter(teacher => teacher.school?.id === parseInt(formData.schoolId))
-                    .map(teacher => (
-                      <option key={teacher.id} value={teacher.id}>
-                        {teacher.fullName}
-                      </option>
-                    ))}
+                  {availableHomeroomTeachers.map((teacher) => (
+                    <option key={teacher.id} value={teacher.id}>
+                      {teacher.fullName}
+                    </option>
+                  ))}
                 </select>
               </div>
               <div className="common-form-group">

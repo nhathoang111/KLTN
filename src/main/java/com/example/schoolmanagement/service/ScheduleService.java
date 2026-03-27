@@ -131,7 +131,7 @@ public class ScheduleService {
     }
 
     @Transactional
-    public int generateSchedules(Integer classId, Integer schoolId, List<Map<String, Object>> subjectAssignments, Integer numberOfWeeks) {
+    public int generateSchedules(Integer classId, Integer schoolId, List<Map<String, Object>> subjectAssignments, Integer numberOfWeeks, String session) {
         // Lấy class entity
         Optional<ClassEntity> classOpt = classRepository.findById(classId);
         if (!classOpt.isPresent()) {
@@ -238,6 +238,11 @@ public class ScheduleService {
         }
         
         int createdCount = 0;
+
+        String sessionMode = (session == null ? "BOTH" : session.trim().toUpperCase());
+        if (!"MORNING".equals(sessionMode) && !"AFTERNOON".equals(sessionMode) && !"BOTH".equals(sessionMode)) {
+            sessionMode = "BOTH";
+        }
         
         // Hai nhóm slot: sáng (1–5) và chiều (6–9), shuffle riêng — tránh trường hợp random chỉ trúng buổi sáng
         List<Object[]> morningSlots = new ArrayList<>();
@@ -252,6 +257,12 @@ public class ScheduleService {
         }
         Collections.shuffle(morningSlots);
         Collections.shuffle(afternoonSlots);
+
+        if ("MORNING".equals(sessionMode)) {
+            afternoonSlots.clear();
+        } else if ("AFTERNOON".equals(sessionMode)) {
+            morningSlots.clear();
+        }
         
         System.out.println("📊 Morning slots: " + morningSlots.size() + ", afternoon slots: " + afternoonSlots.size());
         
@@ -282,9 +293,17 @@ public class ScheduleService {
             g.teacher = teacherOpt.get();
             g.teacherId = teacherId;
             g.periodsPerWeek = periodsPerWeek;
-            int afternoonCap = Math.min(AFTERNOON_PERIOD_COUNT, (periodsPerWeek + 1) / 2);
-            g.afternoonRemaining = afternoonCap;
-            g.morningRemaining = periodsPerWeek - afternoonCap;
+            if ("MORNING".equals(sessionMode)) {
+                g.afternoonRemaining = 0;
+                g.morningRemaining = periodsPerWeek;
+            } else if ("AFTERNOON".equals(sessionMode)) {
+                g.afternoonRemaining = periodsPerWeek;
+                g.morningRemaining = 0;
+            } else {
+                int afternoonCap = Math.min(AFTERNOON_PERIOD_COUNT, (periodsPerWeek + 1) / 2);
+                g.afternoonRemaining = afternoonCap;
+                g.morningRemaining = periodsPerWeek - afternoonCap;
+            }
             batch.add(g);
             System.out.println("📚 Queued " + g.subject.getName() + " P=" + periodsPerWeek
                     + " (chiều " + g.afternoonRemaining + ", sáng " + g.morningRemaining + ")");

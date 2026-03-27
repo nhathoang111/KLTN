@@ -17,6 +17,8 @@ const ScheduleListPage = () => {
   const [classes, setClasses] = useState([]);
   const [subjects, setSubjects] = useState([]);
   const [teachers, setTeachers] = useState([]);
+  const [teachersForSelectedSubject, setTeachersForSelectedSubject] = useState([]);
+  const [loadingTeachersBySubject, setLoadingTeachersBySubject] = useState(false);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [showGenerateModal, setShowGenerateModal] = useState(false);
@@ -46,8 +48,11 @@ const ScheduleListPage = () => {
   const [generateData, setGenerateData] = useState({
     classId: '',
     subjectAssignments: [],
-    numberOfWeeks: 1
+    numberOfWeeks: 1,
+    session: 'BOTH'
   });
+  const [generateClassSections, setGenerateClassSections] = useState([]);
+  const [loadingGenerateClassSections, setLoadingGenerateClassSections] = useState(false);
 
   /** Cập nhật mỗi phút để highlight tiết hiện tại */
   const [clock, setClock] = useState(() => Date.now());
@@ -145,8 +150,16 @@ const ScheduleListPage = () => {
       setClasses(allClasses);
 
       // Fetch subjects
-      const subjectsRes = await api.get('/subjects');
-      setSubjects(subjectsRes.data.subjects || []);
+      // Chỉ lấy môn thuộc đúng trường (tránh lấy toàn DB)
+      const subjectsRes = schoolId
+        ? await api.get(`/subjects/school/${schoolId}`)
+        : await api.get('/subjects');
+      let subj = subjectsRes.data.subjects || [];
+      // Nếu API trả nhiều hơn kỳ vọng, vẫn chặn lại theo school ở FE
+      if (schoolId) {
+        subj = subj.filter((s) => (s?.school?.id ?? s?.school_id) === schoolId);
+      }
+      setSubjects(subj);
 
       /**
        * BE UserService.getUsersFilteredAndEnriched:
@@ -226,6 +239,64 @@ const ScheduleListPage = () => {
       fetchSchedules();
     }
   }, [selectedClassId, user, loading]);
+
+  // Modal thêm/sửa lịch học:
+  // lọc giáo viên theo đúng LỚP + MÔN từ dữ liệu lớp học phần (class_sections)
+  useEffect(() => {
+    const classIdRaw = formData.classId || selectedClassId;
+    const classId = classIdRaw ? Number(classIdRaw) : null;
+    const subjectId = formData.subjectId ? Number(formData.subjectId) : null;
+
+    // Chưa chọn đủ lớp + môn thì chưa có cơ sở lọc theo lớp học phần
+    if (!classId || !subjectId) {
+      setTeachersForSelectedSubject([]);
+      return;
+    }
+
+    let cancelled = false;
+    const run = async () => {
+      try {
+        setLoadingTeachersBySubject(true);
+        const res = await api.get(`/class-sections/class/${classId}`);
+        if (cancelled) return;
+        const sections = res.data?.classSections || [];
+        const list = [];
+        const seen = new Set();
+        sections.forEach((cs) => {
+          const sid = cs?.subject?.id ?? cs?.subject_id;
+          const t = cs?.teacher;
+          const tid = t?.id;
+          const st = (cs?.status || '').toUpperCase();
+          if (Number(sid) !== subjectId) return;
+          if (!tid) return;
+          if (st && st !== 'ACTIVE') return;
+          if (seen.has(tid)) return;
+          seen.add(tid);
+          list.push({ id: tid, fullName: t.fullName || `GV #${tid}` });
+        });
+        setTeachersForSelectedSubject(list);
+
+        // Nếu giáo viên đang chọn không nằm trong lớp học phần của lớp+môn này -> reset
+        const currentTeacherId = formData.teacherId ? String(formData.teacherId) : '';
+        if (currentTeacherId) {
+          const exists = list.some((t) => String(t.id) === currentTeacherId);
+          if (!exists) {
+            setFormData((p) => ({ ...p, teacherId: '' }));
+          }
+        }
+      } catch (_) {
+        if (cancelled) return;
+        setTeachersForSelectedSubject([]);
+      } finally {
+        if (!cancelled) setLoadingTeachersBySubject(false);
+      }
+    };
+
+    run();
+    return () => {
+      cancelled = true;
+    };
+  }, [formData.classId, selectedClassId, formData.subjectId]);
 
   const fetchSchedules = async () => {
     try {
@@ -481,7 +552,8 @@ const ScheduleListPage = () => {
           teacherId: parseInt(a.teacherId),
           periodsPerWeek: parseInt(a.periodsPerWeek)
         })),
-        numberOfWeeks: parseInt(generateData.numberOfWeeks) || 1
+        numberOfWeeks: parseInt(generateData.numberOfWeeks) || 1,
+        session: generateData.session || 'BOTH'
       };
 
       const response = await api.post('/schedules/generate', payload);
@@ -491,7 +563,8 @@ const ScheduleListPage = () => {
       setGenerateData({
         classId: '',
         subjectAssignments: [],
-        numberOfWeeks: 1
+        numberOfWeeks: 1,
+        session: 'BOTH'
       });
       await fetchSchedules();
       alert(`Tạo thời khóa biểu tự động thành công.\n\nĐã tạo ${createdCount} lịch học cho ${numberOfWeeksCreated} tuần.\n\nDùng nút "Tuần sau →" để xem các tuần tiếp theo.`);
@@ -520,8 +593,62 @@ const ScheduleListPage = () => {
 
   const updateSubjectAssignment = (index, field, value) => {
     const updated = [...generateData.subjectAssignments];
-    updated[index] = { ...updated[index], [field]: value };
+    // Đổi môn thì reset giáo viên để tránh chọn sai cặp lớp+môn
+    if (field === 'subjectId') {
+      updated[index] = { ...updated[index], subjectId: value, teacherId: '' };
+    } else {
+      updated[index] = { ...updated[index], [field]: value };
+    }
     setGenerateData({ ...generateData, subjectAssignments: updated });
+  };
+
+  // Tạo TKB tự động: chỉ lấy giáo viên theo lớp học phần của lớp đang chọn
+  useEffect(() => {
+    const classId = generateData.classId ? Number(generateData.classId) : null;
+    if (!classId) {
+      setGenerateClassSections([]);
+      return;
+    }
+
+    let cancelled = false;
+    const run = async () => {
+      try {
+        setLoadingGenerateClassSections(true);
+        const res = await api.get(`/class-sections/class/${classId}`);
+        if (cancelled) return;
+        setGenerateClassSections(res.data?.classSections || []);
+      } catch (_) {
+        if (cancelled) return;
+        setGenerateClassSections([]);
+      } finally {
+        if (!cancelled) setLoadingGenerateClassSections(false);
+      }
+    };
+
+    run();
+    return () => {
+      cancelled = true;
+    };
+  }, [generateData.classId]);
+
+  const getTeachersForGenerateSubject = (subjectIdRaw) => {
+    const subjectId = subjectIdRaw ? Number(subjectIdRaw) : null;
+    if (!subjectId) return [];
+    const seen = new Set();
+    const out = [];
+    (generateClassSections || []).forEach((cs) => {
+      const sid = cs?.subject?.id ?? cs?.subject_id;
+      const teacher = cs?.teacher;
+      const tid = teacher?.id;
+      const st = (cs?.status || '').toUpperCase();
+      if (Number(sid) !== subjectId) return;
+      if (!tid) return;
+      if (st && st !== 'ACTIVE') return;
+      if (seen.has(tid)) return;
+      seen.add(tid);
+      out.push({ id: tid, fullName: teacher.fullName || `GV #${tid}` });
+    });
+    return out;
   };
 
   const formatDate = (dateString) => {
@@ -1104,9 +1231,16 @@ const ScheduleListPage = () => {
                 <select
                   value={formData.teacherId}
                   onChange={(e) => setFormData({ ...formData, teacherId: e.target.value })}
+                  disabled={!formData.subjectId || !(formData.classId || selectedClassId)}
                 >
-                  <option value="">-- Chọn giáo viên --</option>
-                  {teachers.map(teacher => (
+                  <option value="">
+                    {!formData.subjectId
+                      ? '-- Chọn môn trước --'
+                      : loadingTeachersBySubject
+                        ? '-- Đang tải giáo viên --'
+                        : '-- Chọn giáo viên --'}
+                  </option>
+                  {teachersForSelectedSubject.map(teacher => (
                     <option key={teacher.id} value={teacher.id}>{teacher.fullName}</option>
                   ))}
                 </select>
@@ -1225,9 +1359,30 @@ const ScheduleListPage = () => {
             </div>
 
             <div className="form-group">
+              <label>Buổi tạo lịch *</label>
+              <select
+                value={generateData.session}
+                onChange={(e) => setGenerateData({ ...generateData, session: e.target.value })}
+                required
+                style={{ width: '100%' }}
+              >
+                <option value="BOTH">Cả ngày (sáng + chiều)</option>
+                <option value="MORNING">Chỉ buổi sáng</option>
+                <option value="AFTERNOON">Chỉ buổi chiều</option>
+              </select>
+              <small style={{ color: '#666', fontSize: '0.85rem', display: 'block', marginTop: '0.5rem' }}>
+                Nếu chọn sáng thì không tạo tiết chiều, và ngược lại.
+              </small>
+            </div>
+
+            <div className="form-group">
               <label>Phân bổ môn học</label>
               {generateData.subjectAssignments.map((assignment, index) => (
                 <div key={index} style={{ display: 'flex', gap: '10px', marginBottom: '10px', alignItems: 'end' }}>
+                  {(() => {
+                    const eligibleTeachers = getTeachersForGenerateSubject(assignment.subjectId);
+                    return (
+                      <>
                   <select
                     value={assignment.subjectId}
                     onChange={(e) => updateSubjectAssignment(index, 'subjectId', e.target.value)}
@@ -1242,9 +1397,18 @@ const ScheduleListPage = () => {
                     value={assignment.teacherId}
                     onChange={(e) => updateSubjectAssignment(index, 'teacherId', e.target.value)}
                     style={{ flex: 1 }}
+                    disabled={!generateData.classId || !assignment.subjectId || loadingGenerateClassSections}
                   >
-                    <option value="">-- Giáo viên --</option>
-                    {teachers.map(teacher => (
+                    <option value="">
+                      {!generateData.classId
+                        ? '-- Chọn lớp trước --'
+                        : !assignment.subjectId
+                          ? '-- Chọn môn trước --'
+                          : loadingGenerateClassSections
+                            ? '-- Đang tải giáo viên --'
+                            : '-- Giáo viên --'}
+                    </option>
+                    {eligibleTeachers.map(teacher => (
                       <option key={teacher.id} value={teacher.id}>{teacher.fullName}</option>
                     ))}
                   </select>
@@ -1264,6 +1428,9 @@ const ScheduleListPage = () => {
                   >
                     Xóa
                   </button>
+                      </>
+                    );
+                  })()}
                 </div>
               ))}
               <button

@@ -413,6 +413,12 @@ const ExamScoreManagement = () => {
   const [teacherOuterShow1T, setTeacherOuterShow1T] = useState(true);
   const [teacherOuterShowCk, setTeacherOuterShowCk] = useState(true);
 
+  // AI phân tích theo học sinh (cho giáo viên)
+  const [aiStudentModal, setAiStudentModal] = useState(null); // { studentId, fullName, email }
+  const [aiStudentLoading, setAiStudentLoading] = useState(false);
+  const [aiStudentError, setAiStudentError] = useState('');
+  const [aiStudentResult, setAiStudentResult] = useState(null); // response from /api/ai/insights/student
+
   useEffect(() => {
     fetchExamScores();
     fetchStudents();
@@ -420,6 +426,42 @@ const ExamScoreManagement = () => {
     fetchClasses();
     fetchScoreLockStatus();
   }, [user]);
+
+  const runAiStudentInsight = async (student) => {
+    const sid = student?.id ?? student?.studentId;
+    if (!sid) return;
+    try {
+      setAiStudentError('');
+      setAiStudentResult(null);
+      setAiStudentModal({
+        studentId: sid,
+        fullName: student?.fullName || '',
+        email: student?.email || '',
+      });
+      setAiStudentLoading(true);
+
+      const res = await api.post(
+        '/ai/insights/student',
+        { studentId: Number(sid), currentWindowDays: 30, previousWindowDays: 30 },
+        {
+          headers: {
+            'X-User-Id': user?.id,
+            'X-User-Role': user?.role?.name,
+          },
+        }
+      );
+      setAiStudentResult(res.data || null);
+    } catch (e) {
+      const msg =
+        e?.response?.data?.error ||
+        e?.response?.data?.message ||
+        e?.message ||
+        'Phân tích AI thất bại';
+      setAiStudentError(String(msg));
+    } finally {
+      setAiStudentLoading(false);
+    }
+  };
 
   const fetchScoreLockStatus = async () => {
     try {
@@ -1296,7 +1338,12 @@ const ExamScoreManagement = () => {
         alert(currentEditMode ? 'Sửa điểm thành công!' : 'Nhập điểm theo lớp thành công!');
       } catch (submitError) {
         console.error('Error submitting scores:', submitError);
-        alert('Có lỗi xảy ra khi lưu điểm số. Vui lòng thử lại.');
+        const msg =
+          submitError?.response?.data?.error ||
+          submitError?.response?.data?.message ||
+          submitError?.message ||
+          'Có lỗi xảy ra khi lưu điểm số. Vui lòng thử lại.';
+        alert(msg);
       }
     } catch (error) {
       console.error('Error saving class scores:', error);
@@ -1778,6 +1825,16 @@ const ExamScoreManagement = () => {
                               >
                                 <Trash2 size={14} />
                               </button>
+                              <button
+                                type="button"
+                                className="rounded-full bg-violet-100 px-3 py-1.5 text-xs font-semibold text-violet-700 hover:bg-violet-200 disabled:opacity-60"
+                                onClick={() => runAiStudentInsight(group.student)}
+                                disabled={aiStudentLoading}
+                                title="AI phân tích theo học sinh (gửi PH nếu có môn < 5)"
+                                aria-label="AI phân tích học sinh"
+                              >
+                                AI
+                              </button>
                             </div>
                           </td>
                         )}
@@ -2156,6 +2213,94 @@ const ExamScoreManagement = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal AI phân tích theo học sinh (Teacher) */}
+      {aiStudentModal && (
+        <div
+          className="common-modal-overlay"
+          onClick={() => {
+            if (aiStudentLoading) return;
+            setAiStudentModal(null);
+            setAiStudentError('');
+            setAiStudentResult(null);
+          }}
+        >
+          <div
+            className="common-modal"
+            onClick={(e) => e.stopPropagation()}
+            style={{ maxWidth: '720px', width: '92%' }}
+          >
+            <div className="common-modal-header">
+              <h3>AI phân tích học sinh</h3>
+              <button
+                className="common-close-btn"
+                onClick={() => {
+                  if (aiStudentLoading) return;
+                  setAiStudentModal(null);
+                  setAiStudentError('');
+                  setAiStudentResult(null);
+                }}
+              >
+                ✕
+              </button>
+            </div>
+            <div style={{ padding: '1rem' }}>
+              <div style={{ marginBottom: '0.75rem', fontSize: '0.95rem' }}>
+                <strong>{aiStudentModal.fullName || `Học sinh #${aiStudentModal.studentId}`}</strong>
+                {aiStudentModal.email ? (
+                  <span style={{ color: '#64748b' }}> — {aiStudentModal.email}</span>
+                ) : null}
+              </div>
+
+              {aiStudentLoading && <div style={{ color: '#334155' }}>Đang phân tích...</div>}
+
+              {aiStudentError && (
+                <div
+                  style={{
+                    padding: '0.75rem 1rem',
+                    background: '#fef2f2',
+                    border: '1px solid #fecaca',
+                    color: '#b91c1c',
+                    borderRadius: 10,
+                    fontSize: '0.9rem',
+                    marginBottom: '0.75rem',
+                  }}
+                >
+                  <strong>Lỗi:</strong> {aiStudentError}
+                </div>
+              )}
+
+              {aiStudentResult?.analysis?.analysis ? (
+                <>
+                  <div
+                    style={{
+                      padding: '0.75rem',
+                      background: '#f5f3ff',
+                      border: '1px solid #ddd6fe',
+                      borderRadius: 12,
+                      whiteSpace: 'pre-line',
+                      color: '#312e81',
+                      maxHeight: 320,
+                      overflow: 'auto',
+                    }}
+                  >
+                    {aiStudentResult.analysis.analysis}
+                  </div>
+                  <div style={{ marginTop: '0.75rem', fontSize: '0.9rem', color: '#475569' }}>
+                    {aiStudentResult.hasUnderAverage ? (
+                      <div>
+                        Đã phát hiện môn dưới trung bình. Thông báo phụ huynh: <strong>{aiStudentResult.notifiedParentCount ?? 0}</strong>.
+                      </div>
+                    ) : (
+                      <div>Không có môn dưới trung bình nên không gửi thông báo phụ huynh.</div>
+                    )}
+                  </div>
+                </>
+              ) : null}
+            </div>
           </div>
         </div>
       )}

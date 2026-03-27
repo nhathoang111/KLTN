@@ -35,6 +35,8 @@ const ClassDetailPage = () => {
 
   const [subjects, setSubjects] = useState([]);
   const [teachers, setTeachers] = useState([]);
+  const [teachersForSelectedSubject, setTeachersForSelectedSubject] = useState([]);
+  const [teachersBySubjectLoading, setTeachersBySubjectLoading] = useState(false);
   const [creating, setCreating] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
   const [createError, setCreateError] = useState("");
@@ -109,10 +111,13 @@ const ClassDetailPage = () => {
         const allUsers = usersRes.data?.users || [];
         const teacherUsers = allUsers.filter((u) => isTeacherRole(u?.role?.name));
         setTeachers(teacherUsers);
+        // Mặc định: chưa chọn môn thì hiển thị toàn bộ giáo viên đã lọc theo trường
+        setTeachersForSelectedSubject(teacherUsers);
       } catch (_) {
         if (!cancelled) return;
         setSubjects([]);
         setTeachers([]);
+        setTeachersForSelectedSubject([]);
       }
     };
 
@@ -122,6 +127,49 @@ const ClassDetailPage = () => {
       cancelled = true;
     };
   }, [classEntity?.school?.id]);
+
+  // Khi chọn môn trong form tạo lớp học phần:
+  // chỉ hiển thị giáo viên dạy đúng môn đó (dựa trên teacher_subjects).
+  useEffect(() => {
+    const schoolId = classEntity?.school?.id;
+    const subjectId = createForm.subjectId ? Number(createForm.subjectId) : null;
+
+    // Chưa chọn môn -> dùng danh sách giáo viên của trường
+    if (!subjectId || !schoolId) {
+      setTeachersForSelectedSubject(teachers || []);
+      return;
+    }
+
+    let cancelled = false;
+    const run = async () => {
+      try {
+        setTeachersBySubjectLoading(true);
+        const res = await api.get(`/subjects/${subjectId}/teachers`);
+        if (cancelled) return;
+        const list = res.data?.teachers || [];
+        setTeachersForSelectedSubject(list);
+
+        const currentTeacherId = createForm.teacherId ? String(createForm.teacherId) : '';
+        if (currentTeacherId) {
+          const exists = list.some((t) => String(t.id) === currentTeacherId);
+          if (!exists) {
+            setCreateForm((p) => ({ ...p, teacherId: '' }));
+          }
+        }
+      } catch (e) {
+        if (cancelled) return;
+        // Fallback: nếu BE chưa có endpoint/hoặc lỗi -> hiển thị toàn bộ giáo viên theo trường
+        setTeachersForSelectedSubject(teachers || []);
+      } finally {
+        if (!cancelled) setTeachersBySubjectLoading(false);
+      }
+    };
+
+    run();
+    return () => {
+      cancelled = true;
+    };
+  }, [createForm.subjectId, classEntity?.school?.id, teachers]);
 
   const refreshSections = async () => {
     const sectionsRes = await api.get(`/class-sections/class/${classId}`).catch(() => ({ data: { classSections: [] } }));
@@ -338,7 +386,7 @@ const ClassDetailPage = () => {
                   required
                 >
                   <option value="">Chọn giáo viên</option>
-                  {teachers.map((t) => (
+                  {(teachersBySubjectLoading ? teachers : teachersForSelectedSubject).map((t) => (
                     <option key={t.id} value={t.id}>
                       {t.fullName}
                     </option>

@@ -33,7 +33,10 @@ public class AnnouncementService {
     @Autowired
     private SchoolRepository schoolRepository;
 
-    public List<Announcement> getAnnouncements(Integer schoolId, Integer classId) {
+    public List<Announcement> getAnnouncements(Integer schoolId, Integer classId, Integer recipientUserId) {
+        if (recipientUserId != null) {
+            return announcementRepository.findByRecipientUserId(recipientUserId);
+        }
         if (classId != null) {
             return announcementRepository.findByClassEntityId(classId);
         } else if (schoolId != null) {
@@ -159,6 +162,31 @@ public class AnnouncementService {
             announcement.setCreatedBy(createdBy);
         } else {
             throw new BadRequestException("Người tạo là bắt buộc");
+        }
+
+        // recipientUserId (optional)
+        Integer recipientUserId = null;
+        Object recipientUserIdObj = announcementData.get("recipientUserId");
+        if (recipientUserIdObj != null) {
+            if (recipientUserIdObj instanceof Integer) {
+                recipientUserId = (Integer) recipientUserIdObj;
+            } else if (recipientUserIdObj instanceof String) {
+                String str = ((String) recipientUserIdObj).trim();
+                if (!str.isEmpty()) {
+                    try {
+                        recipientUserId = Integer.parseInt(str);
+                    } catch (NumberFormatException ignored) {}
+                }
+            } else if (recipientUserIdObj instanceof Number) {
+                recipientUserId = ((Number) recipientUserIdObj).intValue();
+            }
+        }
+        if (recipientUserId != null) {
+            User recipient = userRepository.findById(recipientUserId).orElse(null);
+            if (recipient == null) {
+                throw new BadRequestException("Không tìm thấy người nhận với ID: " + recipientUserId);
+            }
+            announcement.setRecipientUser(recipient);
         }
 
         return announcementRepository.save(announcement);

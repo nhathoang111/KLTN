@@ -28,6 +28,13 @@ const TeacherDashboard = () => {
   const [assignments, setAssignments] = useState([]);
   const [studentCountByClassId, setStudentCountByClassId] = useState({});
   const [scoreStats, setScoreStats] = useState({ gioi: 0, kha: 0, trungBinh: 0, yeu: 0 });
+  const [teacherSubjectAverages, setTeacherSubjectAverages] = useState([]);
+  const [teacherSubjectTrends, setTeacherSubjectTrends] = useState({});
+  const [classSections, setClassSections] = useState([]);
+
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiAnalysis, setAiAnalysis] = useState(null);
+  const [aiError, setAiError] = useState('');
 
   const teacherId = user?.id;
 
@@ -81,6 +88,12 @@ const TeacherDashboard = () => {
       setAssignments(assignmentsRes.data?.assignments || []);
       const counts = countsRes.data || {};
       setStudentCountByClassId(counts);
+      try {
+        const classSectionsRes = await api.get(`/class-sections/teacher/${teacherId}`);
+        setClassSections(classSectionsRes.data?.classSections || []);
+      } catch (e) {
+        setClassSections([]);
+      }
 
       // Lớp đang dạy = các lớp xuất hiện trong TKB của GV (distinct từ schedules)
       const classIdsFromSchedules = new Set(
@@ -101,6 +114,42 @@ const TeacherDashboard = () => {
           else yeu++;
         });
         setScoreStats({ gioi, kha, trungBinh, yeu });
+
+        // Tính điểm TB theo môn để đưa vào AI phân tích
+        const bySubject = {};
+        const now = Date.now();
+        const DAY = 24 * 60 * 60 * 1000;
+        const currentStart = now - 30 * DAY;
+        const previousStart = now - 60 * DAY;
+        const trendBySubject = {};
+
+        teacherClassScores.forEach((s) => {
+          const subjectName = s.subject?.name || 'Môn';
+          const sc = Number(s.score);
+          if (!bySubject[subjectName]) bySubject[subjectName] = { min: sc };
+          else bySubject[subjectName].min = Math.min(bySubject[subjectName].min, sc);
+
+          const t = s.createdAt ? Date.parse(s.createdAt) : NaN;
+          if (!Number.isNaN(t)) {
+            if (!trendBySubject[subjectName]) {
+              trendBySubject[subjectName] = { cur: { min: null }, prev: { min: null } };
+            }
+            if (t >= currentStart) {
+              const curMin = trendBySubject[subjectName].cur.min;
+              trendBySubject[subjectName].cur.min = curMin == null ? sc : Math.min(curMin, sc);
+            } else if (t >= previousStart && t < currentStart) {
+              const prevMin = trendBySubject[subjectName].prev.min;
+              trendBySubject[subjectName].prev.min = prevMin == null ? sc : Math.min(prevMin, sc);
+            }
+          }
+        });
+        const subjectMinScores = Object.entries(bySubject).map(([name, v]) => ({
+          subject: name,
+          score: Number(v.min),
+        }));
+        subjectMinScores.sort((a, b) => a.score - b.score);
+        setTeacherSubjectAverages(subjectMinScores);
+        setTeacherSubjectTrends(trendBySubject);
       }
     } catch (e) {
       console.error('Error fetching teacher dashboard:', e);
@@ -119,6 +168,45 @@ const TeacherDashboard = () => {
     if (ids.size === 0) teacherClasses.forEach((c) => ids.add(c.id));
     return ids;
   }, [allSchedules, teacherClasses]);
+
+  // "Danh sách lớp phụ trách" nên hiển thị cả:
+  // - lớp GVCN (teacherClasses)
+  // - và các lớp giáo viên đang dạy theo TKB (allSchedules)
+  // Nếu chỉ dựa vào GVCN mà giáo viên không làm GVCN thì sẽ hiện "Chưa có lớp phụ trách".
+  const classesForResponsibilityList = React.useMemo(() => {
+    const map = new Map();
+    (teacherClasses || []).forEach((c) => {
+      const id = c?.id;
+      if (id != null && !map.has(id)) map.set(id, c);
+    });
+
+    (allSchedules || []).forEach((s) => {
+      const c = s?.classEntity;
+      const id = c?.id;
+      if (id != null && !map.has(id)) map.set(id, c);
+    });
+
+    (classSections || []).forEach((cs) => {
+      const c = cs?.classRoom || cs?.class_room;
+      const id = c?.id;
+      if (id != null && !map.has(id)) map.set(id, c);
+    });
+
+    return Array.from(map.values()).sort((a, b) => {
+      const na = a?.name ?? '';
+      const nb = b?.name ?? '';
+      return na.localeCompare(nb, 'vi');
+    });
+  }, [teacherClasses, allSchedules, classSections]);
+
+  const homeroomClassesList = React.useMemo(() => {
+    return (teacherClasses || []).slice();
+  }, [teacherClasses]);
+
+  const otherResponsibilityClassesList = React.useMemo(() => {
+    const homeroomIds = new Set((teacherClasses || []).map((c) => c?.id).filter(Boolean));
+    return (classesForResponsibilityList || []).filter((c) => !homeroomIds.has(c?.id));
+  }, [teacherClasses, classesForResponsibilityList]);
   const classesTeachingCount = classIdsTeaching.size;
   const totalStudents = Array.from(classIdsTeaching).reduce(
     (sum, id) => sum + (studentCountByClassId[id] ?? 0),
@@ -149,6 +237,34 @@ const TeacherDashboard = () => {
       </div>
     );
   }
+
+  const analyzeWithAi = async () => {
+    try {
+      setAiError('');
+      setAiAnalysis(null);
+      if (!teacherSubjectAverages.length) {
+        setAiError('Chưa có dữ liệu điểm để phân tích.');
+        return;
+      }
+      setAiLoading(true);
+
+      const fullName = user?.fullName || '';
+      const payload = {
+        target: fullName ? `Giáo viên: ${fullName}` : 'Giáo viên',
+        subjects: teacherSubjectAverages.map((r) => {
+          const t = teacherSubjectTrends[r.subject];
+          const prevMin = t?.prev?.min ?? null;
+          return { name: r.subject, score: Number(r.score), previousScore: prevMin != null ? Number(prevMin.toFixed(2)) : null };
+        }),
+      };
+      const res = await api.post('/ai/grade-analysis', payload);
+      setAiAnalysis(res.data?.analysis ?? '');
+    } catch (e) {
+      setAiError(e?.response?.data?.error || e?.message || 'Phân tích AI thất bại');
+    } finally {
+      setAiLoading(false);
+    }
+  };
 
   return (
     <div className="td-wrap">
@@ -231,12 +347,90 @@ const TeacherDashboard = () => {
           </div>
 
           <div className="td-card">
-            <h3 className="td-card-title">Danh sách lớp phụ trách</h3>
-            <ul className="td-class-list">
-              {teacherClasses.length === 0 ? (
-                <li className="td-empty">Chưa có lớp phụ trách.</li>
+            <h3 className="td-card-title">Bài tập đã giao</h3>
+            <ul className="td-assign-list td-assign-list--recent">
+              {assignments.length === 0 ? (
+                <li className="td-empty">Chưa có bài tập.</li>
               ) : (
-                teacherClasses.map((c) => {
+                [...assignments]
+                  .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
+                  .slice(0, 8)
+                  .map((a) => (
+                    <li key={a.id} className="td-assign-item">
+                      <span className="td-assign-icon" />
+                      <div className="td-assign-body">
+                        <span className="td-assign-title">{a.title}</span>
+                        <span className="td-assign-class">Lớp {a.classEntity?.name ?? '-'}</span>
+                        {a.dueDate && (
+                          <span className="td-assign-due">{formatDueDate(a.dueDate)}</span>
+                        )}
+                      </div>
+                    </li>
+                  ))
+              )}
+            </ul>
+          </div>
+
+          <div className="td-card" style={{ marginTop: '16px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
+              <h3 className="td-card-title" style={{ margin: 0 }}>AI phân tích điểm</h3>
+              <button
+                type="button"
+                className="td-view-all"
+                onClick={analyzeWithAi}
+                disabled={aiLoading || teacherSubjectAverages.length === 0}
+                style={{ cursor: (aiLoading || teacherSubjectAverages.length === 0) ? 'not-allowed' : 'pointer' }}
+              >
+                {aiLoading ? 'Đang phân tích...' : 'Phân tích bằng AI'}
+              </button>
+            </div>
+
+            {aiError && (
+              <div
+                style={{
+                  marginTop: '10px',
+                  padding: '8px 12px',
+                  background: '#fef2f2',
+                  border: '1px solid #fecaca',
+                  borderRadius: '8px',
+                  color: '#b91c1c',
+                  fontSize: '0.9rem',
+                }}
+              >
+                {aiError}
+              </div>
+            )}
+
+            {aiAnalysis && (
+              <div
+                style={{
+                  marginTop: '10px',
+                  padding: '10px 12px',
+                  background: '#f5f3ff',
+                  border: '1px solid #ddd6fe',
+                  borderRadius: '10px',
+                  whiteSpace: 'pre-line',
+                  maxHeight: '260px',
+                  overflow: 'auto',
+                  color: '#312e81',
+                  fontSize: '0.9rem',
+                }}
+              >
+                {aiAnalysis}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Cột phải */}
+        <div className="td-right-col">
+          <div className="td-card">
+            <h3 className="td-card-title">Lớp chủ nhệm</h3>
+            <ul className="td-class-list">
+              {homeroomClassesList.length === 0 ? (
+                <li className="td-empty">Chưa có lớp chủ nhiệm.</li>
+              ) : (
+                homeroomClassesList.map((c) => {
                   const count = studentCountByClassId[c.id] ?? c.studentCount ?? 0;
                   return (
                     <li key={c.id}>
@@ -255,55 +449,29 @@ const TeacherDashboard = () => {
               )}
             </ul>
           </div>
-        </div>
-
-        {/* Cột phải */}
-        <div className="td-right-col">
-          <div className="td-card">
-            <div className="td-card-head">
-              <h3 className="td-card-title">Bài tập cho lớp phụ trách</h3>
-              <button type="button" className="td-view-all" onClick={() => navigate('/assignments')}>
-                Xem tất cả
-              </button>
-            </div>
-            <ul className="td-assign-list">
-              {assignments.length === 0 ? (
-                <li className="td-empty">Chưa có bài tập.</li>
-              ) : (
-                assignments.slice(0, 5).map((a) => (
-                  <li key={a.id} className="td-assign-item">
-                    <span className="td-assign-icon" />
-                    <div className="td-assign-body">
-                      <span className="td-assign-title">{a.title}</span>
-                      <span className="td-assign-class">Lớp {a.classEntity?.name ?? '-'}</span>
-                      {a.dueDate && (
-                        <span className="td-assign-due">{formatDueDate(a.dueDate)}</span>
-                      )}
-                    </div>
-                  </li>
-                ))
-              )}
-            </ul>
-          </div>
 
           <div className="td-card">
-            <h3 className="td-card-title">Bài tập gần đây</h3>
-            <ul className="td-assign-list td-assign-list--recent">
-              {assignments.length === 0 ? (
-                <li className="td-empty">Chưa có bài tập.</li>
+            <h3 className="td-card-title">Lớp phụ trách</h3>
+            <ul className="td-class-list">
+              {otherResponsibilityClassesList.length === 0 ? (
+                <li className="td-empty">Chưa có lớp phụ trách.</li>
               ) : (
-                [...assignments]
-                  .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
-                  .slice(0, 4)
-                  .map((a) => (
-                    <li key={a.id} className="td-assign-item">
-                      <span className="td-assign-icon" />
-                      <div className="td-assign-body">
-                        <span className="td-assign-title">{a.title}</span>
-                        <span className="td-assign-class">Lớp {a.classEntity?.name ?? '-'}</span>
-                      </div>
+                otherResponsibilityClassesList.map((c) => {
+                  const count = studentCountByClassId[c.id] ?? c.studentCount ?? 0;
+                  return (
+                    <li key={c.id}>
+                      <button
+                        type="button"
+                        className="td-class-item"
+                        onClick={() => navigate(`/classes/${c.id}`)}
+                      >
+                        <span>{c.name}</span>
+                        <span className="td-class-meta">({count} học sinh)</span>
+                        <span className="td-class-arrow">›</span>
+                      </button>
                     </li>
-                  ))
+                  );
+                })
               )}
             </ul>
           </div>

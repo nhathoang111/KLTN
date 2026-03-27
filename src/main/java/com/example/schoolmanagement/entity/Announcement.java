@@ -22,6 +22,14 @@ public class Announcement {
     @JoinColumn(name = "created_by")
     private User createdBy;
 
+    /**
+     * Người nhận (optional). Nếu null: thông báo chung theo trường/lớp.
+     * Nếu có: chỉ user này (ví dụ giáo viên/phụ huynh) nên nhận thông báo AI.
+     */
+    @ManyToOne(fetch = FetchType.EAGER)
+    @JoinColumn(name = "recipient_user_id")
+    private User recipientUser;
+
     private String title;
     private String content;
 
@@ -40,6 +48,9 @@ public class Announcement {
 
     public User getCreatedBy() { return createdBy; }
     public void setCreatedBy(User createdBy) { this.createdBy = createdBy; }
+
+    public User getRecipientUser() { return recipientUser; }
+    public void setRecipientUser(User recipientUser) { this.recipientUser = recipientUser; }
 
     public String getTitle() { return title; }
     public void setTitle(String title) { this.title = title; }

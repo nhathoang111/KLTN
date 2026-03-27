@@ -14,4 +14,6 @@ public interface AnnouncementRepository extends JpaRepository<Announcement, Inte
     List<Announcement> findBySchoolId(@Param("schoolId") Integer schoolId);
     List<Announcement> findByClassEntityId(Integer classId);
     List<Announcement> findByCreatedById(Integer createdById);
+
+    List<Announcement> findByRecipientUserId(Integer recipientUserId);
 }

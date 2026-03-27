@@ -39,6 +39,11 @@ public class SubjectController {
         return ResponseEntity.ok(Map.of("classes", subjectService.getClassesBySubjectId(id)));
     }
 
+    @GetMapping("/{id}/teachers")
+    public ResponseEntity<?> getTeachersBySubject(@PathVariable("id") Integer subjectId) {
+        return ResponseEntity.ok(Map.of("teachers", subjectService.getTeachersBySubjectId(subjectId)));
+    }
+
     @GetMapping("/{id}")
     public ResponseEntity<?> getSubject(@PathVariable Integer id) {
         Subject subject = subjectService.getSubjectById(id);

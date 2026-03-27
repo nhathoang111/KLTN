@@ -15,6 +15,9 @@ public interface TeacherSubjectRepository extends JpaRepository<TeacherSubject, 
     @Query("SELECT ts.subject.id FROM TeacherSubject ts WHERE ts.user.id = :teacherId")
     List<Integer> findSubjectIdsByUserId(@Param("teacherId") Integer teacherId);
 
+    @Query("SELECT DISTINCT ts.user.id FROM TeacherSubject ts WHERE ts.subject.id = :subjectId")
+    List<Integer> findTeacherIdsBySubjectId(@Param("subjectId") Integer subjectId);
+
     @Modifying
     @Query("DELETE FROM TeacherSubject ts WHERE ts.user.id = :userId")
     void deleteByUserId(@Param("userId") Integer userId);

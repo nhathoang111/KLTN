@@ -23,8 +23,9 @@ public class AnnouncementController {
 
     @GetMapping
     public ResponseEntity<?> getAnnouncements(@RequestParam(required = false) Integer schoolId,
-                                             @RequestParam(required = false) Integer classId) {
-        List<Announcement> announcements = announcementService.getAnnouncements(schoolId, classId);
+                                             @RequestParam(required = false) Integer classId,
+                                             @RequestParam(required = false) Integer recipientUserId) {
+        List<Announcement> announcements = announcementService.getAnnouncements(schoolId, classId, recipientUserId);
 
         if (log.isDebugEnabled()) {
             for (Announcement ann : announcements) {

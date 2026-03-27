@@ -28,6 +28,9 @@ const StudentDashboard = () => {
   const [examScores, setExamScores] = useState([]);
   const [announcements, setAnnouncements] = useState([]);
   const [classInfo, setClassInfo] = useState(null); // class detail + student count
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiAnalysis, setAiAnalysis] = useState(null);
+  const [aiError, setAiError] = useState('');
 
   const studentId = user?.id;
   const schoolId = user?.school?.id;
@@ -62,7 +65,12 @@ const StudentDashboard = () => {
 
       const [schedulesRes, scoresRes] = await Promise.all([
         api.get(`/schedules/student/${studentId}`),
-        api.get(`/exam-scores?studentId=${studentId}`),
+        // Lọc theo đúng school để chỉ thấy môn thuộc trường của học sinh
+        api.get(
+          schoolId
+            ? `/exam-scores?studentId=${studentId}&schoolId=${schoolId}`
+            : `/exam-scores?studentId=${studentId}`
+        ),
       ]);
 
       const schedules = schedulesRes.data?.schedules || [];
@@ -144,6 +152,80 @@ const StudentDashboard = () => {
     subject: name,
     score: (arr.reduce((a, b) => a + b, 0) / arr.length).toFixed(1),
   }));
+
+  // Dùng "điểm thấp nhất" theo môn để AI chắc chắn liệt kê môn có điểm dưới 5.0
+  const recentMinScores = React.useMemo(() => {
+    const by = {};
+    (examScores || []).forEach((e) => {
+      const subjectName = e.subject?.name || 'Môn';
+      const score = Number(e.score);
+      if (Number.isNaN(score)) return;
+      if (!by[subjectName]) by[subjectName] = { min: score };
+      else by[subjectName].min = Math.min(by[subjectName].min, score);
+    });
+    return Object.entries(by).map(([subject, v]) => ({ subject, score: v.min }));
+  }, [examScores]);
+
+  const subjectTrendBy30Days = React.useMemo(() => {
+    const now = Date.now();
+    const DAY = 24 * 60 * 60 * 1000;
+    const currentStart = now - 30 * DAY;
+    const previousStart = now - 60 * DAY;
+
+    const by = {};
+    (examScores || []).forEach((e) => {
+      const subjectName = e.subject?.name || 'Môn';
+      const score = Number(e.score);
+      if (Number.isNaN(score)) return;
+      const t = e.createdAt ? Date.parse(e.createdAt) : NaN;
+      if (Number.isNaN(t)) return;
+
+      if (!by[subjectName]) by[subjectName] = { cur: { min: null }, prev: { min: null } };
+
+      if (t >= currentStart) {
+        const curMin = by[subjectName].cur.min;
+        by[subjectName].cur.min = curMin == null ? score : Math.min(curMin, score);
+      } else if (t >= previousStart && t < currentStart) {
+        const prevMin = by[subjectName].prev.min;
+        by[subjectName].prev.min = prevMin == null ? score : Math.min(prevMin, score);
+      }
+    });
+    return by;
+  }, [examScores]);
+
+  const analyzeWithAi = async () => {
+    try {
+      setAiError('');
+      setAiAnalysis(null);
+      if (!recentScores.length) {
+        setAiError('Chưa có điểm để phân tích.');
+        return;
+      }
+      setAiLoading(true);
+
+      const fullName = user?.fullName || studentDetail?.fullName || '';
+
+      const payload = {
+        target: fullName ? `Học sinh: ${fullName}` : 'Học sinh',
+        subjects: recentMinScores.map((r) => ({
+          name: r.subject,
+          score: Number(r.score),
+          previousScore: (() => {
+            const t = subjectTrendBy30Days[r.subject];
+            if (!t || t.prev.min == null) return null;
+            return Number(Number(t.prev.min).toFixed(2));
+          })(),
+        })),
+      };
+
+      const res = await api.post('/ai/grade-analysis', payload);
+      setAiAnalysis(res.data?.analysis ?? '');
+    } catch (e) {
+      setAiError(e?.response?.data?.error || e?.message || 'Phân tích AI thất bại');
+    } finally {
+      setAiLoading(false);
+    }
+  };
 
   const formatDueDate = (d) => {
     if (!d) return '';
@@ -246,6 +328,52 @@ const StudentDashboard = () => {
             <button type="button" className="sd-view-all" onClick={() => navigate('/exam-scores')}>
               Xem tất cả
             </button>
+
+            <div style={{ marginTop: '0.75rem' }}>
+              <button
+                type="button"
+                className="sd-view-all"
+                onClick={analyzeWithAi}
+                disabled={aiLoading || recentScores.length === 0}
+              >
+                {aiLoading ? 'Đang phân tích...' : 'Phân tích bằng AI'}
+              </button>
+
+              {aiError && (
+                <div
+                  style={{
+                    marginTop: '0.5rem',
+                    padding: '0.5rem 0.75rem',
+                    background: '#fef2f2',
+                    border: '1px solid #fecaca',
+                    borderRadius: '8px',
+                    fontSize: '0.85rem',
+                    color: '#b91c1c',
+                  }}
+                >
+                  {aiError}
+                </div>
+              )}
+
+              {aiAnalysis && (
+                <div
+                  style={{
+                    marginTop: '0.5rem',
+                    padding: '0.75rem',
+                    background: '#f5f3ff',
+                    border: '1px solid #ddd6fe',
+                    borderRadius: '10px',
+                    fontSize: '0.85rem',
+                    color: '#312e81',
+                    whiteSpace: 'pre-line',
+                    maxHeight: '240px',
+                    overflow: 'auto',
+                  }}
+                >
+                  {aiAnalysis}
+                </div>
+              )}
+            </div>
           </div>
         </div>
 

@@ -112,6 +112,7 @@ public class ScheduleController {
         Object numberOfWeeksObj = request.get("numberOfWeeks");
         Integer numberOfWeeks = numberOfWeeksObj instanceof Number
                 ? ((Number) numberOfWeeksObj).intValue() : 1;
+        String session = request.get("session") != null ? String.valueOf(request.get("session")) : "BOTH";
         if (numberOfWeeks == null || numberOfWeeks < 1) {
             numberOfWeeks = 1;
         }
@@ -120,7 +121,7 @@ public class ScheduleController {
             throw new BadRequestException("classId and subjectAssignments are required");
         }
 
-        int createdCount = scheduleService.generateSchedules(classId, schoolId, subjectAssignments, numberOfWeeks);
+        int createdCount = scheduleService.generateSchedules(classId, schoolId, subjectAssignments, numberOfWeeks, session);
         return ResponseEntity.ok(Map.of(
                 "message", "Schedules generated successfully",
                 "count", createdCount));

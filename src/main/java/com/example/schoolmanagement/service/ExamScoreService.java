@@ -56,8 +56,17 @@ public class ExamScoreService {
             return;
         }
         List<com.example.schoolmanagement.entity.Schedule> teacherSchedules = scheduleRepository.findByTeacherId(currentUserId);
-        boolean isAssigned = teacherSchedules.stream()
-                .anyMatch(schedule -> schedule.getSubject() != null && schedule.getSubject().getId().equals(subjectId));
+        // Một số trường hợp TKB đã tạo nhưng Schedule.subject bị null (hoặc không set đúng).
+        // Khi đó fallback qua schedule.classSection.subject để vẫn đối chiếu được môn giáo viên phụ trách.
+        boolean isAssigned = teacherSchedules.stream().anyMatch(schedule -> {
+            Integer sid = null;
+            if (schedule.getSubject() != null) {
+                sid = schedule.getSubject().getId();
+            } else if (schedule.getClassSection() != null && schedule.getClassSection().getSubject() != null) {
+                sid = schedule.getClassSection().getSubject().getId();
+            }
+            return sid != null && sid.equals(subjectId);
+        });
         if (!isAssigned) {
             String msg = isCreate
                     ? "Bạn không có quyền thêm điểm cho môn học này. Chỉ có thể thêm điểm cho các môn học bạn phụ trách."

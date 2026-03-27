@@ -64,6 +64,7 @@ public interface ScheduleRepository extends JpaRepository<Schedule, Integer> {
             "LEFT JOIN FETCH s.subject " +
             "LEFT JOIN FETCH s.school " +
             "LEFT JOIN FETCH s.classSection cs " +
+            "LEFT JOIN FETCH cs.subject " +
             "WHERE s.teacher.id = :teacherId")
     List<Schedule> findByTeacherId(@Param("teacherId") Integer teacherId);
     

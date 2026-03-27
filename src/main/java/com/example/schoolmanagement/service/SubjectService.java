@@ -8,9 +8,12 @@ package com.example.schoolmanagement.service;
 import com.example.schoolmanagement.entity.Subject;
 import com.example.schoolmanagement.exception.BadRequestException;
 import com.example.schoolmanagement.exception.ResourceNotFoundException;
+import com.example.schoolmanagement.entity.User;
 import com.example.schoolmanagement.repository.SchoolRepository;
 import com.example.schoolmanagement.repository.ScheduleRepository;
+import com.example.schoolmanagement.repository.TeacherSubjectRepository;
 import com.example.schoolmanagement.repository.SubjectRepository;
+import com.example.schoolmanagement.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -29,6 +32,12 @@ public class SubjectService {
 
     @Autowired
     private ScheduleRepository scheduleRepository;
+
+    @Autowired
+    private TeacherSubjectRepository teacherSubjectRepository;
+
+    @Autowired
+    private UserRepository userRepository;
 
     /** Số lớp đang học từng môn (subjectId -> count). Đếm theo thời khóa biểu (Schedule). */
     public Map<Integer, Long> getSubjectClassCounts() {
@@ -106,6 +115,41 @@ public class SubjectService {
         if (subject.getStatus() != null) existing.setStatus(subject.getStatus());
         if (subject.getDeletedAt() != null) existing.setDeletedAt(subject.getDeletedAt());
         return saveSubject(existing);
+    }
+
+    /**
+     * Danh sách giáo viên dạy 1 môn (dựa trên bảng teacher_subjects).
+     * Trả về DTO tối giản: { id, fullName }.
+     */
+    public List<Map<String, Object>> getTeachersBySubjectId(Integer subjectId) {
+        if (subjectId == null) throw new BadRequestException("Thiếu subjectId");
+
+        Subject subject = getSubjectById(subjectId);
+        Integer subjSchoolId = subject.getSchool() != null ? subject.getSchool().getId() : null;
+
+        List<Integer> teacherIds = teacherSubjectRepository.findTeacherIdsBySubjectId(subjectId);
+        if (teacherIds == null || teacherIds.isEmpty()) return List.of();
+
+        List<User> users = userRepository.findAllById(teacherIds);
+        List<Map<String, Object>> teachers = new ArrayList<>();
+        for (User u : users) {
+            if (u == null) continue;
+            // Chặn trường hợp join trả về user khác trường (nếu dữ liệu bẩn)
+            if (subjSchoolId != null) {
+                if (u.getSchool() == null || u.getSchool().getId() == null) continue;
+                if (!subjSchoolId.equals(u.getSchool().getId())) continue;
+            }
+            if (u.getRole() == null || u.getRole().getName() == null) continue;
+            String rn = u.getRole().getName().toUpperCase();
+            boolean isTeacher = rn.startsWith("TEACHER") || rn.contains("TEACHER") || rn.contains("GIÁO VIÊN") || rn.contains("GIAO VIEN") || rn.contains("GV");
+            if (!isTeacher) continue;
+
+            Map<String, Object> row = new HashMap<>();
+            row.put("id", u.getId());
+            row.put("fullName", u.getFullName());
+            teachers.add(row);
+        }
+        return teachers;
     }
 
     public void deleteSubject(Integer id) {
