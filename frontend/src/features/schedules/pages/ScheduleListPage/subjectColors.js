@@ -11,6 +11,8 @@ const FALLBACK = [
 ];
 
 const RULES = [
+  { test: (s) => /chào cờ/i.test(s), colors: { bg: '#fef2f2', accent: '#dc2626', title: '#991b1b' } },
+  { test: (s) => /sinh hoạt/i.test(s), colors: { bg: '#eef2ff', accent: '#4f46e5', title: '#312e81' } },
   { test: (s) => /toán|math/i.test(s), colors: { bg: '#dbeafe', accent: '#2563eb', title: '#1e3a8a' } },
   { test: (s) => /ngữ văn|^văn\b|văn học|literature/i.test(s), colors: { bg: '#ffedd5', accent: '#ea580c', title: '#9a3412' } },
   { test: (s) => /anh|english|tiếng anh/i.test(s), colors: { bg: '#ede9fe', accent: '#7c3aed', title: '#4c1d95' } },

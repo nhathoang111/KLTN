@@ -55,7 +55,7 @@ public class ClassSectionService {
     }
 
     public List<ClassSection> getByTeacherId(Integer teacherId) {
-        return classSectionRepository.findByTeacherId(teacherId);
+        return classSectionRepository.findByTeacherIdFetchAll(teacherId);
     }
 
     public ClassSection save(ClassSection classSection) {

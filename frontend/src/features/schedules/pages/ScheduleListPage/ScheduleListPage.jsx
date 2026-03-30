@@ -10,6 +10,7 @@ import {
   MAX_PERIOD,
 } from './schoolScheduleTimeline';
 import { colorsForSubject } from './subjectColors';
+import { scheduleSubjectDisplayName } from '../../../../shared/lib/scheduleLabels';
 
 const ScheduleListPage = () => {
   const { user } = useAuth();
@@ -545,8 +546,10 @@ const ScheduleListPage = () => {
         return;
       }
 
+      const schoolId = user?.school?.id;
       const payload = {
         classId: parseInt(generateData.classId),
+        ...(schoolId != null && schoolId !== '' ? { schoolId: Number(schoolId) } : {}),
         subjectAssignments: generateData.subjectAssignments.map(a => ({
           subjectId: parseInt(a.subjectId),
           teacherId: parseInt(a.teacherId),
@@ -557,17 +560,37 @@ const ScheduleListPage = () => {
       };
 
       const response = await api.post('/schedules/generate', payload);
-      const createdCount = response.data.count || 0;
+      const data = response.data || {};
       const numberOfWeeksCreated = parseInt(generateData.numberOfWeeks) || 1;
-      setShowGenerateModal(false);
-      setGenerateData({
-        classId: '',
-        subjectAssignments: [],
-        numberOfWeeks: 1,
-        session: 'BOTH'
-      });
-      await fetchSchedules();
-      alert(`Tạo thời khóa biểu tự động thành công.\n\nĐã tạo ${createdCount} lịch học cho ${numberOfWeeksCreated} tuần.\n\nDùng nút "Tuần sau →" để xem các tuần tiếp theo.`);
+      if (data.success) {
+        setShowGenerateModal(false);
+        setGenerateData({
+          classId: '',
+          subjectAssignments: [],
+          numberOfWeeks: 1,
+          session: 'BOTH'
+        });
+        await fetchSchedules();
+        alert(
+          `${data.message || 'Thành công.'}\n\n` +
+            `Tiết yêu cầu (tổng/tuần): ${data.requestedPeriods ?? '-'} — Đã tạo: ${data.assignedPeriods ?? '-'}\n` +
+            `Sức chứa tuần đầu: ${data.weeklyCapacity ?? '-'}\n\n` +
+            `Đã tạo cho ${numberOfWeeksCreated} tuần. Dùng "Tuần sau →" để xem thêm.`
+        );
+      } else {
+        const unmet = Array.isArray(data.unmetAssignments) ? data.unmetAssignments : [];
+        const unmetText =
+          unmet.length > 0
+            ? '\n\nChưa đủ tiết:\n' +
+              unmet
+                .map(
+                  (u) =>
+                    `- Dòng ${u.lineIndex + 1}: ${u.subjectName ?? u.subjectId} / ${u.teacherName ?? u.teacherId} — cần ${u.requiredPeriods}, được ${u.assignedPeriods}`
+                )
+                .join('\n')
+            : '';
+        alert((data.message || 'Tạo TKB tự động không hoàn tất.') + unmetText);
+      }
     } catch (error) {
       console.error('Error generating schedules:', error);
       alert('Lỗi khi tạo thời khóa biểu: ' + (error.response?.data?.error || error.message));
@@ -600,6 +623,26 @@ const ScheduleListPage = () => {
       updated[index] = { ...updated[index], [field]: value };
     }
     setGenerateData({ ...generateData, subjectAssignments: updated });
+  };
+
+  /** Mỗi môn chỉ chọn một lần: ẩn môn đã dùng ở dòng khác (vẫn hiện môn đang chọn ở dòng này). */
+  const getSubjectsForAssignmentRow = (rowIndex) => {
+    const assignments = generateData.subjectAssignments;
+    const takenElsewhere = new Set(
+      assignments
+        .map((a, i) =>
+          i !== rowIndex && a.subjectId ? String(a.subjectId) : null
+        )
+        .filter(Boolean)
+    );
+    const currentId = assignments[rowIndex]?.subjectId
+      ? String(assignments[rowIndex].subjectId)
+      : '';
+    return subjects.filter(
+      (s) =>
+        !takenElsewhere.has(String(s.id)) ||
+        (currentId !== '' && String(s.id) === currentId)
+    );
   };
 
   // Tạo TKB tự động: chỉ lấy giáo viên theo lớp học phần của lớp đang chọn
@@ -1023,8 +1066,8 @@ const ScheduleListPage = () => {
                     }
                     const schedule = getScheduleForDayAndPeriod(dayOfWeek, row.period);
                     const sid = schedule?.subject?.id ?? schedule?.subject_id;
-                    const sname = schedule?.subject?.name;
-                    const palette = colorsForSubject(sid, sname);
+                    const displayTitle = scheduleSubjectDisplayName(schedule, '');
+                    const palette = colorsForSubject(sid, displayTitle);
                     const emptyTitle = canManage
                       ? 'Chưa có tiết — dùng nút Thêm lịch học để phân công.'
                       : 'Chưa có tiết học trong khung giờ này.';
@@ -1050,20 +1093,22 @@ const ScheduleListPage = () => {
                           >
                             <div className="tt-lesson-card__time">{formatTimeRange(row.startMin, row.endMin)}</div>
                             <div className="tt-lesson-card__title" style={{ color: palette.title }}>
-                              {schedule.subject?.name || '—'}
+                              {scheduleSubjectDisplayName(schedule)}
                             </div>
                             <div className="tt-lesson-card__meta">{schedule.teacher?.fullName || '—'}</div>
                             <div className="tt-lesson-card__room">Phòng: {schedule.room || '—'}</div>
                             {canManage && (
                               <div className="tt-lesson-card__actions">
-                                <button
-                                  type="button"
-                                  className="tt-lesson-card__btn tt-lesson-card__btn--edit"
-                                  onClick={() => handleEdit(schedule)}
-                                  title="Sửa tiết học"
-                                >
-                                  Sửa
-                                </button>
+                                {!(schedule.fixedActivityCode || schedule.fixed_activity_code) && (
+                                  <button
+                                    type="button"
+                                    className="tt-lesson-card__btn tt-lesson-card__btn--edit"
+                                    onClick={() => handleEdit(schedule)}
+                                    title="Sửa tiết học"
+                                  >
+                                    Sửa
+                                  </button>
+                                )}
                                 <button
                                   type="button"
                                   className="tt-lesson-card__btn tt-lesson-card__btn--del"
@@ -1124,8 +1169,8 @@ const ScheduleListPage = () => {
                       ? getScheduleForDayAndPeriod(dayOfWeek, row.period)
                       : null;
                     const sid = schedule?.subject?.id ?? schedule?.subject_id;
-                    const sname = schedule?.subject?.name;
-                    const palette = colorsForSubject(sid, sname);
+                    const displayTitle = scheduleSubjectDisplayName(schedule, '');
+                    const palette = colorsForSubject(sid, displayTitle);
                     const emptyTitle = canManage
                       ? 'Chưa có tiết — dùng nút Thêm lịch học, chọn tiết 6–10 (buổi chiều).'
                       : 'Chưa có tiết học trong khung giờ này.';
@@ -1151,20 +1196,22 @@ const ScheduleListPage = () => {
                           >
                             <div className="tt-lesson-card__time">{formatTimeRange(row.startMin, row.endMin)}</div>
                             <div className="tt-lesson-card__title" style={{ color: palette.title }}>
-                              {schedule.subject?.name || '—'}
+                              {scheduleSubjectDisplayName(schedule)}
                             </div>
                             <div className="tt-lesson-card__meta">{schedule.teacher?.fullName || '—'}</div>
                             <div className="tt-lesson-card__room">Phòng: {schedule.room || '—'}</div>
                             {canManage && (
                               <div className="tt-lesson-card__actions">
-                                <button
-                                  type="button"
-                                  className="tt-lesson-card__btn tt-lesson-card__btn--edit"
-                                  onClick={() => handleEdit(schedule)}
-                                  title="Sửa tiết học"
-                                >
-                                  Sửa
-                                </button>
+                                {!(schedule.fixedActivityCode || schedule.fixed_activity_code) && (
+                                  <button
+                                    type="button"
+                                    className="tt-lesson-card__btn tt-lesson-card__btn--edit"
+                                    onClick={() => handleEdit(schedule)}
+                                    title="Sửa tiết học"
+                                  >
+                                    Sửa
+                                  </button>
+                                )}
                                 <button
                                   type="button"
                                   className="tt-lesson-card__btn tt-lesson-card__btn--del"
@@ -1389,7 +1436,7 @@ const ScheduleListPage = () => {
                     style={{ flex: 1 }}
                   >
                     <option value="">-- Môn học --</option>
-                    {subjects.map(subject => (
+                    {getSubjectsForAssignmentRow(index).map((subject) => (
                       <option key={subject.id} value={subject.id}>{subject.name}</option>
                     ))}
                   </select>

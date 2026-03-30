@@ -23,7 +23,12 @@ public interface ClassSectionRepository extends JpaRepository<ClassSection, Inte
 
     List<ClassSection> findBySubjectId(Integer subjectId);
 
-    List<ClassSection> findByTeacherId(Integer teacherId);
+    @Query("SELECT DISTINCT cs FROM ClassSection cs " +
+            "LEFT JOIN FETCH cs.classRoom " +
+            "LEFT JOIN FETCH cs.subject " +
+            "LEFT JOIN FETCH cs.teacher " +
+            "WHERE cs.teacher.id = :teacherId")
+    List<ClassSection> findByTeacherIdFetchAll(@Param("teacherId") Integer teacherId);
 
     @Query("SELECT cs FROM ClassSection cs WHERE cs.classRoom.school.id = :schoolId")
     List<ClassSection> findBySchoolId(@Param("schoolId") Integer schoolId);

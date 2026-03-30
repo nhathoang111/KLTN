@@ -1,5 +1,6 @@
 package com.example.schoolmanagement.controller;
 
+import com.example.schoolmanagement.dto.schedule.ScheduleGenerateResult;
 import com.example.schoolmanagement.entity.Schedule;
 import com.example.schoolmanagement.exception.BadRequestException;
 import com.example.schoolmanagement.service.ScheduleService;
@@ -121,10 +122,8 @@ public class ScheduleController {
             throw new BadRequestException("classId and subjectAssignments are required");
         }
 
-        int createdCount = scheduleService.generateSchedules(classId, schoolId, subjectAssignments, numberOfWeeks, session);
-        return ResponseEntity.ok(Map.of(
-                "message", "Schedules generated successfully",
-                "count", createdCount));
+        ScheduleGenerateResult result = scheduleService.generateSchedules(classId, schoolId, subjectAssignments, numberOfWeeks, session);
+        return ResponseEntity.ok(result);
     }
 
     @DeleteMapping("/class/{classId}")

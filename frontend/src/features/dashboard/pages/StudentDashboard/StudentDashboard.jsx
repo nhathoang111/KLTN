@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../../../../shared/lib/api';
+import { scheduleSubjectDisplayName } from '../../../../shared/lib/scheduleLabels';
 import { useAuth } from '../../../auth/context/AuthContext';
 import './StudentDashboard.css';
 
@@ -301,7 +302,7 @@ const StudentDashboard = () => {
                     todaySchedules.map((s) => (
                       <tr key={s.id}>
                         <td>Tiết {s.period ?? '-'}</td>
-                        <td>{s.subject?.name ?? '-'}</td>
+                        <td>{scheduleSubjectDisplayName(s, '-')}</td>
                         <td>{s.teacher?.fullName ?? '-'}</td>
                       </tr>
                     ))

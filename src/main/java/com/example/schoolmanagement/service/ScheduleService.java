@@ -6,6 +6,8 @@ import com.example.schoolmanagement.entity.School;
 import com.example.schoolmanagement.entity.Subject;
 import com.example.schoolmanagement.entity.User;
 import com.example.schoolmanagement.entity.ClassSection;
+import com.example.schoolmanagement.dto.schedule.ScheduleGenerateResult;
+import com.example.schoolmanagement.dto.schedule.ScheduleGenerateResult.UnmetAssignment;
 import com.example.schoolmanagement.exception.BadRequestException;
 import com.example.schoolmanagement.exception.ResourceNotFoundException;
 import com.example.schoolmanagement.repository.ScheduleRepository;
@@ -30,6 +32,110 @@ public class ScheduleService {
     private static final int MAX_PERIOD = 10;
     /** Số tiết chiều trong ngày (period 6…MAX_PERIOD). */
     private static final int AFTERNOON_PERIOD_COUNT = MAX_PERIOD - 5;
+
+    /** Mã tiết cố định trên bản ghi schedule (không dùng bảng subjects). */
+    public static final String FIXED_ACTIVITY_CHAOCO = "CHAOCO";
+    public static final String FIXED_ACTIVITY_SHL = "SHL";
+
+    /**
+     * Tiết cố định theo buổi (dayOffset: 0 = Thứ 2 … 5 = Thứ 7 trong mô hình TKB 6 ngày).
+     * Buổi sáng: T2 tiết 1 chào cờ; T7 tiết 5 sinh hoạt lớp.
+     * Buổi chiều: T2 tiết 5 (chiều) = period 10 chào cờ; T7 tiết 5 chiều = period 10 sinh hoạt lớp.
+     */
+    private static void collectFixedSlotsForSession(String sessionMode, List<int[]> outDayOffsetAndPeriod) {
+        boolean morning = "MORNING".equals(sessionMode) || "BOTH".equals(sessionMode);
+        boolean afternoon = "AFTERNOON".equals(sessionMode) || "BOTH".equals(sessionMode);
+        if (morning) {
+            outDayOffsetAndPeriod.add(new int[]{0, 1});   // Thứ 2 — chào cờ
+            outDayOffsetAndPeriod.add(new int[]{5, 5});   // Thứ 7 — sinh hoạt lớp
+        }
+        if (afternoon) {
+            outDayOffsetAndPeriod.add(new int[]{0, MAX_PERIOD}); // Thứ 2 tiết 5 chiều — chào cờ
+            outDayOffsetAndPeriod.add(new int[]{5, MAX_PERIOD}); // Thứ 7 tiết 5 chiều — sinh hoạt lớp
+        }
+    }
+
+    private static boolean isChaocoSlot(int dayOffset, int period) {
+        return dayOffset == 0 && (period == 1 || period == MAX_PERIOD);
+    }
+
+    private static boolean isShlSlot(int dayOffset, int period) {
+        return dayOffset == 5 && (period == 5 || period == MAX_PERIOD);
+    }
+
+    /** Đánh dấu các ô cố định tuần đầu để không xếp môn khác và kiểm tra trùng GV chủ nhiệm. */
+    private static void reserveFixedSlotsFirstWeek(
+            LocalDate firstMonday,
+            LocalDate today,
+            String sessionMode,
+            Set<String> occupiedClassSlotsFirstWeek,
+            Set<String> occupiedTeacherSlotsFirstWeek,
+            User homeroomTeacher) {
+        List<int[]> slots = new ArrayList<>();
+        collectFixedSlotsForSession(sessionMode, slots);
+        Integer homeroomId = homeroomTeacher != null ? homeroomTeacher.getId() : null;
+        for (int[] dp : slots) {
+            int dayOffset = dp[0];
+            int period = dp[1];
+            LocalDate d = firstMonday.plusDays(dayOffset);
+            if (d.isBefore(today)) {
+                continue;
+            }
+            String cKey = d + "-" + period;
+            occupiedClassSlotsFirstWeek.add(cKey);
+            if (homeroomId != null) {
+                occupiedTeacherSlotsFirstWeek.add(homeroomId + "-" + d + "-" + period);
+            }
+        }
+    }
+
+    /**
+     * Tạo các bản ghi tiết cố định (fixedActivityCode, không subject_id).
+     */
+    private List<Schedule> buildFixedActivitySchedules(
+            ClassEntity classEntity,
+            School school,
+            String sessionMode,
+            LocalDate nextMonday,
+            int numberOfWeeks,
+            LocalDate today,
+            String classRoom,
+            User homeroomTeacher) {
+        List<Schedule> fixed = new ArrayList<>();
+        List<int[]> defs = new ArrayList<>();
+        collectFixedSlotsForSession(sessionMode, defs);
+        for (int week = 0; week < numberOfWeeks; week++) {
+            LocalDate weekStart = nextMonday.plusWeeks(week);
+            for (int[] dp : defs) {
+                int dayOffset = dp[0];
+                int period = dp[1];
+                LocalDate date = weekStart.plusDays(dayOffset);
+                if (date.isBefore(today)) {
+                    continue;
+                }
+                String code;
+                if (isChaocoSlot(dayOffset, period)) {
+                    code = FIXED_ACTIVITY_CHAOCO;
+                } else if (isShlSlot(dayOffset, period)) {
+                    code = FIXED_ACTIVITY_SHL;
+                } else {
+                    continue;
+                }
+                Schedule sch = new Schedule();
+                sch.setDate(date);
+                sch.setPeriod(period);
+                sch.setRoom(classRoom);
+                sch.setSubject(null);
+                sch.setFixedActivityCode(code);
+                sch.setTeacher(homeroomTeacher);
+                sch.setSchool(school);
+                sch.setClassEntity(classEntity);
+                sch.setClassSection(null);
+                fixed.add(sch);
+            }
+        }
+        return fixed;
+    }
     @Autowired
     private ScheduleRepository scheduleRepository;
     
@@ -131,81 +237,78 @@ public class ScheduleService {
     }
 
     @Transactional
-    public int generateSchedules(Integer classId, Integer schoolId, List<Map<String, Object>> subjectAssignments, Integer numberOfWeeks, String session) {
-        // Lấy class entity
-        Optional<ClassEntity> classOpt = classRepository.findById(classId);
-        if (!classOpt.isPresent()) {
-            throw new ResourceNotFoundException("Class not found");
-        }
-        ClassEntity classEntity = classOpt.get();
-        
-        // Lấy school entity
+    public ScheduleGenerateResult generateSchedules(Integer classId, Integer schoolIdRequest, List<Map<String, Object>> subjectAssignments, Integer numberOfWeeks, String session) {
+        ScheduleGenerateResult out = new ScheduleGenerateResult();
+        out.setUnmetAssignments(new ArrayList<>());
+
+        ClassEntity classEntity = classRepository.findById(classId)
+                .orElseThrow(() -> new ResourceNotFoundException("Class not found"));
         School school = classEntity.getSchool();
         if (school == null) {
             throw new ResourceNotFoundException("School not found for class");
         }
-        
-        // Tính toán tuần để tạo lịch - CHỈ tạo cho tuần tiếp theo
+        Integer schoolId = school.getId();
+        if (schoolIdRequest != null && schoolId != null && !schoolIdRequest.equals(schoolId)) {
+            throw new BadRequestException("classId does not belong to the given schoolId");
+        }
+
+        List<GenAssign> batch = new ArrayList<>();
+        Set<String> duplicatePairs = new HashSet<>();
+        for (int line = 0; line < subjectAssignments.size(); line++) {
+            final int rowIndex = line;
+            Map<String, Object> row = subjectAssignments.get(line);
+            Integer subjectId = parseInt(row.get("subjectId"));
+            Integer teacherId = parseInt(row.get("teacherId"));
+            Integer periodsPerWeek = parseInt(row.get("periodsPerWeek"));
+            if (subjectId == null || teacherId == null || periodsPerWeek == null) {
+                throw new BadRequestException("subjectAssignments[" + rowIndex + "]: subjectId, teacherId, periodsPerWeek are required");
+            }
+            if (periodsPerWeek < 1) {
+                throw new BadRequestException("subjectAssignments[" + rowIndex + "]: periodsPerWeek must be >= 1");
+            }
+            Subject subject = subjectRepository.findById(subjectId)
+                    .orElseThrow(() -> new BadRequestException("subjectAssignments[" + rowIndex + "]: subject not found id=" + subjectId));
+            User teacher = userRepository.findById(teacherId)
+                    .orElseThrow(() -> new BadRequestException("subjectAssignments[" + rowIndex + "]: teacher not found id=" + teacherId));
+            validateSubjectForGenerate(subject, schoolId);
+            validateTeacherForGenerate(teacher, schoolId);
+
+            String pairKey = subjectId + "_" + teacherId;
+            if (!duplicatePairs.add(pairKey)) {
+                throw new BadRequestException("Duplicate subject–teacher pair at line " + rowIndex + " (subjectId=" + subjectId + ", teacherId=" + teacherId + ")");
+            }
+
+            GenAssign g = new GenAssign();
+            g.lineIndex = rowIndex;
+            g.subject = subject;
+            g.teacher = teacher;
+            g.teacherId = teacherId;
+            g.periodsPerWeek = periodsPerWeek;
+            batch.add(g);
+        }
+
+        int requestedPeriods = batch.stream().mapToInt(g -> g.periodsPerWeek).sum();
+
         LocalDate today = LocalDate.now();
-        System.out.println("🔍 ===== GENERATE SCHEDULES START =====");
-        System.out.println("📅 TODAY: " + today + " (Day of week: " + today.getDayOfWeek() + ")");
-        
-        // Tìm Thứ 2 của tuần hiện tại
         LocalDate currentMonday = today;
-        while (currentMonday.getDayOfWeek().getValue() != 1) { // 1 = Monday
+        while (currentMonday.getDayOfWeek().getValue() != 1) {
             currentMonday = currentMonday.minusDays(1);
         }
-        System.out.println("📅 Current Monday: " + currentMonday + " (Day: " + currentMonday.getDayOfWeek() + ")");
-        
-        // Tính thứ 2 tuần tiếp theo
         final LocalDate nextMonday;
         if (today.getDayOfWeek().getValue() == 1) {
-            // Hôm nay là thứ 2 - dùng thứ 2 tuần này (hôm nay) để tạo lịch cho tuần hiện tại
-            nextMonday = currentMonday; // currentMonday = today khi today là thứ 2
-            System.out.println("📅 Today is Monday (" + today + "), using this Monday for schedule generation: " + nextMonday);
+            nextMonday = currentMonday;
         } else {
-            // Hôm nay không phải thứ 2, dùng thứ 2 tuần sau (từ currentMonday)
             nextMonday = currentMonday.plusDays(7);
-            System.out.println("📅 Today is not Monday, using next week Monday: " + nextMonday);
         }
-        
-        System.out.println("📅 Next Monday (will use this): " + nextMonday + " (Day: " + nextMonday.getDayOfWeek() + ")");
-        System.out.println("📅 Today: " + today + " (Day: " + today.getDayOfWeek() + ")");
-        System.out.println("📅 Number of weeks to generate: " + numberOfWeeks);
-        
-        // Tạo danh sách các ngày cho tất cả các tuần (Thứ 2 đến Thứ 7, bỏ Chủ nhật)
-        List<LocalDate> weekDates = new ArrayList<>();
-        for (int week = 0; week < numberOfWeeks; week++) {
-            LocalDate weekStart = nextMonday.plusWeeks(week);
-            System.out.println("📅 Creating week dates for week " + (week + 1) + " from " + weekStart + " (Monday) to " + weekStart.plusDays(5) + " (Saturday)");
-            for (int i = 0; i < 6; i++) { // 6 ngày: Thứ 2 (i=0) đến Thứ 7 (i=5)
-                LocalDate date = weekStart.plusDays(i);
-                weekDates.add(date);
-                String dayName = date.getDayOfWeek().toString();
-                System.out.println("✅ [Week " + (week + 1) + ", Day " + (i+1) + "/6] Added date: " + date + " (Day: " + dayName + ")");
-            }
-        }
-        
-        System.out.println("📅 Final week dates count: " + weekDates.size() + " (should be " + (numberOfWeeks * 6) + " = " + numberOfWeeks + " weeks × 6 days)");
-        System.out.println("📅 Week dates: " + weekDates);
-        
-        // Lấy danh sách schedules hiện có của lớp để tránh conflict
-        // CHỈ kiểm tra conflict cho tuần đầu tiên khi tạo pattern
+
         List<Schedule> existingSchedules = scheduleRepository.findByClassEntityId(classId);
         Set<String> occupiedClassSlotsFirstWeek = new HashSet<>();
         Set<String> occupiedTeacherSlotsFirstWeek = new HashSet<>();
-        
-        // Xác định phòng cố định cho lớp này
-        String classRoom = null;
-        if (classEntity.getRoom() != null && !classEntity.getRoom().trim().isEmpty()) {
-            classRoom = classEntity.getRoom();
-            System.out.println("🏫 Using room from ClassEntity for class " + classEntity.getName() + ": " + classRoom);
-        } else {
-            classRoom = "A" + String.format("%03d", classId);
-            System.out.println("🏫 Assigning new default room for class " + classEntity.getName() + ": " + classRoom);
-        }
-        
-        // Chỉ block các schedule của tuần đầu tiên (để tạo pattern)
+
+        String classRoom = (classEntity.getRoom() != null && !classEntity.getRoom().trim().isEmpty())
+                ? classEntity.getRoom()
+                : "A" + String.format("%03d", classId);
+
         LocalDate firstWeekStart = nextMonday;
         for (int i = 0; i < 6; i++) {
             LocalDate firstWeekDate = firstWeekStart.plusDays(i);
@@ -218,33 +321,42 @@ public class ScheduleService {
                 }
             }
         }
-        
-        // Lấy schedules của các giáo viên cho tuần đầu tiên
-        for (Map<String, Object> assignment : subjectAssignments) {
-            Integer teacherId = parseInt(assignment.get("teacherId"));
-            if (teacherId != null) {
-                List<Schedule> teacherSchedules = scheduleRepository.findByTeacherId(teacherId);
-                for (Schedule s : teacherSchedules) {
-                    if (s.getDate() != null) {
-                        for (int i = 0; i < 6; i++) {
-                            LocalDate firstWeekDate = firstWeekStart.plusDays(i);
-                            if (s.getDate().equals(firstWeekDate)) {
-                                occupiedTeacherSlotsFirstWeek.add(teacherId + "-" + s.getDate().toString() + "-" + s.getPeriod());
-                            }
-                        }
+        for (GenAssign g : batch) {
+            List<Schedule> teacherSchedules = scheduleRepository.findByTeacherId(g.teacherId);
+            for (Schedule s : teacherSchedules) {
+                if (s.getDate() == null) continue;
+                for (int i = 0; i < 6; i++) {
+                    LocalDate firstWeekDate = firstWeekStart.plusDays(i);
+                    if (s.getDate().equals(firstWeekDate)) {
+                        occupiedTeacherSlotsFirstWeek.add(g.teacherId + "-" + s.getDate().toString() + "-" + s.getPeriod());
                     }
                 }
             }
         }
-        
-        int createdCount = 0;
 
         String sessionMode = (session == null ? "BOTH" : session.trim().toUpperCase());
         if (!"MORNING".equals(sessionMode) && !"AFTERNOON".equals(sessionMode) && !"BOTH".equals(sessionMode)) {
             sessionMode = "BOTH";
         }
-        
-        // Hai nhóm slot: sáng (1–5) và chiều (6–9), shuffle riêng — tránh trường hợp random chỉ trúng buổi sáng
+
+        reserveFixedSlotsFirstWeek(
+                firstWeekStart,
+                today,
+                sessionMode,
+                occupiedClassSlotsFirstWeek,
+                occupiedTeacherSlotsFirstWeek,
+                classEntity.getHomeroomTeacher());
+
+        int weeklyCapacity = computeWeeklyFreeSlotCapacity(firstWeekStart, sessionMode, occupiedClassSlotsFirstWeek);
+        out.setWeeklyCapacity(weeklyCapacity);
+        out.setRequestedPeriods(requestedPeriods);
+
+        if (requestedPeriods > weeklyCapacity) {
+            throw new BadRequestException(
+                    String.format("Tổng số tiết yêu cầu mỗi tuần (%d) vượt quá số ô trống trong tuần đầu (%d).",
+                            requestedPeriods, weeklyCapacity));
+        }
+
         List<Object[]> morningSlots = new ArrayList<>();
         List<Object[]> afternoonSlots = new ArrayList<>();
         for (int i = 0; i < 6; i++) {
@@ -257,67 +369,36 @@ public class ScheduleService {
         }
         Collections.shuffle(morningSlots);
         Collections.shuffle(afternoonSlots);
-
         if ("MORNING".equals(sessionMode)) {
             afternoonSlots.clear();
         } else if ("AFTERNOON".equals(sessionMode)) {
             morningSlots.clear();
         }
-        
-        System.out.println("📊 Morning slots: " + morningSlots.size() + ", afternoon slots: " + afternoonSlots.size());
-        
-        // Lưu pattern: Map<dayOffset-period, subject-teacher>
+
         Map<String, Object[]> weekPattern = new HashMap<>();
-        
-        // Shuffle danh sách môn học để random hóa thứ tự phân bổ
-        List<Map<String, Object>> shuffledAssignments = new ArrayList<>(subjectAssignments);
-        Collections.shuffle(shuffledAssignments);
-        
-        System.out.println("📚 Subject assignments shuffled for random distribution");
-        
-        List<GenAssign> batch = new ArrayList<>();
-        for (Map<String, Object> assignment : shuffledAssignments) {
-            Integer subjectId = parseInt(assignment.get("subjectId"));
-            Integer teacherId = parseInt(assignment.get("teacherId"));
-            Integer periodsPerWeek = parseInt(assignment.get("periodsPerWeek"));
-            if (subjectId == null || teacherId == null || periodsPerWeek == null || periodsPerWeek < 1) {
-                continue;
-            }
-            Optional<Subject> subjectOpt = subjectRepository.findById(subjectId);
-            Optional<User> teacherOpt = userRepository.findById(teacherId);
-            if (!subjectOpt.isPresent() || !teacherOpt.isPresent()) {
-                continue;
-            }
-            GenAssign g = new GenAssign();
-            g.subject = subjectOpt.get();
-            g.teacher = teacherOpt.get();
-            g.teacherId = teacherId;
-            g.periodsPerWeek = periodsPerWeek;
+        List<GenAssign> workBatch = new ArrayList<>(batch);
+        Collections.shuffle(workBatch);
+
+        for (GenAssign g : workBatch) {
             if ("MORNING".equals(sessionMode)) {
                 g.afternoonRemaining = 0;
-                g.morningRemaining = periodsPerWeek;
+                g.morningRemaining = g.periodsPerWeek;
             } else if ("AFTERNOON".equals(sessionMode)) {
-                g.afternoonRemaining = periodsPerWeek;
+                g.afternoonRemaining = g.periodsPerWeek;
                 g.morningRemaining = 0;
             } else {
-                int afternoonCap = Math.min(AFTERNOON_PERIOD_COUNT, (periodsPerWeek + 1) / 2);
+                int afternoonCap = Math.min(AFTERNOON_PERIOD_COUNT, (g.periodsPerWeek + 1) / 2);
                 g.afternoonRemaining = afternoonCap;
-                g.morningRemaining = periodsPerWeek - afternoonCap;
+                g.morningRemaining = g.periodsPerWeek - afternoonCap;
             }
-            batch.add(g);
-            System.out.println("📚 Queued " + g.subject.getName() + " P=" + periodsPerWeek
-                    + " (chiều " + g.afternoonRemaining + ", sáng " + g.morningRemaining + ")");
         }
-        
-        // Round-robin chiều: mỗi vòng mỗi môn tối đa 1 tiết chiều — tránh một môn chiếm hết slot chiều
+
         boolean progress;
         do {
             progress = false;
             Collections.shuffle(afternoonSlots);
-            for (GenAssign g : batch) {
-                if (g.afternoonRemaining <= 0) {
-                    continue;
-                }
+            for (GenAssign g : workBatch) {
+                if (g.afternoonRemaining <= 0) continue;
                 int n = tryAssignSlotsToPattern(afternoonSlots, 1, g.subject, g.teacher, g.teacherId,
                         nextMonday, today, weekPattern, occupiedClassSlotsFirstWeek, occupiedTeacherSlotsFirstWeek);
                 if (n > 0) {
@@ -326,23 +407,19 @@ public class ScheduleService {
                 }
             }
         } while (progress);
-        
-        for (GenAssign g : batch) {
-            if (g.morningRemaining <= 0) {
-                continue;
-            }
+
+        for (GenAssign g : workBatch) {
+            if (g.morningRemaining <= 0) continue;
             Collections.shuffle(morningSlots);
             int n = tryAssignSlotsToPattern(morningSlots, g.morningRemaining, g.subject, g.teacher, g.teacherId,
                     nextMonday, today, weekPattern, occupiedClassSlotsFirstWeek, occupiedTeacherSlotsFirstWeek);
             g.morningRemaining -= n;
         }
-        
-        for (GenAssign g : batch) {
-            int have = countPatternSlotsForSubject(g.subject, weekPattern);
+
+        for (GenAssign g : workBatch) {
+            int have = countPatternSlotsForGenAssign(g, weekPattern);
             int need = g.periodsPerWeek - have;
-            if (need <= 0) {
-                continue;
-            }
+            if (need <= 0) continue;
             Collections.shuffle(afternoonSlots);
             int n = tryAssignSlotsToPattern(afternoonSlots, need, g.subject, g.teacher, g.teacherId,
                     nextMonday, today, weekPattern, occupiedClassSlotsFirstWeek, occupiedTeacherSlotsFirstWeek);
@@ -353,24 +430,63 @@ public class ScheduleService {
                         nextMonday, today, weekPattern, occupiedClassSlotsFirstWeek, occupiedTeacherSlotsFirstWeek);
             }
         }
-        
-        System.out.println("📋 Pattern created with " + weekPattern.size() + " slots");
-        System.out.println("📋 Pattern details:");
-        for (Map.Entry<String, Object[]> entry : weekPattern.entrySet()) {
-            String key = entry.getKey();
-            Object[] value = entry.getValue();
-            Subject s = (Subject) value[0];
-            User t = (User) value[1];
-            Integer p = (Integer) value[2];
-            System.out.println("  - " + key + " -> " + s.getName() + " (" + t.getFullName() + ") period " + p);
+
+        List<UnmetAssignment> unmetPattern = new ArrayList<>();
+        for (GenAssign g : batch) {
+            int have = countPatternSlotsForGenAssign(g, weekPattern);
+            if (have < g.periodsPerWeek) {
+                UnmetAssignment u = new UnmetAssignment();
+                u.setLineIndex(g.lineIndex);
+                u.setSubjectId(g.subject.getId());
+                u.setSubjectName(g.subject.getName());
+                u.setTeacherId(g.teacherId);
+                u.setTeacherName(g.teacher.getFullName());
+                u.setRequiredPeriods(g.periodsPerWeek);
+                u.setAssignedPeriods(have);
+                unmetPattern.add(u);
+            }
         }
-        
-        // Áp dụng pattern cho tất cả các tuần
-        // Tạo Set để track các slot đã tạo (tránh duplicate)
+        if (!unmetPattern.isEmpty()) {
+            out.setSuccess(false);
+            out.setAssignedPeriods(0);
+            out.setUnmetAssignments(unmetPattern);
+            out.setMessage("Không ghép đủ tiết trong tuần mẫu (pattern).");
+            return out;
+        }
+
+        Map<String, Integer> pairToLine = new HashMap<>();
+        for (GenAssign g : batch) {
+            pairToLine.put(g.subject.getId() + "-" + g.teacherId, g.lineIndex);
+        }
+
+        int[] expectedPerLine = new int[batch.size()];
+        for (int week = 0; week < numberOfWeeks; week++) {
+            LocalDate weekStart = nextMonday.plusWeeks(week);
+            List<String> sortedKeys = new ArrayList<>(weekPattern.keySet());
+            sortedKeys.sort((ka, kb) -> {
+                String[] a = ka.split("-");
+                String[] b = kb.split("-");
+                int d = Integer.compare(Integer.parseInt(a[0]), Integer.parseInt(b[0]));
+                if (d != 0) return d;
+                return Integer.compare(Integer.parseInt(a[1]), Integer.parseInt(b[1]));
+            });
+            for (String patternKey : sortedKeys) {
+                Object[] patternValue = weekPattern.get(patternKey);
+                Subject subject = (Subject) patternValue[0];
+                User teacher = (User) patternValue[1];
+                Integer dayOffset = (Integer) patternValue[3];
+                LocalDate date = weekStart.plusDays(dayOffset);
+                if (date.isBefore(today)) {
+                    continue;
+                }
+                Integer lineIdx = pairToLine.get(subject.getId() + "-" + teacher.getId());
+                if (lineIdx != null && lineIdx >= 0 && lineIdx < expectedPerLine.length) {
+                    expectedPerLine[lineIdx]++;
+                }
+            }
+        }
+
         Set<String> createdSlots = new HashSet<>();
-        
-        // Lấy tất cả schedules hiện có của lớp và giáo viên để kiểm tra conflict
-        // Chỉ kiểm tra conflict với database, không kiểm tra với các slot vừa tạo
         Set<String> existingClassSlots = new HashSet<>();
         Set<String> existingTeacherSlots = new HashSet<>();
         for (Schedule s : existingSchedules) {
@@ -381,26 +497,20 @@ public class ScheduleService {
                 }
             }
         }
-        
-        // Lấy schedules của các giáo viên
-        for (Map<String, Object> assignment : subjectAssignments) {
-            Integer teacherId = parseInt(assignment.get("teacherId"));
-            if (teacherId != null) {
-                List<Schedule> teacherSchedules = scheduleRepository.findByTeacherId(teacherId);
-                for (Schedule s : teacherSchedules) {
-                    if (s.getDate() != null) {
-                        existingTeacherSlots.add(teacherId + "-" + s.getDate().toString() + "-" + s.getPeriod());
-                    }
+        for (GenAssign g : batch) {
+            for (Schedule s : scheduleRepository.findByTeacherId(g.teacherId)) {
+                if (s.getDate() != null) {
+                    existingTeacherSlots.add(g.teacherId + "-" + s.getDate().toString() + "-" + s.getPeriod());
                 }
             }
         }
-        
-        // Áp dụng pattern cho từng tuần
+
+        boolean conflictSkip = false;
+        List<Schedule> toSave = new ArrayList<>();
+        List<Integer> linePerRow = new ArrayList<>();
+
         for (int week = 0; week < numberOfWeeks; week++) {
             LocalDate weekStart = nextMonday.plusWeeks(week);
-            System.out.println("📅 ===== Applying pattern to week " + (week + 1) + " (starting " + weekStart + ") =====");
-            
-            // Duyệt pattern theo thứ tự deterministic (dayOffset, period) — không dùng sort chuỗi (tránh lỗi "10" < "2")
             List<String> sortedPatternKeys = new ArrayList<>(weekPattern.keySet());
             sortedPatternKeys.sort((ka, kb) -> {
                 String[] a = ka.split("-");
@@ -409,46 +519,34 @@ public class ScheduleService {
                 if (d != 0) return d;
                 return Integer.compare(Integer.parseInt(a[1]), Integer.parseInt(b[1]));
             });
-            
+
             for (String patternKey : sortedPatternKeys) {
                 Object[] patternValue = weekPattern.get(patternKey);
-                
                 Subject subject = (Subject) patternValue[0];
                 User teacher = (User) patternValue[1];
                 Integer period = (Integer) patternValue[2];
                 Integer dayOffset = (Integer) patternValue[3];
-                
                 LocalDate date = weekStart.plusDays(dayOffset);
-                
-                // Chỉ tạo cho các ngày trong tương lai hoặc hôm nay
+
                 if (date.isBefore(today)) {
-                    System.out.println("⚠️ Skipping past date: " + date + " period " + period);
                     continue;
                 }
-                
-                String slotKey = date.toString() + "-" + period;
-                
-                // Kiểm tra xem slot này đã được tạo chưa (tránh duplicate)
+                String slotKey = date + "-" + period;
                 if (createdSlots.contains(slotKey)) {
-                    System.out.println("⚠️ Skipping slot (already created): " + date + " period " + period);
                     continue;
                 }
-                
-                // Kiểm tra conflict với database
-                String classSlotKey = date.toString() + "-" + period;
-                String teacherSlotKey = teacher.getId() + "-" + date.toString() + "-" + period;
-                
-                if (existingClassSlots.contains(classSlotKey)) {
-                    System.out.println("⚠️ Skipping slot (class conflict in DB): " + date + " period " + period);
+                String classSlotKey = date + "-" + period;
+                String teacherSlotKey = teacher.getId() + "-" + date + "-" + period;
+                if (existingClassSlots.contains(classSlotKey) || existingTeacherSlots.contains(teacherSlotKey)) {
+                    conflictSkip = true;
                     continue;
                 }
-                
-                if (existingTeacherSlots.contains(teacherSlotKey)) {
-                    System.out.println("⚠️ Skipping slot (teacher conflict in DB): " + date + " period " + period);
+
+                Integer lineIdx = pairToLine.get(subject.getId() + "-" + teacher.getId());
+                if (lineIdx == null) {
                     continue;
                 }
-                
-                // Tạo schedule mới
+
                 Schedule newSchedule = new Schedule();
                 newSchedule.setDate(date);
                 newSchedule.setPeriod(period);
@@ -457,31 +555,162 @@ public class ScheduleService {
                 newSchedule.setTeacher(teacher);
                 newSchedule.setSchool(school);
                 newSchedule.setClassEntity(classEntity);
-                ClassSection linkedCs = resolveClassSection(classEntity, subject.getId(), teacher.getId(), null);
-                newSchedule.setClassSection(linkedCs);
-                
-                try {
-                    scheduleRepository.save(newSchedule);
-                    createdSlots.add(slotKey);
-                    existingClassSlots.add(classSlotKey); // Thêm vào để tránh conflict với các tuần sau
-                    existingTeacherSlots.add(teacherSlotKey);
-                    createdCount++;
-                    String dayName = date.getDayOfWeek().toString();
-                    System.out.println("✅ Week " + (week + 1) + " - " + dayName + " period " + period + 
-                                     ": " + subject.getName() + " (" + teacher.getFullName() + ") - " + date);
-                } catch (Exception e) {
-                    System.out.println("❌ ERROR saving schedule: " + e.getMessage());
-                    e.printStackTrace();
+                newSchedule.setClassSection(resolveClassSection(classEntity, subject.getId(), teacher.getId(), null));
+
+                toSave.add(newSchedule);
+                linePerRow.add(lineIdx);
+                createdSlots.add(slotKey);
+                existingClassSlots.add(classSlotKey);
+                existingTeacherSlots.add(teacherSlotKey);
+            }
+        }
+
+        int[] perLine = new int[batch.size()];
+        for (int i = 0; i < linePerRow.size(); i++) {
+            int li = linePerRow.get(i);
+            if (li >= 0 && li < perLine.length) {
+                perLine[li]++;
+            }
+        }
+
+        List<UnmetAssignment> unmetExpand = new ArrayList<>();
+        for (GenAssign g : batch) {
+            int exp = expectedPerLine[g.lineIndex];
+            int got = perLine[g.lineIndex];
+            if (got < exp) {
+                UnmetAssignment u = new UnmetAssignment();
+                u.setLineIndex(g.lineIndex);
+                u.setSubjectId(g.subject.getId());
+                u.setSubjectName(g.subject.getName());
+                u.setTeacherId(g.teacherId);
+                u.setTeacherName(g.teacher.getFullName());
+                u.setRequiredPeriods(exp);
+                u.setAssignedPeriods(got);
+                unmetExpand.add(u);
+            }
+        }
+
+        if (conflictSkip || !unmetExpand.isEmpty()) {
+            out.setSuccess(false);
+            out.setAssignedPeriods(0);
+            out.setUnmetAssignments(unmetExpand);
+            out.setMessage(conflictSkip
+                    ? "Không thể tạo đủ tiết do trùng lịch lớp/giáo viên với dữ liệu có sẵn."
+                    : "Không đủ số tiết có thể xếp được trong các tuần đã chọn (xem unmetAssignments).");
+            return out;
+        }
+
+        List<Schedule> fixedActivities = buildFixedActivitySchedules(
+                classEntity,
+                school,
+                sessionMode,
+                nextMonday,
+                numberOfWeeks,
+                today,
+                classRoom,
+                classEntity.getHomeroomTeacher());
+        for (Schedule fs : fixedActivities) {
+            String classKey = fs.getDate().toString() + "-" + fs.getPeriod();
+            if (createdSlots.contains(classKey)) {
+                out.setSuccess(false);
+                out.setAssignedPeriods(0);
+                out.setUnmetAssignments(new ArrayList<>());
+                out.setMessage("Ô tiết cố định (Chào cờ / Sinh hoạt lớp) trùng với tiết vừa xếp — kiểm tra logic block slot.");
+                return out;
+            }
+            if (existingClassSlots.contains(classKey)) {
+                out.setSuccess(false);
+                out.setAssignedPeriods(0);
+                out.setUnmetAssignments(new ArrayList<>());
+                out.setMessage("Ô tiết cố định trùng lịch lớp đã có trong hệ thống.");
+                return out;
+            }
+            if (fs.getTeacher() != null) {
+                String tk = fs.getTeacher().getId() + "-" + fs.getDate().toString() + "-" + fs.getPeriod();
+                if (existingTeacherSlots.contains(tk)) {
+                    out.setSuccess(false);
+                    out.setAssignedPeriods(0);
+                    out.setUnmetAssignments(new ArrayList<>());
+                    out.setMessage("Ô tiết cố định trùng lịch giáo viên chủ nhiệm với lịch đã có.");
+                    return out;
+                }
+            }
+            toSave.add(fs);
+            createdSlots.add(classKey);
+            existingClassSlots.add(classKey);
+            if (fs.getTeacher() != null) {
+                existingTeacherSlots.add(fs.getTeacher().getId() + "-" + fs.getDate().toString() + "-" + fs.getPeriod());
+            }
+        }
+
+        scheduleRepository.saveAll(toSave);
+        out.setSuccess(true);
+        out.setAssignedPeriods(toSave.size());
+        out.setMessage("Đã tạo thời khóa biểu tự động thành công.");
+        return out;
+    }
+
+    private static void validateSubjectForGenerate(Subject s, Integer schoolId) {
+        if (s.getDeletedAt() != null) {
+            throw new BadRequestException("Subject id " + s.getId() + " is deleted");
+        }
+        if (s.getStatus() != null && !"ACTIVE".equalsIgnoreCase(s.getStatus().trim())) {
+            throw new BadRequestException("Subject id " + s.getId() + " is not ACTIVE");
+        }
+        if (schoolId != null && s.getSchool() != null && s.getSchool().getId() != null
+                && !schoolId.equals(s.getSchool().getId())) {
+            throw new BadRequestException("Subject id " + s.getId() + " does not belong to this school");
+        }
+    }
+
+    private static void validateTeacherForGenerate(User t, Integer schoolId) {
+        if (t.getRole() == null || t.getRole().getName() == null) {
+            throw new BadRequestException("Teacher id " + t.getId() + " has no role");
+        }
+        String rn = t.getRole().getName().toUpperCase();
+        boolean isTeacher = rn.startsWith("TEACHER") || rn.contains("TEACHER")
+                || rn.contains("GIÁO VIÊN") || rn.contains("GIAO VIEN") || rn.contains("GV");
+        if (!isTeacher) {
+            throw new BadRequestException("User id " + t.getId() + " is not a teacher role");
+        }
+        if (schoolId != null) {
+            if (t.getSchool() == null || t.getSchool().getId() == null
+                    || !schoolId.equals(t.getSchool().getId())) {
+                throw new BadRequestException("Teacher id " + t.getId() + " does not belong to this school");
+            }
+        }
+    }
+
+    private static int computeWeeklyFreeSlotCapacity(LocalDate firstMonday, String sessionMode, Set<String> occupiedClassSlotsFirstWeek) {
+        int count = 0;
+        for (int d = 0; d < 6; d++) {
+            LocalDate day = firstMonday.plusDays(d);
+            String dateStr = day.toString();
+            if ("MORNING".equals(sessionMode)) {
+                for (int p = MIN_PERIOD; p <= 5; p++) {
+                    if (!occupiedClassSlotsFirstWeek.contains(dateStr + "-" + p)) {
+                        count++;
+                    }
+                }
+            } else if ("AFTERNOON".equals(sessionMode)) {
+                for (int p = 6; p <= MAX_PERIOD; p++) {
+                    if (!occupiedClassSlotsFirstWeek.contains(dateStr + "-" + p)) {
+                        count++;
+                    }
+                }
+            } else {
+                for (int p = MIN_PERIOD; p <= MAX_PERIOD; p++) {
+                    if (!occupiedClassSlotsFirstWeek.contains(dateStr + "-" + p)) {
+                        count++;
+                    }
                 }
             }
         }
-        
-        System.out.println("🔍 ===== GENERATE SCHEDULES COMPLETE: Created " + createdCount + " schedules =====");
-        
-        return createdCount;
+        return count;
     }
 
     private static final class GenAssign {
+        int lineIndex;
         Subject subject;
         User teacher;
         Integer teacherId;
@@ -490,11 +719,13 @@ public class ScheduleService {
         int morningRemaining;
     }
 
-    private int countPatternSlotsForSubject(Subject subject, Map<String, Object[]> weekPattern) {
+    private int countPatternSlotsForGenAssign(GenAssign g, Map<String, Object[]> weekPattern) {
         int c = 0;
         for (Object[] v : weekPattern.values()) {
             Subject s = (Subject) v[0];
-            if (s.getId() != null && subject.getId() != null && s.getId().equals(subject.getId())) {
+            User t = (User) v[1];
+            if (s.getId() != null && g.subject.getId() != null && s.getId().equals(g.subject.getId())
+                    && t.getId() != null && g.teacherId != null && t.getId().equals(g.teacherId)) {
                 c++;
             }
         }
@@ -712,6 +943,7 @@ public class ScheduleService {
             if (subjectId != null) {
                 schedule.setSubject(subjectRepository.findById(subjectId)
                         .orElseThrow(() -> new BadRequestException("Subject not found")));
+                schedule.setFixedActivityCode(null);
             }
         }
 

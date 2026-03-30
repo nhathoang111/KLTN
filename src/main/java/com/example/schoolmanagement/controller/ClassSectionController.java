@@ -72,7 +72,41 @@ public class ClassSectionController {
     @GetMapping("/teacher/{teacherId}")
     public ResponseEntity<?> getByTeacher(@PathVariable Integer teacherId) {
         List<ClassSection> list = classSectionService.getByTeacherId(teacherId);
-        return ResponseEntity.ok(Map.of("classSections", list));
+        List<Map<String, Object>> dtoList = list.stream().map(cs -> {
+            Map<String, Object> row = new HashMap<>();
+            row.put("id", cs.getId());
+            row.put("semester", cs.getSemester());
+            row.put("schoolYear", cs.getSchoolYear());
+            row.put("status", cs.getStatus());
+            if (cs.getClassRoom() != null) {
+                Map<String, Object> classDto = new HashMap<>();
+                classDto.put("id", cs.getClassRoom().getId());
+                classDto.put("name", cs.getClassRoom().getName());
+                row.put("classRoom", classDto);
+                row.put("class_room", classDto); // backward compatibility for current FE usage
+            } else {
+                row.put("classRoom", null);
+                row.put("class_room", null);
+            }
+            if (cs.getSubject() != null) {
+                Map<String, Object> subjectDto = new HashMap<>();
+                subjectDto.put("id", cs.getSubject().getId());
+                subjectDto.put("name", cs.getSubject().getName());
+                row.put("subject", subjectDto);
+            } else {
+                row.put("subject", null);
+            }
+            if (cs.getTeacher() != null) {
+                Map<String, Object> teacherDto = new HashMap<>();
+                teacherDto.put("id", cs.getTeacher().getId());
+                teacherDto.put("fullName", cs.getTeacher().getFullName());
+                row.put("teacher", teacherDto);
+            } else {
+                row.put("teacher", null);
+            }
+            return row;
+        }).toList();
+        return ResponseEntity.ok(Map.of("classSections", dtoList));
     }
 
     @PostMapping

@@ -141,6 +141,29 @@ public class UserService {
             schoolMap.put("code", u.getSchool().getCode() != null ? u.getSchool().getCode() : "");
             map.put("school", schoolMap);
         }
+
+        // TEACHER: thêm danh sách môn để FE hiển thị "Môn giảng dạy"
+        String roleNameUpper = (u.getRole() != null && u.getRole().getName() != null)
+                ? u.getRole().getName().trim().toUpperCase()
+                : "";
+        boolean isTeacher = roleNameUpper.startsWith("TEACHER") || roleNameUpper.contains("TEACHER") || roleNameUpper.startsWith("GV");
+        if (isTeacher) {
+            List<TeacherSubject> tsList = teacherSubjectRepository.findByUserId(u.getId());
+            List<Map<String, Object>> subjectsList = new ArrayList<>();
+            for (TeacherSubject ts : tsList) {
+                if (ts.getSubject() == null) continue;
+                Map<String, Object> subMap = new HashMap<>();
+                subMap.put("id", ts.getSubject().getId());
+                subMap.put("name", ts.getSubject().getName());
+                subMap.put("code", ts.getSubject().getCode());
+                subjectsList.add(subMap);
+            }
+            // Để FE vừa xử lý profile.subjects vừa profile.subject (môn đầu tiên).
+            map.put("subjects", subjectsList);
+            if (!subjectsList.isEmpty()) {
+                map.put("subject", subjectsList.get(0));
+            }
+        }
         return map;
     }
 

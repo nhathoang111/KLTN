@@ -4,7 +4,13 @@ import jakarta.persistence.*;
 import java.time.LocalDate;
 
 @Entity
-@Table(name = "schedules")
+@Table(name = "schedules",
+        uniqueConstraints = {
+                @UniqueConstraint(name = "uk_schedule_class_date_period",
+                        columnNames = { "class_id", "date", "period" }),
+                @UniqueConstraint(name = "uk_schedule_teacher_date_period",
+                        columnNames = { "teacher_id", "date", "period" })
+        })
 public class Schedule {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -23,11 +29,17 @@ public class Schedule {
     private ClassSection classSection;
 
     @ManyToOne
-    @JoinColumn(name = "subject_id")
+    @JoinColumn(name = "subject_id", nullable = true)
     private Subject subject;
 
+    /**
+     * Tiết cố định (không gắn bản ghi subjects): CHAOCO = Chào cờ, SHL = Sinh hoạt lớp.
+     */
+    @Column(name = "fixed_activity_code", length = 16)
+    private String fixedActivityCode;
+
     @ManyToOne(fetch = FetchType.EAGER)
-    @JoinColumn(name = "teacher_id")
+    @JoinColumn(name = "teacher_id", nullable = true)
     private User teacher;
 
     @Column(name = "day_of_week")
@@ -54,6 +66,9 @@ public class Schedule {
 
     public Subject getSubject() { return subject; }
     public void setSubject(Subject subject) { this.subject = subject; }
+
+    public String getFixedActivityCode() { return fixedActivityCode; }
+    public void setFixedActivityCode(String fixedActivityCode) { this.fixedActivityCode = fixedActivityCode; }
 
     public User getTeacher() { return teacher; }
     public void setTeacher(User teacher) { this.teacher = teacher; }

@@ -427,7 +427,8 @@ const ExamScoreManagement = () => {
     fetchScoreLockStatus();
   }, [user]);
 
-  const runAiStudentInsight = async (student) => {
+  const runAiStudentInsight = async (group) => {
+    const student = group?.student || group;
     const sid = student?.id ?? student?.studentId;
     if (!sid) return;
     try {
@@ -440,9 +441,24 @@ const ExamScoreManagement = () => {
       });
       setAiStudentLoading(true);
 
+      const classId =
+        group?.classEntity?.id ??
+        group?.class_id ??
+        null;
+      const subjectId =
+        group?.subject?.id ??
+        group?.subject_id ??
+        null;
+
       const res = await api.post(
         '/ai/insights/student',
-        { studentId: Number(sid), currentWindowDays: 30, previousWindowDays: 30 },
+        {
+          studentId: Number(sid),
+          classId: classId != null ? Number(classId) : null,
+          subjectId: subjectId != null ? Number(subjectId) : null,
+          currentWindowDays: 30,
+          previousWindowDays: 30,
+        },
         {
           headers: {
             'X-User-Id': user?.id,
@@ -506,21 +522,31 @@ const ExamScoreManagement = () => {
           const schedulesResponse = await api.get(`/schedules/teacher/${user.id}`);
           const teacherSchedules = schedulesResponse.data.schedules || [];
 
-          // Get unique subject IDs from schedules
+          // Get valid pairs (classId, subjectId) the teacher actually teaches.
+          // Important: we must filter by the combination, not independently by subject or class.
           const assignedSubjectIds = new Set();
+          const taughtClassSubjectPairs = new Set();
           teacherSchedules.forEach(schedule => {
             const subjectId = schedule.subject?.id || schedule.subject_id;
             if (subjectId) {
               assignedSubjectIds.add(subjectId);
             }
+
+            const classId = schedule.classEntity?.id || schedule.class_id;
+            if (classId && subjectId) {
+              taughtClassSubjectPairs.add(`${classId}-${subjectId}`);
+            }
           });
 
           console.log('Teacher assigned subject IDs:', Array.from(assignedSubjectIds));
 
-          // Filter scores to only show those for assigned subjects
+          // Filter scores to only show those for the taught (classId, subjectId) pair
           allScores = allScores.filter(score => {
             const scoreSubjectId = score.subject?.id || score.subject_id;
-            return assignedSubjectIds.has(scoreSubjectId);
+            const scoreClassId = score.classEntity?.id || score.class_id;
+            if (!scoreSubjectId || !scoreClassId) return false;
+            // Keep combo-check as the single source of truth
+            return taughtClassSubjectPairs.has(`${scoreClassId}-${scoreSubjectId}`);
           });
 
           console.log('Filtered exam scores for teacher:', allScores.length);
@@ -1828,7 +1854,7 @@ const ExamScoreManagement = () => {
                               <button
                                 type="button"
                                 className="rounded-full bg-violet-100 px-3 py-1.5 text-xs font-semibold text-violet-700 hover:bg-violet-200 disabled:opacity-60"
-                                onClick={() => runAiStudentInsight(group.student)}
+                                onClick={() => runAiStudentInsight(group)}
                                 disabled={aiStudentLoading}
                                 title="AI phân tích theo học sinh (gửi PH nếu có môn < 5)"
                                 aria-label="AI phân tích học sinh"

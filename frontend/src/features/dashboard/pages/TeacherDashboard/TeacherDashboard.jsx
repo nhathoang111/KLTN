@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../../../../shared/lib/api';
+import { scheduleSubjectDisplayName } from '../../../../shared/lib/scheduleLabels';
 import './TeacherDashboard.css';
 import { useAuth } from '../../../auth/context/AuthContext';
 
@@ -35,12 +36,21 @@ const TeacherDashboard = () => {
   const [aiLoading, setAiLoading] = useState(false);
   const [aiAnalysis, setAiAnalysis] = useState(null);
   const [aiError, setAiError] = useState('');
+  const [aiRetryInSec, setAiRetryInSec] = useState(0);
 
   const teacherId = user?.id;
 
   useEffect(() => {
     if (user && teacherId) fetchData();
   }, [user, teacherId]);
+
+  useEffect(() => {
+    if (aiRetryInSec <= 0) return undefined;
+    const timer = setInterval(() => {
+      setAiRetryInSec((prev) => (prev > 1 ? prev - 1 : 0));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [aiRetryInSec]);
 
   // Chuẩn hóa ngày từ API (string "yyyy-mm-dd" hoặc object Java LocalDate) để so sánh với ngày local
   const getScheduleDateStr = (s) => {
@@ -124,7 +134,7 @@ const TeacherDashboard = () => {
         const trendBySubject = {};
 
         teacherClassScores.forEach((s) => {
-          const subjectName = s.subject?.name || 'Môn';
+          const subjectName = scheduleSubjectDisplayName(s, 'Môn');
           const sc = Number(s.score);
           if (!bySubject[subjectName]) bySubject[subjectName] = { min: sc };
           else bySubject[subjectName].min = Math.min(bySubject[subjectName].min, sc);
@@ -242,6 +252,10 @@ const TeacherDashboard = () => {
     try {
       setAiError('');
       setAiAnalysis(null);
+      if (aiRetryInSec > 0) {
+        setAiError(`Gemini đang giới hạn tần suất. Vui lòng thử lại sau ${aiRetryInSec} giây.`);
+        return;
+      }
       if (!teacherSubjectAverages.length) {
         setAiError('Chưa có dữ liệu điểm để phân tích.');
         return;
@@ -258,13 +272,35 @@ const TeacherDashboard = () => {
         }),
       };
       const res = await api.post('/ai/grade-analysis', payload);
+      setAiRetryInSec(0);
       setAiAnalysis(res.data?.analysis ?? '');
     } catch (e) {
-      setAiError(e?.response?.data?.error || e?.message || 'Phân tích AI thất bại');
+      const status = Number(e?.response?.status);
+      const msg = e?.response?.data?.message || e?.response?.data?.error || e?.message || 'Phân tích AI thất bại';
+      if (status === 429) {
+        const m = String(msg);
+        // Chỉ countdown khi message có dạng "thử lại sau khoảng X giây" — tránh nhầm số từ "20 lần/ngày".
+        const retryMatch =
+          m.match(/thử lại sau khoảng\s+(\d+)\s*giây/i) || m.match(/sau khoảng\s+(\d+)\s*giây/i);
+        if (retryMatch) {
+          const retrySec = Number(retryMatch[1]);
+          setAiRetryInSec(Number.isFinite(retrySec) && retrySec > 0 ? retrySec : 0);
+        } else {
+          setAiRetryInSec(0);
+        }
+      }
+      setAiError(msg);
     } finally {
       setAiLoading(false);
     }
   };
+
+  const aiDisabled = aiLoading || teacherSubjectAverages.length === 0 || aiRetryInSec > 0;
+  const aiButtonText = aiLoading
+    ? 'Đang phân tích...'
+    : aiRetryInSec > 0
+      ? `Thử lại sau ${aiRetryInSec}s`
+      : 'Phân tích bằng AI';
 
   return (
     <div className="td-wrap">
@@ -335,7 +371,7 @@ const TeacherDashboard = () => {
                             {s.classEntity?.name ?? '-'}
                           </button>
                         </td>
-                        <td>{s.subject?.name ?? '-'}</td>
+                        <td>{scheduleSubjectDisplayName(s, '-')}</td>
                         <td>{s.room ?? '-'}</td>
                         <td>{getPeriodTime(s.period)}</td>
                       </tr>
@@ -378,10 +414,10 @@ const TeacherDashboard = () => {
                 type="button"
                 className="td-view-all"
                 onClick={analyzeWithAi}
-                disabled={aiLoading || teacherSubjectAverages.length === 0}
-                style={{ cursor: (aiLoading || teacherSubjectAverages.length === 0) ? 'not-allowed' : 'pointer' }}
+                disabled={aiDisabled}
+                style={{ cursor: aiDisabled ? 'not-allowed' : 'pointer' }}
               >
-                {aiLoading ? 'Đang phân tích...' : 'Phân tích bằng AI'}
+                {aiButtonText}
               </button>
             </div>
 

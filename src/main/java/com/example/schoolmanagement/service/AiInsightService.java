@@ -140,6 +140,48 @@ public class AiInsightService {
                 : examScoreRepository.findByStudentId(student.getId());
         if (scores == null) scores = List.of();
 
+        // Nếu FE gửi classId/subjectId thì ưu tiên lọc đúng đúng dòng giáo viên đang phân tích.
+        // (Tránh tình huống bấm AI ở dòng Sinh nhưng AI lại gom cả Toán của cùng học sinh.)
+        if (req.getClassId() != null) {
+            Integer requestedClassId = req.getClassId();
+            scores = scores.stream().filter(es -> {
+                if (es == null || es.getClassEntity() == null) return false;
+                return Objects.equals(es.getClassEntity().getId(), requestedClassId);
+            }).collect(Collectors.toList());
+        }
+        if (req.getSubjectId() != null) {
+            Integer requestedSubjectId = req.getSubjectId();
+            scores = scores.stream().filter(es -> {
+                if (es == null || es.getSubject() == null) return false;
+                return Objects.equals(es.getSubject().getId(), requestedSubjectId);
+            }).collect(Collectors.toList());
+        }
+
+        // IMPORTANT: nếu người gọi là TEACHER thì AI chỉ được phân tích theo các môn/lớp mà giáo viên đó dạy.
+        if ("TEACHER".equals(role) && currentUserId != null) {
+            List<ClassSection> teacherSections = classSectionRepository.findByTeacherIdFetchAll(currentUserId);
+            Set<String> taughtClassSubjectPairs = new HashSet<>();
+            for (ClassSection cs : teacherSections) {
+                if (cs == null || cs.getClassRoom() == null || cs.getSubject() == null) continue;
+                Integer cid = cs.getClassRoom().getId();
+                Integer sid = cs.getSubject().getId();
+                if (cid != null && sid != null) {
+                    taughtClassSubjectPairs.add(cid + "-" + sid);
+                }
+            }
+
+            if (!taughtClassSubjectPairs.isEmpty()) {
+                scores = scores.stream().filter(es -> {
+                    if (es == null || es.getClassEntity() == null || es.getSubject() == null) return false;
+                    Integer cid = es.getClassEntity().getId();
+                    Integer sid = es.getSubject().getId();
+                    return cid != null && sid != null && taughtClassSubjectPairs.contains(cid + "-" + sid);
+                }).collect(Collectors.toList());
+            } else {
+                scores = List.of();
+            }
+        }
+
         GradeAnalysisRequest analysisReq = buildGradeAnalysisForStudent(student, scores, curDays, prevDays);
 
         int weakSubjectCount = (int) analysisReq.getSubjects().stream()
