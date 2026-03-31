@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../../../../shared/lib/api';
+import { formatGradeAnalysisForDisplay } from '../../../../shared/lib/formatGradeAnalysisForDisplay';
 import { scheduleSubjectDisplayName } from '../../../../shared/lib/scheduleLabels';
 import { useAuth } from '../../../auth/context/AuthContext';
 import './StudentDashboard.css';
@@ -220,7 +221,7 @@ const StudentDashboard = () => {
       };
 
       const res = await api.post('/ai/grade-analysis', payload);
-      setAiAnalysis(res.data?.analysis ?? '');
+      setAiAnalysis(formatGradeAnalysisForDisplay(res.data) || '');
     } catch (e) {
       setAiError(e?.response?.data?.error || e?.message || 'Phân tích AI thất bại');
     } finally {

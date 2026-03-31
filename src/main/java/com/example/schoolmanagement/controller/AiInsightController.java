@@ -2,6 +2,7 @@ package com.example.schoolmanagement.controller;
 
 import com.example.schoolmanagement.dto.ai.ClassAiInsightRequest;
 import com.example.schoolmanagement.dto.ai.StudentAiInsightRequest;
+import com.example.schoolmanagement.dto.ai.StudentSubjectAnalysisRequest;
 import com.example.schoolmanagement.service.AiInsightService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
@@ -41,6 +42,19 @@ public class AiInsightController {
     ) {
         Map<String, Object> result = aiInsightService.analyzeStudentAndNotifyParents(request, currentUserId, currentUserRole);
         return ResponseEntity.ok(result);
+    }
+
+    /**
+     * GV bộ môn: phân tích điểm của 1 học sinh trong 1 môn (trong 1 lớp) ở kỳ hiện tại.
+     * Scope: 1 student + 1 subject + 1 class; không giả định classAverage/multi-term.
+     */
+    @PostMapping("/student-subject")
+    public ResponseEntity<?> analyzeStudentSubject(
+            @RequestBody StudentSubjectAnalysisRequest request,
+            @RequestHeader(value = "X-User-Id", required = false) Integer currentUserId,
+            @RequestHeader(value = "X-User-Role", required = false) String currentUserRole
+    ) {
+        return ResponseEntity.ok(aiInsightService.analyzeStudentSubjectInClass(request, currentUserId, currentUserRole));
     }
 }
 

@@ -30,7 +30,11 @@ public class Announcement {
     @JoinColumn(name = "recipient_user_id")
     private User recipientUser;
 
+    @Column(length = 255)
     private String title;
+
+    @Lob
+    @Column(columnDefinition = "LONGTEXT")
     private String content;
 
     @Column(name = "created_at")

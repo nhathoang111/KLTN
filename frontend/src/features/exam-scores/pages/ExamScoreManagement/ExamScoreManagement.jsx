@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import api from '../../../../shared/lib/api';
+import { formatGradeAnalysisForDisplay } from '../../../../shared/lib/formatGradeAnalysisForDisplay';
 import './ExamScoreManagement.css';
 import { useAuth } from '../../../auth/context/AuthContext';
 import { Pencil, Trash2, Search, Download } from 'lucide-react';
@@ -30,6 +31,25 @@ function adminUniqueSubjectsFromSchedules(schedules) {
     if (!map.has(sub.id)) map.set(sub.id, { id: sub.id, name: sub.name || `Môn #${sub.id}` });
   });
   return Array.from(map.values()).sort((a, b) => (a.name || '').localeCompare(b.name || '', 'vi'));
+}
+
+/** Response /api/ai/insights/student: gộp top-level + nested `analysis` rồi format. */
+function buildAiStudentInsightDisplayText(data) {
+  if (!data) return '';
+  const nested = data.analysis || {};
+  const merged = {
+    ...nested,
+    analysis: nested.analysis,
+    summary: data.summary ?? nested.summary,
+    trend: data.trend ?? nested.trend,
+    severity: data.severity ?? nested.severity,
+    underAverageSubjects: data.underAverageSubjects ?? nested.underAverageSubjects,
+    topConcerns: nested.topConcerns,
+    prioritySubjects: nested.prioritySubjects,
+    recommendations: data.recommendations ?? nested.recommendations,
+    riskLevel: data.riskLevel ?? nested.riskLevel,
+  };
+  return formatGradeAnalysisForDisplay(merged);
 }
 
 /** Khối "Xem điểm" admin: điểm + TBM từ GET /api/exam-scores/tbm-summary */
@@ -401,6 +421,7 @@ const ExamScoreManagement = () => {
   const [classScoreData, setClassScoreData] = useState({}); // {studentId: {scoreMieng, score15P, ...}}
   const [filteredSubjectsForClass, setFilteredSubjectsForClass] = useState([]); // Môn theo TKB + học kỳ (GV)
   const [displayFilterClassId, setDisplayFilterClassId] = useState(''); // Lớp đã chọn để filter hiển thị (cho Teacher)
+  const [displayFilterSubjectId, setDisplayFilterSubjectId] = useState(''); // Môn đã chọn để filter hiển thị (cho Teacher)
   const [isEditMode, setIsEditMode] = useState(false); // Phân biệt giữa nhập điểm mới và sửa điểm
   /** Học kỳ trong modal nhập điểm (lọc môn theo TKB, khớp admin) */
   const [teacherModalSemester, setTeacherModalSemester] = useState('1');
@@ -418,6 +439,11 @@ const ExamScoreManagement = () => {
   const [aiStudentLoading, setAiStudentLoading] = useState(false);
   const [aiStudentError, setAiStudentError] = useState('');
   const [aiStudentResult, setAiStudentResult] = useState(null); // response from /api/ai/insights/student
+
+  const aiStudentDisplayText = useMemo(
+    () => buildAiStudentInsightDisplayText(aiStudentResult),
+    [aiStudentResult]
+  );
 
   useEffect(() => {
     fetchExamScores();
@@ -1350,6 +1376,7 @@ const ExamScoreManagement = () => {
         const userRole = user?.role?.name?.toUpperCase();
         if (userRole === 'TEACHER') {
           setDisplayFilterClassId(selectedClassForScore);
+          setDisplayFilterSubjectId('');
         }
 
         // Reset form
@@ -1405,6 +1432,12 @@ const ExamScoreManagement = () => {
         return scoreClassId && scoreClassId.toString() === displayFilterClassId.toString();
       });
     }
+    if (userRole === 'TEACHER' && displayFilterSubjectId) {
+      filteredScores = filteredScores.filter(score => {
+        const scoreSubjectId = score.subject?.id || score.subject_id;
+        return scoreSubjectId && scoreSubjectId.toString() === displayFilterSubjectId.toString();
+      });
+    }
 
     filteredScores.forEach(score => {
       const studentId = score.student?.id;
@@ -1446,7 +1479,25 @@ const ExamScoreManagement = () => {
     return Object.values(grouped);
   };
 
-  const scoreGroups = useMemo(() => groupScoresByStudentAndSubject(), [examScores, displayFilterClassId, user]);
+  const outerSubjectsForFilter = useMemo(() => {
+    const userRole = user?.role?.name?.toUpperCase();
+    if (userRole !== 'TEACHER') return subjects || [];
+    if (!displayFilterClassId) return subjects || [];
+
+    // Khi đã chọn lớp, chỉ hiển thị các môn thực sự có điểm trong bảng của giáo viên cho lớp đó.
+    const cid = displayFilterClassId.toString();
+    const subjectIds = new Set();
+    (examScores || []).forEach(score => {
+      const scoreClassId = score.classEntity?.id || score.class_id;
+      if (!scoreClassId || scoreClassId.toString() !== cid) return;
+      const sid = score.subject?.id || score.subject_id;
+      if (sid) subjectIds.add(sid.toString());
+    });
+
+    return (subjects || []).filter(s => s && s.id != null && subjectIds.has(String(s.id)));
+  }, [subjects, examScores, displayFilterClassId, user]);
+
+  const scoreGroups = useMemo(() => groupScoresByStudentAndSubject(), [examScores, displayFilterClassId, displayFilterSubjectId, user]);
 
   useEffect(() => {
     const role = user?.role?.name?.toUpperCase();
@@ -1629,7 +1680,10 @@ const ExamScoreManagement = () => {
             <span>Lọc theo lớp:</span>
             <select
               value={displayFilterClassId}
-              onChange={(e) => setDisplayFilterClassId(e.target.value)}
+              onChange={(e) => {
+                setDisplayFilterClassId(e.target.value);
+                setDisplayFilterSubjectId('');
+              }}
               style={{
                 padding: '8px 12px',
                 borderRadius: '6px',
@@ -1646,9 +1700,34 @@ const ExamScoreManagement = () => {
               ))}
             </select>
           </label>
-          {displayFilterClassId && (
+          <label style={{ fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <span>Lọc theo môn:</span>
+            <select
+              value={displayFilterSubjectId}
+              onChange={(e) => setDisplayFilterSubjectId(e.target.value)}
+              style={{
+                padding: '8px 12px',
+                borderRadius: '6px',
+                border: '1px solid #ddd',
+                fontSize: '14px',
+                minWidth: '200px'
+              }}
+              disabled={!outerSubjectsForFilter || outerSubjectsForFilter.length === 0}
+            >
+              <option value="">-- Tất cả các môn --</option>
+              {(outerSubjectsForFilter || []).map(s => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          {(displayFilterClassId || displayFilterSubjectId) && (
             <button
-              onClick={() => setDisplayFilterClassId('')}
+              onClick={() => {
+                setDisplayFilterClassId('');
+                setDisplayFilterSubjectId('');
+              }}
               style={{
                 padding: '6px 12px',
                 backgroundColor: '#6c757d',
@@ -2299,7 +2378,35 @@ const ExamScoreManagement = () => {
                 </div>
               )}
 
-              {aiStudentResult?.analysis?.analysis ? (
+              {(() => {
+                const analysis = aiStudentResult?.analysis;
+                const source = aiStudentResult?.source ?? analysis?.source;
+                const aiSuccess = aiStudentResult?.aiSuccess ?? analysis?.aiSuccess;
+                const aiError = aiStudentResult?.aiError ?? analysis?.aiError;
+
+                if (!source) return null;
+                const label = source === 'GEMINI' ? 'Gemini' : 'Local';
+                const reason = aiSuccess === false && aiError ? ` (${aiError})` : '';
+
+                return (
+                  <div
+                    style={{
+                      marginBottom: '0.75rem',
+                      fontSize: '0.85rem',
+                      color: '#64748b',
+                    }}
+                  >
+                    Nguồn: <strong>{label}</strong>
+                    {reason}
+                  </div>
+                );
+              })()}
+
+              {!aiStudentLoading && !aiStudentError && aiStudentResult && !aiStudentDisplayText ? (
+                <div style={{ color: '#64748b', fontSize: '0.9rem' }}>Không có nội dung phân tích để hiển thị.</div>
+              ) : null}
+
+              {aiStudentDisplayText ? (
                 <>
                   <div
                     style={{
@@ -2313,7 +2420,7 @@ const ExamScoreManagement = () => {
                       overflow: 'auto',
                     }}
                   >
-                    {aiStudentResult.analysis.analysis}
+                    {aiStudentDisplayText}
                   </div>
                   <div style={{ marginTop: '0.75rem', fontSize: '0.9rem', color: '#475569' }}>
                     {aiStudentResult.hasUnderAverage ? (

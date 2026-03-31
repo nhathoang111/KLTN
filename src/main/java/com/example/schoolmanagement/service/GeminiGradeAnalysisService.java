@@ -17,6 +17,7 @@ import java.net.URLEncoder;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.LocalDateTime;
@@ -36,6 +37,15 @@ import java.util.stream.Collectors;
 public class GeminiGradeAnalysisService {
 
     private static final Logger log = LoggerFactory.getLogger(GeminiGradeAnalysisService.class);
+
+    private static final String SOURCE_GEMINI = "GEMINI";
+    private static final String SOURCE_LOCAL_FALLBACK = "LOCAL_FALLBACK";
+
+    private static final String AI_ERROR_INVALID_JSON = "INVALID_JSON";
+    private static final String AI_ERROR_QUOTA_EXCEEDED = "QUOTA_EXCEEDED";
+    private static final String AI_ERROR_MISSING_API_KEY = "MISSING_API_KEY";
+    private static final String AI_ERROR_RUNTIME = "GEMINI_RUNTIME_ERROR";
+
     /** TTL dài hơn một chút để giảm gọi lặp Gemini (free tier dễ 429). */
     private static final long ANALYSIS_CACHE_TTL_MS = 15 * 60 * 1000; // 15 minutes
 
@@ -44,7 +54,11 @@ public class GeminiGradeAnalysisService {
     private final ObjectMapper looseJsonMapper = new ObjectMapper()
             .configure(JsonReadFeature.ALLOW_TRAILING_COMMA.mappedFeature(), true)
             .configure(JsonReadFeature.ALLOW_SINGLE_QUOTES.mappedFeature(), true)
-            .configure(JsonReadFeature.ALLOW_UNQUOTED_FIELD_NAMES.mappedFeature(), true);
+            .configure(JsonReadFeature.ALLOW_UNQUOTED_FIELD_NAMES.mappedFeature(), true)
+            // Gemini đôi khi trả text có ký tự xuống dòng / control char trong string -> JSON strict sẽ fail
+            .configure(JsonReadFeature.ALLOW_UNESCAPED_CONTROL_CHARS.mappedFeature(), true)
+            // Một số response có escape lạ, bật để “cứu” parse
+            .configure(JsonReadFeature.ALLOW_BACKSLASH_ESCAPING_ANY_CHARACTER.mappedFeature(), true);
     private final Map<String, CachedAnalysis> analysisCache = new ConcurrentHashMap<>();
 
     @Value("${GEMINI_API_KEY:}")
@@ -73,7 +87,8 @@ public class GeminiGradeAnalysisService {
             if (strictGemini) {
                 throw new BadRequestException("Thiếu dữ liệu môn học để phân tích AI.");
             }
-            GradeAnalysisResponse fb = buildFallbackStructuredResponse(context, "MEDIUM");
+            GradeAnalysisResponse fb = buildFallbackStructuredResponse(context, "MEDIUM", rs.performanceLevel);
+            markExecutionSource(fb, SOURCE_LOCAL_FALLBACK, false, AI_ERROR_RUNTIME);
             logUsage(requestId, context, fb, startedAt);
             return fb;
         }
@@ -82,7 +97,8 @@ public class GeminiGradeAnalysisService {
             if (strictGemini) {
                 throw new BadRequestException("Thiếu GEMINI_API_KEY hoặc key không hợp lệ.");
             }
-            GradeAnalysisResponse fb = buildFallbackStructuredResponse(context, rs.riskLevel);
+            GradeAnalysisResponse fb = buildFallbackStructuredResponse(context, rs.riskLevel, rs.performanceLevel);
+            markExecutionSource(fb, SOURCE_LOCAL_FALLBACK, false, AI_ERROR_MISSING_API_KEY);
             logUsage(requestId, context, fb, startedAt);
             return fb;
         }
@@ -98,18 +114,24 @@ public class GeminiGradeAnalysisService {
 
             String prompt = buildPrompt(request, rs, context);
             GeminiCallResult gemini = callGemini(prompt);
-            GradeAnalysisResponse parsed = parseGeminiStructuredJson(gemini.analysisText, context);
+            GradeAnalysisResponse parsed = strictGemini
+                    ? parseGeminiJsonStrict(gemini.analysisText)
+                    : parseGeminiJsonLenient(gemini.analysisText);
             if (parsed == null) {
                 if (strictGemini) {
                     throw new BadRequestException("Gemini trả dữ liệu không đúng định dạng JSON mong đợi.");
                 }
-                GradeAnalysisResponse fb = buildFallbackStructuredResponse(context, rs.riskLevel);
+                GradeAnalysisResponse fb = buildFallbackStructuredResponse(context, rs.riskLevel, rs.performanceLevel);
+                markExecutionSource(fb, SOURCE_LOCAL_FALLBACK, false, AI_ERROR_INVALID_JSON);
                 List<String> underFromRequest = rs.underAverageSubjects == null ? List.of() : rs.underAverageSubjects;
                 fb.setUnderAverageSubjects(underFromRequest);
                 fb.setRiskLevel(rs.riskLevel);
+                fb.setSeverity(rs.riskLevel);
                 fb.setTrend(rs.trend);
-                fb.setSummary(buildConsistentSummary(underFromRequest, rs.riskLevel));
-                fb.setAnalysis(buildLegacyAnalysis(fb));
+                fb.setPrioritySubjects(defaultPrioritySubjects(underFromRequest));
+                fb.setTopConcerns(defaultTopConcerns(rs.riskLevel, underFromRequest, context));
+                fb.setRecommendations(defaultRecommendationsByPerformanceLevel(rs.performanceLevel));
+                fb.setSummary(buildConsistentSummary(underFromRequest, fb.getPrioritySubjects(), rs.performanceLevel));
                 fb.setPromptTokens(gemini.promptTokens);
                 fb.setResponseTokens(gemini.responseTokens);
                 fb.setTotalTokens(gemini.totalTokens);
@@ -121,6 +143,8 @@ public class GeminiGradeAnalysisService {
             parsed.setResponseTokens(gemini.responseTokens);
             parsed.setTotalTokens(gemini.totalTokens);
             parsed.setRiskLevel(rs.riskLevel);
+            // severity must align with backend-owned riskLevel
+            parsed.setSeverity(rs.riskLevel);
             if (parsed.getMetadata() == null) parsed.setMetadata(new GradeAnalysisResponse.Metadata());
             if (parsed.getMetadata().getGeneratedAt() == null) parsed.getMetadata().setGeneratedAt(LocalDateTime.now());
             if (context.getTotalStudents() != null) parsed.getMetadata().setTotalStudents(context.getTotalStudents());
@@ -129,16 +153,14 @@ public class GeminiGradeAnalysisService {
             // Deterministic business-rule fields (never trust AI)
             parsed.setTrend(rs.trend);
             parsed.setUnderAverageSubjects(rs.underAverageSubjects == null ? List.of() : rs.underAverageSubjects);
+            parsed.setPerformanceLevel(rs.performanceLevel);
 
-            List<String> recs = defaultList(parsed.getRecommendations());
-            if (recs.isEmpty()) {
-                recs = defaultRecommendationsByRisk(parsed.getRiskLevel());
-            }
-            parsed.setRecommendations(recs);
+            // Defensive validation & sanitization (JSON-only contract)
+            sanitizeAiJsonFields(parsed, rs);
 
-            // Summary must be consistent with under-average list
-            parsed.setSummary(buildConsistentSummary(parsed.getUnderAverageSubjects(), parsed.getRiskLevel()));
-            parsed.setAnalysis(buildLegacyAnalysis(parsed));
+            // Summary must be consistent with backend under-average list (Vietnamese)
+            parsed.setSummary(buildConsistentSummary(parsed.getUnderAverageSubjects(), parsed.getPrioritySubjects(), rs.performanceLevel));
+            markExecutionSource(parsed, SOURCE_GEMINI, true, null);
             putToCache(cacheKey, parsed);
             logUsage(requestId, context, parsed, startedAt);
             return parsed;
@@ -150,16 +172,38 @@ public class GeminiGradeAnalysisService {
                 }
                 throw new BadRequestException("Gemini lỗi: " + e.getMessage());
             }
-            GradeAnalysisResponse fb = buildFallbackStructuredResponse(context, rs.riskLevel);
+            GradeAnalysisResponse fb = buildFallbackStructuredResponse(context, rs.riskLevel, rs.performanceLevel);
+            String aiError = AI_ERROR_RUNTIME;
+            if (isQuotaExceededException(e)) {
+                aiError = AI_ERROR_QUOTA_EXCEEDED;
+            } else if (e.getMessage() != null && e.getMessage().toLowerCase(Locale.ROOT).contains("api key")) {
+                aiError = AI_ERROR_MISSING_API_KEY;
+            } else if (e.getMessage() != null) {
+                String m = e.getMessage().toLowerCase(Locale.ROOT);
+                if (m.contains("json") || m.contains("unexpected character") || m.contains("unexpected end-of-input")) {
+                    aiError = AI_ERROR_INVALID_JSON;
+                }
+            }
+            markExecutionSource(fb, SOURCE_LOCAL_FALLBACK, false, aiError);
             List<String> underFromRequest = rs.underAverageSubjects == null ? List.of() : rs.underAverageSubjects;
             fb.setUnderAverageSubjects(underFromRequest);
             fb.setRiskLevel(rs.riskLevel);
+            fb.setSeverity(rs.riskLevel);
             fb.setTrend(rs.trend);
-            fb.setSummary(buildConsistentSummary(underFromRequest, rs.riskLevel));
-            fb.setAnalysis(buildLegacyAnalysis(fb));
+            fb.setPrioritySubjects(defaultPrioritySubjects(underFromRequest));
+            fb.setTopConcerns(defaultTopConcerns(rs.riskLevel, underFromRequest, context));
+            fb.setRecommendations(defaultRecommendationsByPerformanceLevel(rs.performanceLevel));
+            fb.setSummary(buildConsistentSummary(underFromRequest, fb.getPrioritySubjects(), rs.performanceLevel));
             logUsage(requestId, context, fb, startedAt);
             return fb;
         }
+    }
+
+    private void markExecutionSource(GradeAnalysisResponse resp, String source, boolean aiSuccess, String aiError) {
+        if (resp == null) return;
+        resp.setSource(source);
+        resp.setAiSuccess(aiSuccess);
+        resp.setAiError(aiSuccess ? null : aiError);
     }
 
     private static class GeminiCallResult {
@@ -176,45 +220,94 @@ public class GeminiGradeAnalysisService {
         }
     }
 
+    public static class StudentSubjectAiFields {
+        private final String summary;
+        private final List<String> topConcerns;
+        private final List<String> recommendations;
+
+        public StudentSubjectAiFields(String summary, List<String> topConcerns, List<String> recommendations) {
+            this.summary = summary;
+            this.topConcerns = topConcerns;
+            this.recommendations = recommendations;
+        }
+
+        public String getSummary() {
+            return summary;
+        }
+
+        public List<String> getTopConcerns() {
+            return topConcerns;
+        }
+
+        public List<String> getRecommendations() {
+            return recommendations;
+        }
+    }
+
+    public StudentSubjectAiFields generateStudentSubjectAiFields(String prompt, AiExecutionContext ctx) throws Exception {
+        // Keep JSON-only contract; schema only allows summary/topConcerns/recommendations.
+        String schema = "{"
+                + "\"type\":\"OBJECT\","
+                + "\"required\":[\"summary\",\"topConcerns\",\"recommendations\"],"
+                + "\"properties\":{"
+                + "\"summary\":{\"type\":\"STRING\"},"
+                + "\"topConcerns\":{\"type\":\"ARRAY\",\"items\":{\"type\":\"STRING\"},\"minItems\":1,\"maxItems\":3},"
+                + "\"recommendations\":{\"type\":\"ARRAY\",\"items\":{\"type\":\"STRING\"},\"minItems\":1,\"maxItems\":3}"
+                + "}"
+                + "}";
+        GeminiCallResult gemini = callGemini(prompt, schema, 1200, 35);
+        StudentSubjectAiFields parsed = parseStudentSubjectAiJsonStrict(gemini.analysisText);
+        return parsed;
+    }
+
     private GeminiCallResult callGemini(String prompt) throws Exception {
+        String schema = "{"
+                + "\"type\":\"OBJECT\","
+                + "\"required\":[\"summary\",\"trend\",\"severity\",\"topConcerns\",\"prioritySubjects\",\"recommendations\"],"
+                + "\"properties\":{"
+                + "\"summary\":{\"type\":\"STRING\"},"
+                + "\"trend\":{\"type\":\"STRING\",\"enum\":[\"Tăng\",\"Giảm\",\"Ổn định\",\"Không đủ dữ liệu để xác định xu hướng\"]},"
+                + "\"severity\":{\"type\":\"STRING\",\"enum\":[\"LOW\",\"MEDIUM\",\"HIGH\",\"CRITICAL\"]},"
+                + "\"topConcerns\":{\"type\":\"ARRAY\",\"items\":{\"type\":\"STRING\"},\"minItems\":2,\"maxItems\":3},"
+                + "\"prioritySubjects\":{\"type\":\"ARRAY\",\"items\":{\"type\":\"STRING\"},\"minItems\":1,\"maxItems\":3},"
+                + "\"recommendations\":{\"type\":\"ARRAY\",\"items\":{\"type\":\"STRING\"},\"minItems\":2,\"maxItems\":3}"
+                + "}"
+                + "}";
+        return callGemini(prompt, schema, 2400, 45);
+    }
+
+    private GeminiCallResult callGemini(String prompt, String responseSchemaJson, int maxOutputTokens, int timeoutSeconds) throws Exception {
         if (geminiModel == null || geminiModel.isBlank()) {
             throw new IllegalArgumentException("Gemini model is empty");
+        }
+        if (responseSchemaJson == null || responseSchemaJson.isBlank()) {
+            throw new IllegalArgumentException("responseSchemaJson is empty");
         }
 
         String modelEnc = URLEncoder.encode(geminiModel, StandardCharsets.UTF_8);
         String url = "https://generativelanguage.googleapis.com/v1beta/models/" + modelEnc + ":generateContent?key="
                 + URLEncoder.encode(geminiApiKey, StandardCharsets.UTF_8);
 
-        // Prompt Gemini
-        // generationConfig để giảm “lạc format”, temperature thấp
         String body = "{"
                 + "\"contents\":[{\"role\":\"user\",\"parts\":[{\"text\":" + jsonString(prompt) + " }]}],"
                 + "\"generationConfig\":{"
                 + "\"temperature\":0,"
                 + "\"responseMimeType\":\"application/json\","
-                + "\"responseSchema\":{"
-                + "\"type\":\"OBJECT\","
-                + "\"required\":[\"summary\",\"trend\",\"recommendations\"],"
-                + "\"properties\":{"
-                + "\"summary\":{\"type\":\"STRING\"},"
-                + "\"trend\":{\"type\":\"STRING\"},"
-                + "\"recommendations\":{\"type\":\"ARRAY\",\"items\":{\"type\":\"STRING\"}}"
-                + "}"
-                + "},"
-                + "\"maxOutputTokens\":512"
+                + "\"responseSchema\":" + responseSchemaJson + ","
+                + "\"maxOutputTokens\":" + Math.max(128, maxOutputTokens)
                 + "}"
                 + "}";
 
         HttpRequest httpRequest = HttpRequest.newBuilder()
                 .uri(URI.create(url))
                 .header("Content-Type", "application/json")
-                .timeout(Duration.ofSeconds(20))
+                .timeout(Duration.ofSeconds(Math.max(10, timeoutSeconds)))
                 .POST(HttpRequest.BodyPublishers.ofString(body))
                 .build();
 
-        HttpResponse<String> response = httpClient.send(httpRequest, HttpResponse.BodyHandlers.ofString());
+        HttpResponse<byte[]> response = httpClient.send(httpRequest, HttpResponse.BodyHandlers.ofByteArray());
         if (response.statusCode() == 429) {
-            String body429 = response.body();
+            String body429 = decodeHttpBodyBestEffort(response);
             if (shouldRetry429(body429)) {
                 Long retrySec = extractRetrySeconds(body429);
                 long waitMs = Math.min(45_000L, Math.max(5_000L, ((retrySec == null ? 10L : retrySec) + 1L) * 1000L));
@@ -225,18 +318,18 @@ public class GeminiGradeAnalysisService {
                     Thread.currentThread().interrupt();
                     throw new RuntimeException("Gemini retry interrupted");
                 }
-                response = httpClient.send(httpRequest, HttpResponse.BodyHandlers.ofString());
+                response = httpClient.send(httpRequest, HttpResponse.BodyHandlers.ofByteArray());
             } else {
                 log.warn("Gemini returned quota-exhausted 429, skipping retry");
             }
         }
         if (response.statusCode() < 200 || response.statusCode() >= 300) {
-            throw new RuntimeException("Gemini API error: " + response.statusCode() + " - " + response.body());
+            throw new RuntimeException("Gemini API error: " + response.statusCode() + " - " + decodeHttpBodyBestEffort(response));
         }
 
-        JsonNode root = objectMapper.readTree(response.body());
+        String rawHttpBody = decodeHttpBodyBestEffort(response);
+        JsonNode root = objectMapper.readTree(rawHttpBody);
 
-        // Token usage (nếu Gemini trả usageMetadata)
         Integer promptTokens = null;
         Integer responseTokens = null;
         Integer totalTokens = null;
@@ -246,12 +339,6 @@ public class GeminiGradeAnalysisService {
                 promptTokens = parseIntFromUsage(usage, "promptTokenCount", "prompt_token_count");
                 responseTokens = parseIntFromUsage(usage, "candidatesTokenCount", "candidates_token_count");
                 totalTokens = parseIntFromUsage(usage, "totalTokenCount", "total_token_count");
-
-                log.debug("Gemini usage node found: {}", usage);
-                log.debug("Gemini token usage parsed: promptTokens={}, responseTokens={}, totalTokens={}",
-                        promptTokens, responseTokens, totalTokens);
-            } else {
-                log.debug("Gemini token usage missing usageMetadata/usage node");
             }
         } catch (Exception ex) {
             log.debug("Gemini token usage parse failed: {}", ex.toString());
@@ -263,6 +350,96 @@ public class GeminiGradeAnalysisService {
             throw new RuntimeException("Gemini API response missing content.text");
         }
         return new GeminiCallResult(textNode.asText(), promptTokens, responseTokens, totalTokens);
+    }
+
+    private StudentSubjectAiFields parseStudentSubjectAiJsonStrict(String text) {
+        if (text == null) throw new BadRequestException("Gemini trả về rỗng");
+        String candidate = sanitizeGeminiJsonCandidate(stripCodeFences(text).trim());
+        if (candidate.isEmpty()) throw new BadRequestException("Gemini trả về rỗng");
+
+        JsonNode node = null;
+        try {
+            node = objectMapper.readTree(candidate);
+        } catch (Exception ignore) {
+        }
+        if (node == null) {
+            try {
+                node = looseJsonMapper.readTree(candidate);
+            } catch (Exception ignore) {
+            }
+        }
+        if (node == null) {
+            String extracted = extractFirstJsonObject(candidate);
+            if (extracted != null) {
+                try {
+                    node = objectMapper.readTree(extracted);
+                } catch (Exception ignore) {
+                }
+                if (node == null) {
+                    try {
+                        node = looseJsonMapper.readTree(extracted);
+                    } catch (Exception ignore) {
+                    }
+                }
+            }
+        }
+        if (node == null || !node.isObject()) {
+            throw new BadRequestException("Gemini trả dữ liệu không đúng định dạng JSON mong đợi.");
+        }
+
+        String summary = textOrNull(node.get("summary"));
+        List<String> concerns = readStringArray(node.get("topConcerns"), 3);
+        List<String> recs = readStringArray(node.get("recommendations"), 3);
+        return new StudentSubjectAiFields(summary, concerns, recs);
+    }
+
+    private static String textOrNull(JsonNode n) {
+        if (n == null || n.isNull()) return null;
+        String s = n.asText();
+        return s == null ? null : s.trim();
+    }
+
+    private static List<String> readStringArray(JsonNode n, int max) {
+        if (n == null || n.isNull() || !n.isArray()) return List.of();
+        List<String> out = new ArrayList<>();
+        for (JsonNode it : n) {
+            if (it == null || it.isNull()) continue;
+            String s = it.asText();
+            if (s == null) continue;
+            s = s.trim();
+            if (s.isEmpty()) continue;
+            out.add(s);
+            if (out.size() >= max) break;
+        }
+        return out;
+    }
+
+    /**
+     * Gemini HTTP response đôi khi bị decode sai charset nếu dùng BodyHandlers.ofString().
+     * Đọc bytes rồi tự decode UTF-8 giúp giữ đúng JSON/text.
+     */
+    private String decodeHttpBodyBestEffort(HttpResponse<byte[]> response) {
+        if (response == null || response.body() == null) return "";
+        byte[] bytes = response.body();
+        // Prefer UTF-8 regardless of headers (Gemini JSON should be UTF-8)
+        String utf8 = new String(bytes, StandardCharsets.UTF_8);
+        if (looksLikeJson(utf8) || containsJsonMarkers(utf8)) return utf8;
+
+        // Fallback: if some environment returns bytes that are not UTF-8, try ISO-8859-1.
+        // We still return something readable for error messages/logs.
+        String latin1 = new String(bytes, Charset.forName("ISO-8859-1"));
+        return (looksLikeJson(latin1) || containsJsonMarkers(latin1)) ? latin1 : utf8;
+    }
+
+    private boolean looksLikeJson(String s) {
+        if (s == null) return false;
+        String t = s.trim();
+        return (t.startsWith("{") && t.endsWith("}")) || (t.startsWith("[") && t.endsWith("]"));
+    }
+
+    private boolean containsJsonMarkers(String s) {
+        if (s == null) return false;
+        return s.contains("\"candidates\"") || s.contains("\"content\"") || s.contains("\"parts\"") || s.contains("\"text\"");
     }
 
     private JsonNode locateUsageNode(JsonNode root) {
@@ -319,24 +496,47 @@ public class GeminiGradeAnalysisService {
 
         String target = request.getTarget() == null ? "" : request.getTarget();
         String scope = context.getAnalysisScope() == null ? (request.getClassId() == null ? "GLOBAL" : "CLASS") : context.getAnalysisScope();
-        return "Bạn là AI phân tích điểm học tập trong hệ thống quản trị trường học.\n"
+
+        List<String> under = rs.underAverageSubjects == null ? List.of() : rs.underAverageSubjects;
+        int belowAverageSubjectCount = under.size();
+        boolean coreSubjectsWeak = isAnyCoreSubjectWeak(under);
+        List<String> topWeakSubjects = deriveTopWeakSubjects(request.getSubjects(), 3);
+        List<String> suggestedPrioritySubjects = defaultPrioritySubjects(under);
+
+        return "Bạn là AI trợ lý quản lý học thuật trong hệ thống quản trị trường học.\n"
                 + "Chỉ dùng dữ liệu đầu vào, không suy diễn thêm.\n"
-                + "Trả về DUY NHẤT 1 JSON hợp lệ, không markdown, không giải thích.\n"
-                + "JSON schema:\n"
+                + "Trả về DUY NHẤT 1 JSON hợp lệ (không markdown, không code block, không giải thích, không thêm text trước/sau JSON).\n"
+                + "Schema JSON bắt buộc:\n"
                 + "{"
                 + "\"summary\":string,"
-                + "\"trend\":string,"
-                + "\"recommendations\":string[]"
+                + "\"trend\":\"Tăng\"|\"Giảm\"|\"Ổn định\"|\"Không đủ dữ liệu để xác định xu hướng\","
+                + "\"severity\":\"LOW\"|\"MEDIUM\"|\"HIGH\"|\"CRITICAL\","
+                + "\"topConcerns\":string[] (2..3),"
+                + "\"prioritySubjects\":string[] (1..3),"
+                + "\"recommendations\":string[] (2..3)"
                 + "}\n"
                 + "Nguyên tắc:\n"
-                + "- Ngắn gọn, nhất quán, tiếng Việt.\n"
+                + "- Ngắn gọn, nhất quán, tiếng Việt, quản trị/điều hành được.\n"
                 + "- Nếu scope=GLOBAL: chỉ nhận xét tổng quan toàn cục, tránh quá chi tiết từng môn cụ thể.\n"
                 + "- Nếu scope=CLASS: có thể chi tiết theo môn.\n"
-                + "- trend dùng các giá trị: Tăng/Giảm/Ổn định/Không đủ dữ liệu để xác định xu hướng.\n"
-                + "- recommendations tối đa 3 ý, ngắn.\n"
+                + "- trend PHẢI đúng chính tả và đúng 1 trong 4 giá trị được phép.\n"
+                + "- severity phải bám theo riskLevelFromBackend.\n"
+                + "- Giọng điệu nội dung PHẢI thay đổi theo performanceLevelFromBackend:\n"
+                + "  + YEU: cảnh báo + can thiệp/ưu tiên phụ đạo.\n"
+                + "  + TRUNG_BINH: theo dõi + củng cố nền tảng để cải thiện.\n"
+                + "  + KHA: tích cực + tiếp tục phát huy, cải thiện các phần chưa nổi bật.\n"
+                + "  + GIOI: ghi nhận thành tích + duy trì và học nâng cao.\n"
+                + "- mapping performanceLevelFromBackend (BẮT BUỘC) theo TBM backend: <4=YEU, <=6.5=TRUNG_BINH, <=8.0=KHA, >8=GIOI.\n"
+                + "- topConcerns: 2-3 mối lo chính, tránh lặp.\n"
+                + "- prioritySubjects: 1-3 môn quan trọng nhất, không liệt kê quá nhiều.\n"
+                + "- recommendations: 2-3 hành động cụ thể, khả thi trong 1-2 tuần.\n"
+                + "- Mọi chuỗi trong JSON KHÔNG xuống dòng (không ký tự newline literal trong chuỗi). summary gọn <= 120 ký tự; mỗi mục topConcerns/recommendations <= 60 ký tự.\n"
+                + "- Ưu tiên môn cốt lõi khi liên quan: Toán, Ngữ văn, Tiếng Anh.\n"
+                + "- Tránh câu chung chung kiểu “cần cố gắng hơn”.\n"
                 + "Ràng buộc nhất quán (BẮT BUỘC):\n"
-                + "- Backend là nguồn duy nhất cho danh sách môn dưới trung bình và riskLevel.\n"
-                + "- Bạn chỉ được sinh nội dung text cho summary/trend/recommendations.\n"
+                + "- Backend là nguồn duy nhất cho danh sách môn dưới trung bình, riskLevel và performanceLevel.\n"
+                + "- Bạn chỉ được sinh nội dung cho summary, topConcerns, prioritySubjects, recommendations.\n"
+                + "- Không sinh riskLevel, không sinh underAverageSubjects.\n"
                 + "- Không được tự khẳng định “không có môn dưới trung bình” nếu backend đã cung cấp danh sách môn dưới trung bình tồn tại.\n"
                 + "Dữ liệu:\n"
                 + "{"
@@ -344,7 +544,14 @@ public class GeminiGradeAnalysisService {
                 + "\"scope\":" + jsonString(scope) + ","
                 + "\"riskLevelFromBackend\":" + jsonString(rs.riskLevel) + ","
                 + "\"computedTrendFromBackend\":" + jsonString(rs.trend) + ","
-                + "\"underAverageSubjectsFromBackend\":" + jsonString(String.join(", ", rs.underAverageSubjects)) + ","
+                + "\"performanceLevelFromBackend\":" + jsonString(rs.performanceLevel) + ","
+                + "\"belowAverageSubjectCount\":" + belowAverageSubjectCount + ","
+                + "\"underAverageSubjectsFromBackend\":" + jsonString(String.join(", ", under)) + ","
+                + "\"topWeakSubjectsFromBackend\":" + jsonString(String.join(", ", topWeakSubjects)) + ","
+                + "\"coreSubjectsWeak\":" + (coreSubjectsWeak ? "true" : "false") + ","
+                + "\"suggestedPrioritySubjectsFromBackend\":" + jsonString(String.join(", ", suggestedPrioritySubjects)) + ","
+                + "\"totalStudents\":" + (context.getTotalStudents() == null ? "null" : context.getTotalStudents()) + ","
+                + "\"weakStudentCount\":" + (context.getWeakStudentCount() == null ? "null" : context.getWeakStudentCount()) + ","
                 + "\"subjects\":[" + subjectsJson + "]"
                 + "}";
     }
@@ -411,11 +618,15 @@ public class GeminiGradeAnalysisService {
     private RiskAndStats calculateRiskAndStats(GradeAnalysisRequest request, AiExecutionContext context) {
         List<GradeAnalysisRequest.SubjectScore> subjects = request.getSubjects() == null ? List.of() : request.getSubjects();
         List<String> under = new ArrayList<>();
+        List<Double> performanceVals = new ArrayList<>();
         for (GradeAnalysisRequest.SubjectScore s : subjects) {
             if (s == null || s.getName() == null) continue;
             if (isSubjectWeak(s.getScore(), s.getAverageScore() != null ? s.getAverageScore() : s.getScore())) {
                 under.add(s.getName());
             }
+            // averageScoreCandidate: prefer sent averageScore, fallback to score
+            Double pv = s.getAverageScore() != null ? s.getAverageScore() : s.getScore();
+            if (pv != null) performanceVals.add(pv);
         }
         under = under.stream().distinct().sorted(String::compareToIgnoreCase).collect(Collectors.toList());
         String trend = detectTrend(subjects);
@@ -442,6 +653,27 @@ public class GeminiGradeAnalysisService {
         boolean avgBelow5 = avg != null && avg < 5.0;
         boolean avgGood = avg != null && avg >= 6.5;
 
+        // performanceLevel based on deterministic thresholds
+        Double avgForPerformance = null;
+        if (!performanceVals.isEmpty()) {
+            OptionalDouble odp = performanceVals.stream().mapToDouble(Double::doubleValue).average();
+            avgForPerformance = odp.isPresent() ? odp.getAsDouble() : null;
+        }
+        // If we don't have any averageScore values, reuse avg from scoreVals.
+        if (avgForPerformance == null) avgForPerformance = avg;
+        String performanceLevel;
+        if (avgForPerformance == null) {
+            performanceLevel = "TRUNG_BINH";
+        } else if (avgForPerformance < 4.0) {
+            performanceLevel = "YEU";
+        } else if (avgForPerformance <= 6.5) {
+            performanceLevel = "TRUNG_BINH";
+        } else if (avgForPerformance <= 8.0) {
+            performanceLevel = "KHA";
+        } else {
+            performanceLevel = "GIOI";
+        }
+
         String risk;
         if (underCount >= 2 || avgBelow5) {
             risk = "HIGH";
@@ -452,32 +684,115 @@ public class GeminiGradeAnalysisService {
         } else {
             risk = "MEDIUM";
         }
-        return new RiskAndStats(risk, trend, under);
+        return new RiskAndStats(risk, trend, under, performanceLevel);
     }
 
-    private GradeAnalysisResponse parseGeminiStructuredJson(String text, AiExecutionContext context) {
+    private GradeAnalysisResponse parseGeminiJsonStrict(String text) {
         if (text == null || text.isBlank()) return null;
-        String raw = text.trim();
-        if (raw.startsWith("```")) {
-            raw = raw.replaceFirst("^```json", "").replaceFirst("^```", "");
-            if (raw.endsWith("```")) raw = raw.substring(0, raw.length() - 3);
-            raw = raw.trim();
+        String raw = sanitizeGeminiJsonCandidate(stripCodeFences(text));
+
+        // STRICT endpoint still requires a JSON object, but parse is made resilient:
+        // a) stripCodeFences
+        // b) try objectMapper
+        // c) try looseJsonMapper
+        // d) extractFirstJsonObject + parse again
+        // e) then return null
+        try {
+            JsonNode node = objectMapper.readTree(raw);
+            return toGradeAnalysisResponseFromJson(node);
+        } catch (Exception e1) {
+            try {
+                JsonNode node = looseJsonMapper.readTree(raw);
+                return toGradeAnalysisResponseFromJson(node);
+            } catch (Exception e2) {
+                String extracted = extractFirstJsonObject(raw);
+                if (extracted != null && !extracted.isBlank()) {
+                    String exRaw = sanitizeGeminiJsonCandidate(extracted);
+                    try {
+                        JsonNode node = objectMapper.readTree(exRaw);
+                        return toGradeAnalysisResponseFromJson(node);
+                    } catch (Exception e3) {
+                        try {
+                            JsonNode node = looseJsonMapper.readTree(exRaw);
+                            return toGradeAnalysisResponseFromJson(node);
+                        } catch (Exception e4) {
+                            logGeminiParseFailure("strict-extracted", raw, e4);
+                            return null;
+                        }
+                    }
+                }
+                logGeminiParseFailure("strict", raw, e2);
+                return null;
+            }
         }
+    }
+
+    private GradeAnalysisResponse parseGeminiJsonLenient(String text) {
+        if (text == null || text.isBlank()) return null;
+        String raw = sanitizeGeminiJsonCandidate(stripCodeFences(text));
         try {
             JsonNode node = parseJsonNodeResilient(raw);
-            GradeAnalysisResponse r = new GradeAnalysisResponse();
-            r.setSummary(node.path("summary").asText(null));
-            r.setTrend(node.path("trend").asText(null));
-            r.setRecommendations(toStringList(node.get("recommendations")));
-            return r;
+            return toGradeAnalysisResponseFromJson(node);
         } catch (Exception e) {
-            // Backward compatibility: nếu Gemini vẫn trả dạng 4 block text cũ,
-            // parse lại thành cấu trúc mới thay vì rơi ngay vào fallback generic.
-            GradeAnalysisResponse legacy = parseLegacyBlockText(raw);
-            if (legacy != null) return legacy;
-            log.warn("Gemini JSON parse failed. rawSample={}", abbreviate(raw, 600));
+            logGeminiParseFailure("lenient", raw, e);
             return null;
         }
+    }
+
+    private GradeAnalysisResponse toGradeAnalysisResponseFromJson(JsonNode node) {
+        if (node == null || node.isNull() || !node.isObject()) return null;
+        GradeAnalysisResponse r = new GradeAnalysisResponse();
+        r.setSummary(node.path("summary").asText(null));
+        r.setTrend(node.path("trend").asText(null));
+        r.setSeverity(node.path("severity").asText(null));
+        r.setTopConcerns(toStringList(node.get("topConcerns")));
+        r.setPrioritySubjects(toStringList(node.get("prioritySubjects")));
+        r.setRecommendations(toStringList(node.get("recommendations")));
+        return r;
+    }
+
+    private String stripCodeFences(String raw) {
+        if (raw == null) return "";
+        String s = raw.trim();
+        if (s.startsWith("```")) {
+            s = s.replaceFirst("^```json", "").replaceFirst("^```", "");
+            if (s.endsWith("```")) s = s.substring(0, s.length() - 3);
+        }
+        return s.trim();
+    }
+
+    /**
+     * Lightweight sanitization before JSON parsing:
+     * - trim
+     * - remove BOM
+     * - remove illegal ASCII control chars (including raw newlines/tabs) which commonly break JSON parsers
+     * This does NOT rewrite structure or "fix" invalid JSON beyond removing control chars.
+     */
+    private String sanitizeGeminiJsonCandidate(String raw) {
+        if (raw == null) return "";
+        String s = raw.trim();
+        if (!s.isEmpty() && s.charAt(0) == '\uFEFF') {
+            s = s.substring(1);
+        }
+        StringBuilder sb = new StringBuilder(s.length());
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            if (c >= 0x00 && c <= 0x1F) {
+                // Drop control chars. Raw newlines/tabs inside JSON strings are illegal and
+                // frequently show up in Gemini output, breaking strict parsing.
+                continue;
+            }
+            sb.append(c);
+        }
+        return sb.toString().trim();
+    }
+
+    private void logGeminiParseFailure(String mode, String raw, Exception e) {
+        // Keep WARN concise but include exception for stacktrace.
+        log.warn("Gemini JSON parse failed ({}). rawSample={}", mode, abbreviate(raw, 600), e);
+        // Full raw is useful for diagnosing occasional invalid JSON from model.
+        // Log at DEBUG to avoid flooding production logs.
+        log.debug("Gemini raw text ({}): {}", mode, raw);
     }
 
     private JsonNode parseJsonNodeResilient(String raw) throws Exception {
@@ -527,60 +842,6 @@ public class GeminiGradeAnalysisService {
         return null;
     }
 
-    private GradeAnalysisResponse parseLegacyBlockText(String text) {
-        if (text == null || text.isBlank()) return null;
-        String s = text.trim();
-        if (!s.contains("Đánh giá:") || !s.contains("Môn dưới trung bình:")
-                || !s.contains("Xu hướng:") || !s.contains("Khuyến nghị:")) {
-            return null;
-        }
-        try {
-            String summary = extractBlock(s, "Đánh giá:", "Môn dưới trung bình:");
-            String under = extractBlock(s, "Môn dưới trung bình:", "Xu hướng:");
-            String trend = extractBlock(s, "Xu hướng:", "Khuyến nghị:");
-            String rec = extractBlock(s, "Khuyến nghị:", null);
-
-            GradeAnalysisResponse r = new GradeAnalysisResponse();
-            r.setSummary(summary);
-            r.setTrend(trend);
-            if (under == null || under.isBlank() || under.toLowerCase(Locale.ROOT).contains("không có môn dưới trung bình")) {
-                r.setUnderAverageSubjects(new ArrayList<>());
-            } else {
-                List<String> subjects = new ArrayList<>();
-                for (String part : under.split(",")) {
-                    String item = part.trim();
-                    if (!item.isEmpty()) {
-                        // bỏ phần "(điểm)" nếu có để giữ list môn sạch
-                        int idx = item.indexOf(" (");
-                        subjects.add(idx > 0 ? item.substring(0, idx).trim() : item);
-                    }
-                }
-                r.setUnderAverageSubjects(subjects);
-            }
-
-            List<String> recs = new ArrayList<>();
-            if (rec != null && !rec.isBlank()) {
-                for (String line : rec.split("\\n")) {
-                    String item = line.replace("-", "").trim();
-                    if (!item.isEmpty()) recs.add(item);
-                }
-            }
-            r.setRecommendations(recs);
-            return r;
-        } catch (Exception e) {
-            return null;
-        }
-    }
-
-    private String extractBlock(String text, String start, String end) {
-        int s = text.indexOf(start);
-        if (s < 0) return "";
-        s += start.length();
-        int e = (end == null) ? text.length() : text.indexOf(end, s);
-        if (e < 0) e = text.length();
-        return text.substring(s, e).trim();
-    }
-
     private List<String> toStringList(JsonNode node) {
         if (node == null || !node.isArray()) return new ArrayList<>();
         List<String> out = new ArrayList<>();
@@ -592,19 +853,22 @@ public class GeminiGradeAnalysisService {
         return out;
     }
 
-    private GradeAnalysisResponse buildFallbackStructuredResponse(AiExecutionContext context, String riskLevel) {
+    private GradeAnalysisResponse buildFallbackStructuredResponse(AiExecutionContext context, String riskLevel, String performanceLevel) {
         GradeAnalysisResponse r = new GradeAnalysisResponse();
-        r.setSummary(buildConsistentSummary(List.of(), riskLevel));
+        r.setSeverity(riskLevel);
+        r.setPerformanceLevel(performanceLevel);
+        r.setTopConcerns(defaultTopConcerns(riskLevel, List.of(), context));
+        r.setPrioritySubjects(new ArrayList<>());
+        r.setSummary(buildConsistentSummary(List.of(), List.of(), performanceLevel));
         r.setUnderAverageSubjects(new ArrayList<>());
         r.setTrend("Không đủ dữ liệu để xác định xu hướng.");
-        r.setRecommendations(List.of("Rà soát lại dữ liệu học tập"));
+        r.setRecommendations(defaultRecommendationsByPerformanceLevel(performanceLevel));
         r.setRiskLevel(riskLevel);
         GradeAnalysisResponse.Metadata m = new GradeAnalysisResponse.Metadata();
         m.setGeneratedAt(LocalDateTime.now());
         m.setTotalStudents(context.getTotalStudents());
         m.setWeakStudentCount(context.getWeakStudentCount());
         r.setMetadata(m);
-        r.setAnalysis(buildLegacyAnalysis(r));
         return r;
     }
 
@@ -621,18 +885,202 @@ public class GeminiGradeAnalysisService {
                 + "Khuyến nghị:\n" + rec;
     }
 
-    /**
-     * Deterministic, strictly consistent summary based ONLY on backend-derived underAverageSubjects.
-     * Validation requirements (case-sensitive phrases):
-     * - underAverageSubjects non-empty => summary contains "subjects below average"
-     * - underAverageSubjects empty     => summary contains "No subjects below average"
-     */
-    private String buildConsistentSummary(List<String> underAverageSubjects, String riskLevel) {
+    private String buildConsistentSummary(List<String> underAverageSubjects, List<String> prioritySubjects, String performanceLevel) {
         List<String> under = defaultList(underAverageSubjects);
-        if (!under.isEmpty()) {
-            return "subjects below average detected: " + String.join(", ", under);
+        String level = performanceLevel == null ? "TRUNG_BINH" : performanceLevel;
+        List<String> pri = defaultList(prioritySubjects).stream().limit(3).collect(Collectors.toList());
+
+        boolean hasUnder = under != null && !under.isEmpty();
+        String priText = pri.isEmpty() ? "" : String.join(", ", pri);
+        String priOrGeneric = priText.isBlank() ? "các môn dưới trung bình" : priText;
+
+        if ("YEU".equalsIgnoreCase(level)) {
+            if (hasUnder) {
+                return "Mức YẾU; cần ưu tiên can thiệp các môn dưới trung bình: " + priOrGeneric + ".";
+            }
+            return "Mức YẾU; cần theo dõi sát và có kế hoạch phụ đạo kịp thời.";
         }
-        return "No subjects below average detected";
+
+        if ("TRUNG_BINH".equalsIgnoreCase(level)) {
+            if (hasUnder) {
+                return "Mức TRUNG BÌNH; tập trung củng cố nền tảng và cải thiện các môn còn dưới trung bình: " + priOrGeneric + ".";
+            }
+            return "Mức TRUNG BÌNH; duy trì mức điểm hiện tại và tăng luyện tập để tiến bộ rõ rệt hơn.";
+        }
+
+        if ("KHA".equalsIgnoreCase(level)) {
+            if (hasUnder) {
+                return "Mức KHÁ; vẫn còn các môn dưới trung bình cần cải thiện: " + priOrGeneric + ", đồng thời phát huy các môn tốt.";
+            }
+            return "Mức KHÁ; phát huy đà học tập tốt và tiếp tục cải thiện các phần chưa nổi bật.";
+        }
+
+        if ("GIOI".equalsIgnoreCase(level)) {
+            if (hasUnder) {
+                return "Mức GIỎI; duy trì thành tích nhưng cần xử lý thêm các điểm yếu nhỏ: " + priOrGeneric + ".";
+            }
+            return "Mức GIỎI; duy trì thành tích, học nâng cao và phát triển thêm năng lực theo chuyên sâu.";
+        }
+
+        if (!under.isEmpty()) {
+            // fallback text for unknown performanceLevel
+            int n = under.size();
+            if (!pri.isEmpty()) {
+                return "Có " + n + " môn dưới trung bình; ưu tiên xử lý: " + String.join(", ", pri) + ".";
+            }
+            return "Có " + n + " môn dưới trung bình; cần ưu tiên can thiệp theo kế hoạch.";
+        }
+        return "Không có môn dưới trung bình.";
+    }
+
+    private void sanitizeAiJsonFields(GradeAnalysisResponse parsed, RiskAndStats rs) {
+        if (parsed == null) return;
+
+        // summary: if blank -> deterministic Vietnamese summary will be applied later anyway
+        if (parsed.getSummary() != null) {
+            String s = parsed.getSummary().trim();
+            parsed.setSummary(s.isBlank() ? null : s);
+        }
+
+        // trend: must be one of allowed values, otherwise fallback to backend deterministic trend
+        String aiTrend = parsed.getTrend() == null ? "" : parsed.getTrend().trim();
+        if (!isAllowedTrend(aiTrend)) {
+            parsed.setTrend(rs != null ? rs.trend : null);
+        } else {
+            parsed.setTrend(aiTrend);
+        }
+
+        // severity: always align with backend riskLevel
+        parsed.setSeverity(parsed.getRiskLevel());
+
+        // topConcerns: 2-3 items
+        List<String> concerns = defaultList(parsed.getTopConcerns()).stream()
+                .filter(Objects::nonNull)
+                .map(String::trim)
+                .filter(s -> !s.isBlank())
+                .limit(3)
+                .collect(Collectors.toList());
+        if (concerns.size() < 2) {
+            concerns = defaultTopConcerns(parsed.getRiskLevel(),
+                    parsed.getUnderAverageSubjects() == null ? List.of() : parsed.getUnderAverageSubjects(),
+                    null);
+        }
+        if (concerns.size() == 1) {
+            concerns = List.of(concerns.get(0), "Cần theo dõi tiến độ theo tuần để giảm rủi ro học lực.");
+        }
+        parsed.setTopConcerns(concerns.stream().limit(3).collect(Collectors.toList()));
+
+        // prioritySubjects: 1-3, prefer subset of underAverageSubjects, prioritize core subjects
+        List<String> aiPri = defaultList(parsed.getPrioritySubjects()).stream()
+                .filter(Objects::nonNull)
+                .map(String::trim)
+                .filter(s -> !s.isBlank())
+                .limit(3)
+                .collect(Collectors.toList());
+        List<String> backendPri = defaultPrioritySubjects(parsed.getUnderAverageSubjects() == null ? List.of() : parsed.getUnderAverageSubjects());
+        List<String> pri = aiPri.isEmpty() ? backendPri : aiPri;
+        if (parsed.getUnderAverageSubjects() != null && !parsed.getUnderAverageSubjects().isEmpty()) {
+            List<String> under = parsed.getUnderAverageSubjects();
+            pri = pri.stream().filter(under::contains).limit(3).collect(Collectors.toList());
+            if (pri.isEmpty()) pri = backendPri;
+        }
+        if (pri.isEmpty()) {
+            // no under-average subjects => keep empty, UI can hide
+            parsed.setPrioritySubjects(new ArrayList<>());
+        } else {
+            parsed.setPrioritySubjects(pri.stream().limit(3).collect(Collectors.toList()));
+        }
+
+        // recommendations: trim, drop blanks, limit to 3; if empty -> defaults by risk
+        List<String> recs = defaultList(parsed.getRecommendations()).stream()
+                .filter(Objects::nonNull)
+                .map(String::trim)
+                .filter(s -> !s.isBlank())
+                .limit(3)
+                .collect(Collectors.toList());
+        if (recs.isEmpty()) {
+            String perf = rs != null ? rs.performanceLevel : null;
+            recs = defaultRecommendationsByPerformanceLevel(perf);
+        }
+        parsed.setRecommendations(recs);
+    }
+
+    private boolean isAllowedTrend(String t) {
+        if (t == null) return false;
+        return "Tăng".equals(t)
+                || "Giảm".equals(t)
+                || "Ổn định".equals(t)
+                || "Không đủ dữ liệu để xác định xu hướng".equals(t);
+    }
+
+    private List<String> defaultTopConcerns(String riskLevel, List<String> underAverageSubjects, AiExecutionContext ctx) {
+        int n = underAverageSubjects == null ? 0 : underAverageSubjects.size();
+        boolean coreWeak = isAnyCoreSubjectWeak(underAverageSubjects == null ? List.of() : underAverageSubjects);
+        List<String> out = new ArrayList<>();
+
+        if ("CRITICAL".equalsIgnoreCase(riskLevel) || "HIGH".equalsIgnoreCase(riskLevel)) {
+            out.add("Mức rủi ro học lực cao; cần can thiệp sớm trong 1-2 tuần.");
+        } else if ("MEDIUM".equalsIgnoreCase(riskLevel)) {
+            out.add("Có dấu hiệu cần theo dõi sát để tránh suy giảm kết quả học tập.");
+        } else {
+            out.add("Rủi ro thấp; duy trì theo dõi định kỳ để giữ ổn định.");
+        }
+
+        if (n > 0) {
+            out.add("Có " + n + " môn dưới trung bình; nguy cơ lan rộng nếu không có kế hoạch phụ đạo.");
+        } else {
+            out.add("Chưa phát hiện môn dưới trung bình theo dữ liệu hiện tại.");
+        }
+
+        if (coreWeak) {
+            out.add("Môn cốt lõi đang yếu (Toán/Ngữ văn/Tiếng Anh), cần ưu tiên xử lý.");
+        }
+
+        return out.stream().limit(3).collect(Collectors.toList());
+    }
+
+    private List<String> defaultPrioritySubjects(List<String> underAverageSubjects) {
+        List<String> under = underAverageSubjects == null ? List.of() : underAverageSubjects;
+        List<String> core = List.of("Toán", "Ngữ văn", "Tiếng Anh");
+        List<String> out = new ArrayList<>();
+        for (String c : core) {
+            if (under.contains(c)) out.add(c);
+        }
+        for (String s : under) {
+            if (out.size() >= 3) break;
+            if (s != null && !out.contains(s)) out.add(s);
+        }
+        return out.stream().limit(3).collect(Collectors.toList());
+    }
+
+    private boolean isAnyCoreSubjectWeak(List<String> underAverageSubjects) {
+        if (underAverageSubjects == null || underAverageSubjects.isEmpty()) return false;
+        for (String s : underAverageSubjects) {
+            if (s == null) continue;
+            String t = s.trim();
+            if ("Toán".equalsIgnoreCase(t) || "Ngữ văn".equalsIgnoreCase(t) || "Tiếng Anh".equalsIgnoreCase(t)) return true;
+        }
+        return false;
+    }
+
+    private List<String> deriveTopWeakSubjects(List<GradeAnalysisRequest.SubjectScore> subjects, int k) {
+        if (subjects == null || subjects.isEmpty()) return List.of();
+        int limit = Math.max(1, Math.min(3, k));
+        return subjects.stream()
+                .filter(Objects::nonNull)
+                .filter(s -> s.getName() != null && !s.getName().isBlank())
+                .sorted((a, b) -> {
+                    Double sa = a.getScore();
+                    Double sb = b.getScore();
+                    if (sa == null && sb == null) return 0;
+                    if (sa == null) return 1;
+                    if (sb == null) return -1;
+                    return Double.compare(sa, sb);
+                })
+                .map(s -> s.getName().trim())
+                .distinct()
+                .limit(limit)
+                .collect(Collectors.toList());
     }
 
     private boolean isQuotaExceededException(Exception e) {
@@ -761,12 +1209,15 @@ public class GeminiGradeAnalysisService {
 
     private void logUsage(String requestId, AiExecutionContext context, GradeAnalysisResponse resp, long startedAtMs) {
         long duration = System.currentTimeMillis() - startedAtMs;
-        log.info("AI_USAGE requestId={} endpoint={} schoolId={} classId={} riskLevel={} promptTokens={} responseTokens={} totalTokens={} durationMs={}",
+        log.info("AI_USAGE requestId={} endpoint={} schoolId={} classId={} riskLevel={} source={} aiSuccess={} aiError={} promptTokens={} responseTokens={} totalTokens={} durationMs={}",
                 requestId,
                 context.getEndpoint(),
                 context.getSchoolId(),
                 context.getClassId(),
                 resp != null ? resp.getRiskLevel() : null,
+                resp != null ? resp.getSource() : null,
+                resp != null ? resp.getAiSuccess() : null,
+                resp != null ? resp.getAiError() : null,
                 resp != null ? resp.getPromptTokens() : null,
                 resp != null ? resp.getResponseTokens() : null,
                 resp != null ? resp.getTotalTokens() : null,
@@ -802,6 +1253,37 @@ public class GeminiGradeAnalysisService {
             return List.of("Rà soát lại dữ liệu học tập", "Bổ sung luyện tập cho các chủ đề còn yếu");
         }
         return List.of("Duy trì kế hoạch học tập hiện tại", "Tiếp tục theo dõi định kỳ");
+    }
+
+    private List<String> defaultRecommendationsByPerformanceLevel(String performanceLevel) {
+        String lvl = performanceLevel == null ? "TRUNG_BINH" : performanceLevel;
+        if ("YEU".equalsIgnoreCase(lvl)) {
+            return List.of(
+                    "Phụ đạo trọng điểm theo môn yếu",
+                    "Theo dõi sát tiến độ cải thiện theo tuần",
+                    "Phối hợp phụ huynh để kiểm soát việc tự học"
+            );
+        }
+        if ("TRUNG_BINH".equalsIgnoreCase(lvl)) {
+            return List.of(
+                    "Củng cố nền tảng, bù lấp lỗ hổng kiến thức cơ bản",
+                    "Tăng luyện tập theo dạng bài trọng tâm",
+                    "Rà soát lại sai sót sau mỗi đợt kiểm tra ngắn"
+            );
+        }
+        if ("KHA".equalsIgnoreCase(lvl)) {
+            return List.of(
+                    "Phát huy các điểm mạnh và tiếp tục rèn kỹ năng còn thiếu",
+                    "Cải thiện các môn/chuyên đề chưa nổi bật",
+                    "Tăng bài tập vận dụng để nâng mức ổn định"
+            );
+        }
+        // GIOI
+        return List.of(
+                "Duy trì thành tích hiện tại",
+                "Học nâng cao và bồi dưỡng thêm theo chuyên đề",
+                "Phát triển năng lực qua bài tập/đề nâng cao"
+        );
     }
 
     private List<String> normalizeUnderAverageSubjects(List<String> aiList, List<String> backendList) {
@@ -844,11 +1326,13 @@ public class GeminiGradeAnalysisService {
         private final String riskLevel;
         private final String trend;
         private final List<String> underAverageSubjects;
+        private final String performanceLevel;
 
-        private RiskAndStats(String riskLevel, String trend, List<String> underAverageSubjects) {
+        private RiskAndStats(String riskLevel, String trend, List<String> underAverageSubjects, String performanceLevel) {
             this.riskLevel = riskLevel;
             this.trend = trend;
             this.underAverageSubjects = underAverageSubjects;
+            this.performanceLevel = performanceLevel;
         }
     }
 

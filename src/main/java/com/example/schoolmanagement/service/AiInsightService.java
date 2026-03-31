@@ -4,6 +4,8 @@ import com.example.schoolmanagement.dto.ai.ClassAiInsightRequest;
 import com.example.schoolmanagement.dto.ai.GradeAnalysisRequest;
 import com.example.schoolmanagement.dto.ai.GradeAnalysisResponse;
 import com.example.schoolmanagement.dto.ai.StudentAiInsightRequest;
+import com.example.schoolmanagement.dto.ai.StudentSubjectAnalysisRequest;
+import com.example.schoolmanagement.dto.ai.StudentSubjectAnalysisResponse;
 import com.example.schoolmanagement.entity.*;
 import com.example.schoolmanagement.exception.BadRequestException;
 import com.example.schoolmanagement.exception.ForbiddenException;
@@ -12,6 +14,8 @@ import com.example.schoolmanagement.repository.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.*;
@@ -76,6 +80,7 @@ public class AiInsightService {
         if (createdBy == null) throw new BadRequestException("Thiếu/không hợp lệ X-User-Id");
 
         String title = "[AI] Phân tích điểm lớp " + safeText(cls.getName());
+        String announcementContent = buildLegacyAnnouncementContent(analysis);
 
         List<Integer> announcementIds = new ArrayList<>();
         boolean shouldNotify = geminiGradeAnalysisService.shouldNotify(analysis.getRiskLevel(), false);
@@ -89,7 +94,7 @@ public class AiInsightService {
                 ann.setCreatedBy(createdBy);
                 ann.setRecipientUser(teacher);
                 ann.setTitle(title);
-                ann.setContent(analysis.getAnalysis());
+                ann.setContent(announcementContent);
                 ann.setCreatedAt(LocalDateTime.now());
                 Announcement saved = announcementRepository.save(ann);
                 announcementIds.add(saved.getId());
@@ -233,6 +238,7 @@ public class AiInsightService {
             parentCount = parentIds.size();
 
             String title = "[AI] Cảnh báo điểm dưới trung bình: " + safeText(student.getFullName());
+            String announcementContent = buildLegacyAnnouncementContent(analysis);
             for (Integer pid : parentIds) {
                 User parent = userRepository.findById(pid).orElse(null);
                 if (parent == null) continue;
@@ -242,7 +248,7 @@ public class AiInsightService {
                 ann.setCreatedBy(createdBy);
                 ann.setRecipientUser(parent);
                 ann.setTitle(title);
-                ann.setContent(analysis.getAnalysis());
+                ann.setContent(announcementContent);
                 ann.setCreatedAt(LocalDateTime.now());
                 Announcement saved = announcementRepository.save(ann);
                 announcementIds.add(saved.getId());
@@ -261,6 +267,331 @@ public class AiInsightService {
         out.put("notifiedParentCount", parentCount);
         out.put("announcementIds", announcementIds);
         return out;
+    }
+
+    public StudentSubjectAnalysisResponse analyzeStudentSubjectInClass(
+            StudentSubjectAnalysisRequest req,
+            Integer currentUserId,
+            String currentUserRole
+    ) {
+        String role = normalizeRole(currentUserRole);
+        if (!"TEACHER".equals(role) && !"ADMIN".equals(role) && !"SUPER_ADMIN".equals(role)) {
+            throw new ForbiddenException("Chỉ giáo viên hoặc admin mới được phân tích điểm theo học sinh/môn");
+        }
+        if (req == null) throw new BadRequestException("Body là bắt buộc");
+        if (req.getClassId() == null) throw new BadRequestException("Thiếu classId");
+        if (req.getStudentId() == null) throw new BadRequestException("Thiếu studentId");
+        if (req.getSubjectId() == null) throw new BadRequestException("Thiếu subjectId");
+
+        ClassEntity cls = classRepository.findByIdWithSchool(req.getClassId())
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy lớp id=" + req.getClassId()));
+        User student = userRepository.findByIdWithSchoolAndRole(req.getStudentId())
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy học sinh id=" + req.getStudentId()));
+
+        // Teacher permission: must teach that class + subject
+        if ("TEACHER".equals(role)) {
+            if (currentUserId == null) throw new BadRequestException("Thiếu X-User-Id");
+            boolean teaches = classSectionRepository.findByTeacherIdFetchAll(currentUserId).stream()
+                    .anyMatch(cs -> cs != null
+                            && cs.getClassRoom() != null && Objects.equals(cs.getClassRoom().getId(), req.getClassId())
+                            && cs.getSubject() != null && Objects.equals(cs.getSubject().getId(), req.getSubjectId()));
+            if (!teaches) {
+                throw new ForbiddenException("Bạn không được phân tích môn/lớp này (không thuộc môn giảng dạy)");
+            }
+        }
+
+        // Fetch score rows for exactly this student + class + subject (current-term only exists in DB)
+        List<ExamScore> rows = examScoreRepository.findByStudentIdAndSubjectIdAndClassEntityId(
+                req.getStudentId(), req.getSubjectId(), req.getClassId()
+        );
+        if (rows == null) rows = List.of();
+        rows = rows.stream()
+                .filter(Objects::nonNull)
+                .filter(r -> r.getStatus() == null || "ACTIVE".equalsIgnoreCase(r.getStatus()))
+                .collect(Collectors.toList());
+
+        if (rows.isEmpty()) {
+            throw new ResourceNotFoundException("Không có dữ liệu điểm cho học sinh/môn/lớp đã chọn");
+        }
+
+        String subjectName = rows.stream().map(r -> r.getSubject() != null ? r.getSubject().getName() : null)
+                .filter(Objects::nonNull).findFirst().orElse("Môn học");
+
+        StudentSubjectAnalysisResponse out = new StudentSubjectAnalysisResponse();
+        out.setStudentName(safeText(student.getFullName()));
+        out.setClassName(safeText(cls.getName()));
+        out.setSubjectName(safeText(subjectName));
+
+        // Deterministic stats
+        List<ExamScore> sorted = new ArrayList<>(rows);
+        sorted.sort(Comparator.comparing(r -> r.getCreatedAt() != null ? r.getCreatedAt() : LocalDateTime.MIN));
+
+        List<Double> scores = sorted.stream()
+                .map(ExamScore::getScore)
+                .filter(Objects::nonNull)
+                .filter(d -> !d.isNaN())
+                .collect(Collectors.toList());
+
+        int scoreCount = scores.size();
+        double min = scores.stream().mapToDouble(Double::doubleValue).min().orElse(Double.NaN);
+        double max = scores.stream().mapToDouble(Double::doubleValue).max().orElse(Double.NaN);
+        int belowFive = (int) scores.stream().filter(s -> s < 5.0).count();
+
+        out.setScoreCount(scoreCount);
+        out.setBelowFiveCount(belowFive);
+        out.setMinScore(Double.isNaN(min) ? null : round1(min));
+        out.setMaxScore(Double.isNaN(max) ? null : round1(max));
+
+        // subjectAverage: prefer TBM formula if enough component points exist; else average of available scores
+        Double tbm = computeTbmAttempt1(sorted);
+        Double subjectAverage = tbm != null ? tbm : (scoreCount > 0 ? round1(scores.stream().mapToDouble(Double::doubleValue).average().orElse(Double.NaN)) : null);
+        out.setSubjectAverage(subjectAverage);
+
+        String level = classifySubjectPerformanceLevel(subjectAverage);
+        out.setSubjectPerformanceLevel(level);
+
+        String trend = computeTrendWithinSubject(sorted);
+        out.setTrend(trend);
+
+        // Gemini: only summary/topConcerns/recommendations, tone by subjectPerformanceLevel
+        String prompt = buildStudentSubjectPrompt(out, sorted);
+        GeminiGradeAnalysisService.StudentSubjectAiFields ai = null;
+        try {
+            GeminiGradeAnalysisService.AiExecutionContext ctx = GeminiGradeAnalysisService.AiExecutionContext.forEndpoint("/api/ai/insights/student-subject");
+            ctx.setSchoolId(cls.getSchool() != null ? cls.getSchool().getId() : null);
+            ctx.setClassId(cls.getId());
+            ctx.setAnalysisScope("STUDENT_SUBJECT");
+            ai = geminiGradeAnalysisService.generateStudentSubjectAiFields(prompt, ctx);
+        } catch (Exception ex) {
+            ai = null;
+        }
+
+        if (ai == null) {
+            applyStudentSubjectFallbackNarrative(out);
+        } else {
+            out.setSummary(nonBlankOrFallback(ai.getSummary(), fallbackSummary(out)));
+            out.setTopConcerns(cleanList(ai.getTopConcerns(), 3));
+            out.setRecommendations(cleanList(ai.getRecommendations(), 3));
+            if (out.getTopConcerns() == null || out.getTopConcerns().isEmpty()) {
+                out.setTopConcerns(defaultConcernsByLevel(out));
+            }
+            if (out.getRecommendations() == null || out.getRecommendations().isEmpty()) {
+                out.setRecommendations(defaultRecommendationsByLevel(out));
+            }
+        }
+        return out;
+    }
+
+    private static Double round1(double d) {
+        return BigDecimal.valueOf(d).setScale(1, RoundingMode.HALF_UP).doubleValue();
+    }
+
+    private static String classifySubjectPerformanceLevel(Double subjectAverage) {
+        if (subjectAverage == null) return "TRUNG_BINH";
+        double a = subjectAverage;
+        if (a < 4.0) return "YEU";
+        if (a < 6.5) return "TRUNG_BINH";
+        if (a < 8.0) return "KHA";
+        return "GIOI";
+    }
+
+    private static Double computeTbmAttempt1(List<ExamScore> sorted) {
+        Double oral = findScore(sorted, "MIENG", 1);
+        Double p15 = findScore(sorted, "15P", 1);
+        Double t1 = findScore(sorted, "1TIET", 1);
+        Double ck = findScore(sorted, "CUOIKI", 1);
+        return ExamScoreService.computeTbmFromStandardComponents(oral, p15, t1, ck);
+    }
+
+    private static Double findScore(List<ExamScore> rows, String scoreType, int attempt) {
+        String want = scoreType.trim().toUpperCase();
+        for (ExamScore e : rows) {
+            String st = e.getScoreType() == null ? "15P" : e.getScoreType().trim().toUpperCase();
+            int att = e.getAttempt() == null ? 1 : e.getAttempt();
+            if (st.equals(want) && att == attempt) return e.getScore();
+        }
+        return null;
+    }
+
+    private static String computeTrendWithinSubject(List<ExamScore> sorted) {
+        // Default because system currently has only one term and may have very few points.
+        // Only compute if we truly have "earlier vs later" points in this same subject.
+        List<ExamScore> withTime = sorted.stream()
+                .filter(e -> e.getCreatedAt() != null && e.getScore() != null && !e.getScore().isNaN())
+                .collect(Collectors.toList());
+        if (withTime.size() < 2) return "Không đủ dữ liệu để xác định xu hướng";
+
+        int n = withTime.size();
+        int split = n / 2;
+        if (split <= 0 || split >= n) return "Không đủ dữ liệu để xác định xu hướng";
+
+        double earlyAvg = withTime.subList(0, split).stream().mapToDouble(e -> e.getScore()).average().orElse(Double.NaN);
+        double lateAvg = withTime.subList(split, n).stream().mapToDouble(e -> e.getScore()).average().orElse(Double.NaN);
+        if (Double.isNaN(earlyAvg) || Double.isNaN(lateAvg)) return "Không đủ dữ liệu để xác định xu hướng";
+
+        double delta = lateAvg - earlyAvg;
+        if (Math.abs(delta) < 0.25) return "Ổn định";
+        return delta > 0 ? "Tăng" : "Giảm";
+    }
+
+    private static String buildStudentSubjectPrompt(StudentSubjectAnalysisResponse base, List<ExamScore> rows) {
+        String level = base.getSubjectPerformanceLevel();
+        String tone;
+        if ("YEU".equals(level)) tone = "cảnh báo nhưng mang tính hỗ trợ, ưu tiên can thiệp";
+        else if ("TRUNG_BINH".equals(level)) tone = "nhắc củng cố nền tảng, theo dõi tiến độ";
+        else if ("KHA".equals(level)) tone = "tích cực, động viên tiếp tục cải thiện";
+        else tone = "ghi nhận kết quả tốt, khuyến khích phát huy nâng cao";
+
+        String trend = base.getTrend() != null ? base.getTrend() : "Không đủ dữ liệu để xác định xu hướng";
+        String avg = base.getSubjectAverage() != null ? String.valueOf(base.getSubjectAverage()) : "null";
+        String min = base.getMinScore() != null ? String.valueOf(base.getMinScore()) : "null";
+        String max = base.getMaxScore() != null ? String.valueOf(base.getMaxScore()) : "null";
+
+        // Note: do NOT mention classAverage or multi-term data because the system doesn't have it.
+        return ""
+                + "Bạn là trợ lý phân tích điểm cho giáo viên bộ môn.\n"
+                + "PHẠM VI BẮT BUỘC: chỉ phân tích 1 học sinh trong 1 môn học của 1 lớp, trong kỳ hiện tại.\n"
+                + "DỮ LIỆU KHÔNG CÓ: KHÔNG có điểm trung bình lớp, KHÔNG có chênh lệch so với lớp, KHÔNG có nhiều kỳ để so sánh.\n"
+                + "Bạn chỉ được sử dụng các số liệu được cung cấp dưới đây.\n\n"
+                + "Thông tin:\n"
+                + "- Học sinh: " + safeTextStatic(base.getStudentName()) + "\n"
+                + "- Lớp: " + safeTextStatic(base.getClassName()) + "\n"
+                + "- Môn: " + safeTextStatic(base.getSubjectName()) + "\n"
+                + "- TBM môn (subjectAverage): " + avg + "\n"
+                + "- Min: " + min + " | Max: " + max + "\n"
+                + "- Số lượng điểm (scoreCount): " + base.getScoreCount() + "\n"
+                + "- Số điểm < 5 (belowFiveCount): " + base.getBelowFiveCount() + "\n"
+                + "- Mức kết quả môn (subjectPerformanceLevel - do backend quyết định): " + safeTextStatic(level) + "\n"
+                + "- Xu hướng (trend - do backend quyết định): " + safeTextStatic(trend) + "\n\n"
+                + "YÊU CẦU ĐẦU RA: trả về DUY NHẤT 1 JSON object hợp lệ. KHÔNG markdown, KHÔNG code block, KHÔNG giải thích.\n"
+                + "Schema bắt buộc:\n"
+                + "{\n"
+                + "  \"summary\": \"string\",\n"
+                + "  \"topConcerns\": [\"string\"],\n"
+                + "  \"recommendations\": [\"string\"]\n"
+                + "}\n\n"
+                + "Ràng buộc:\n"
+                + "- summary: 1 câu tiếng Việt, ngắn gọn (<= 140 ký tự), đúng phạm vi 1 môn.\n"
+                + "- topConcerns: 1-3 ý ngắn (<= 70 ký tự/ý), tập trung vào rủi ro/điểm cần chú ý trong môn.\n"
+                + "- recommendations: 1-3 khuyến nghị ngắn (<= 80 ký tự/ý), hành động được trong môn.\n"
+                + "- Không được tự suy luận thêm dữ liệu không có.\n"
+                + "- Văn phong theo mức " + safeTextStatic(level) + ": " + tone + ".\n";
+    }
+
+    private static String nonBlankOrFallback(String s, String fb) {
+        if (s == null) return fb;
+        String t = s.trim();
+        return t.isEmpty() ? fb : t;
+    }
+
+    private static List<String> cleanList(List<String> in, int max) {
+        if (in == null) return List.of();
+        List<String> out = in.stream()
+                .filter(Objects::nonNull)
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .distinct()
+                .limit(max)
+                .collect(Collectors.toList());
+        return out;
+    }
+
+    private static void applyStudentSubjectFallbackNarrative(StudentSubjectAnalysisResponse out) {
+        out.setSummary(fallbackSummary(out));
+        out.setTopConcerns(defaultConcernsByLevel(out));
+        out.setRecommendations(defaultRecommendationsByLevel(out));
+    }
+
+    private static String fallbackSummary(StudentSubjectAnalysisResponse out) {
+        String lvl = out.getSubjectPerformanceLevel();
+        String subj = safeTextStatic(out.getSubjectName());
+        Double avg = out.getSubjectAverage();
+        String avgText = avg != null ? (String.valueOf(avg)) : "chưa đủ";
+
+        if ("YEU".equals(lvl)) {
+            return "Môn " + subj + " đang ở mức YẾU (TBM " + avgText + "); cần hỗ trợ và can thiệp sớm.";
+        }
+        if ("TRUNG_BINH".equals(lvl)) {
+            return "Môn " + subj + " ở mức TRUNG BÌNH (TBM " + avgText + "); cần củng cố để cải thiện.";
+        }
+        if ("KHA".equals(lvl)) {
+            return "Môn " + subj + " ở mức KHÁ (TBM " + avgText + "); duy trì và cải thiện các điểm chưa ổn định.";
+        }
+        return "Môn " + subj + " ở mức GIỎI (TBM " + avgText + "); ghi nhận kết quả tốt và khuyến khích phát huy.";
+    }
+
+    private static List<String> defaultConcernsByLevel(StudentSubjectAnalysisResponse out) {
+        String lvl = out.getSubjectPerformanceLevel();
+        int below5 = out.getBelowFiveCount() != null ? out.getBelowFiveCount() : 0;
+        if ("YEU".equals(lvl)) {
+            return below5 > 0
+                    ? List.of("Có điểm dưới 5 cần xử lý ngay", "Nền tảng kiến thức môn còn yếu")
+                    : List.of("Nền tảng kiến thức môn còn yếu", "Cần tăng cường luyện tập thường xuyên");
+        }
+        if ("TRUNG_BINH".equals(lvl)) {
+            return below5 > 0
+                    ? List.of("Vẫn còn điểm dưới 5 ở một số lần kiểm tra", "Kết quả chưa ổn định")
+                    : List.of("Kết quả chưa ổn định", "Dễ mất điểm ở phần kiến thức trọng tâm");
+        }
+        if ("KHA".equals(lvl)) {
+            return List.of("Một số nội dung chưa thật sự nổi bật", "Cần giữ nhịp học đều");
+        }
+        return List.of("Cần duy trì sự ổn định", "Khuyến khích thử thách ở mức nâng cao");
+    }
+
+    private static List<String> defaultRecommendationsByLevel(StudentSubjectAnalysisResponse out) {
+        String lvl = out.getSubjectPerformanceLevel();
+        String subj = safeTextStatic(out.getSubjectName());
+        if ("YEU".equals(lvl)) {
+            return List.of(
+                    "Ôn lại kiến thức nền tảng môn " + subj,
+                    "Làm bài luyện tập theo dạng và sửa lỗi ngay",
+                    "Trao đổi với phụ huynh để theo dõi sát"
+            );
+        }
+        if ("TRUNG_BINH".equals(lvl)) {
+            return List.of(
+                    "Củng cố các chủ đề hay sai của môn " + subj,
+                    "Tăng luyện tập ngắn hằng tuần",
+                    "Chốt lại lỗi thường gặp sau mỗi bài kiểm tra"
+            );
+        }
+        if ("KHA".equals(lvl)) {
+            return List.of(
+                    "Duy trì thói quen học đều và ôn theo chuyên đề",
+                    "Tập trung cải thiện phần còn mất điểm",
+                    "Luyện thêm đề nâng dần độ khó"
+            );
+        }
+        return List.of(
+                "Duy trì phong độ và kiểm soát lỗi nhỏ",
+                "Luyện đề nâng cao để bứt phá",
+                "Tham gia hoạt động/bài tập mở rộng theo môn"
+        );
+    }
+
+    private static String safeTextStatic(String s) {
+        if (s == null) return "";
+        String t = s.trim();
+        return t.isEmpty() ? "" : t;
+    }
+
+    /**
+     * Legacy display text for announcements.
+     * This is NOT raw Gemini output; it is derived from structured JSON fields.
+     */
+    private String buildLegacyAnnouncementContent(GradeAnalysisResponse analysis) {
+        if (analysis == null) return "";
+        String under = (analysis.getUnderAverageSubjects() == null || analysis.getUnderAverageSubjects().isEmpty())
+                ? "Không có môn dưới trung bình"
+                : String.join(", ", analysis.getUnderAverageSubjects());
+        String rec = (analysis.getRecommendations() == null || analysis.getRecommendations().isEmpty())
+                ? "Rà soát lại dữ liệu học tập"
+                : analysis.getRecommendations().stream().limit(3).map(r -> "- " + safeText(r)).collect(Collectors.joining("\n"));
+        return "Tóm tắt:\n" + safeText(analysis.getSummary()) + "\n\n"
+                + "Môn dưới trung bình:\n" + under + "\n\n"
+                + "Xu hướng:\n" + safeText(analysis.getTrend()) + "\n\n"
+                + "Khuyến nghị:\n" + rec;
     }
 
     private GradeAnalysisRequest buildGradeAnalysisForClass(ClassEntity cls, List<ExamScore> scores, int curDays, int prevDays) {

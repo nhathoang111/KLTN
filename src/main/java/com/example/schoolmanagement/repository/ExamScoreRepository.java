@@ -19,6 +19,8 @@ public interface ExamScoreRepository extends JpaRepository<ExamScore, Integer> {
     List<ExamScore> findBySubjectId(Integer subjectId);
     
     List<ExamScore> findByClassEntityId(Integer classId);
+
+    List<ExamScore> findByStudentIdAndSubjectIdAndClassEntityId(Integer studentId, Integer subjectId, Integer classId);
     
     @Query("SELECT e FROM ExamScore e WHERE e.school.id = :schoolId AND e.student.id = :studentId")
     List<ExamScore> findBySchoolIdAndStudentId(@Param("schoolId") Integer schoolId, @Param("studentId") Integer studentId);

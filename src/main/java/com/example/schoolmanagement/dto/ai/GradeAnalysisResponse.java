@@ -9,11 +9,42 @@ public class GradeAnalysisResponse {
     private String summary;
     private List<String> underAverageSubjects = new ArrayList<>();
     private String trend;
+    /**
+     * Management-oriented severity aligned with backend riskLevel.
+     * LOW | MEDIUM | HIGH | CRITICAL
+     */
+    private String severity;
+    /** 2-3 short key concerns for admins/teachers. */
+    private List<String> topConcerns = new ArrayList<>();
+    /** 1-3 priority subjects to focus on. */
+    private List<String> prioritySubjects = new ArrayList<>();
     private List<String> recommendations = new ArrayList<>();
     private String riskLevel; // LOW | MEDIUM | HIGH | CRITICAL
+
+    /**
+     * Deterministic academic performance classification (backend-owned).
+     * YEU | TRUNG_BINH | KHA | GIOI
+     */
+    private String performanceLevel;
+
+    /**
+     * Execution source for this response:
+     * - GEMINI: Gemini call + parse succeeded
+     * - LOCAL_FALLBACK: local fallback generated due to Gemini/runtime/parse issues
+     */
+    private String source;
+
+    /** true when Gemini executed successfully and response was accepted. */
+    private Boolean aiSuccess;
+
+    /** Short failure reason when aiSuccess=false. */
+    private String aiError;
+
     private Metadata metadata;
 
-    // Legacy field for backward compatibility
+    // Legacy field for backward compatibility.
+    // NOTE: This is a derived display text field, not raw Gemini output.
+    // The primary AI contract is the structured JSON fields: summary/trend/recommendations.
     private String analysis;
     private Integer promptTokens;
     private Integer responseTokens;
@@ -53,6 +84,30 @@ public class GradeAnalysisResponse {
         this.trend = trend;
     }
 
+    public String getSeverity() {
+        return severity;
+    }
+
+    public void setSeverity(String severity) {
+        this.severity = severity;
+    }
+
+    public List<String> getTopConcerns() {
+        return topConcerns;
+    }
+
+    public void setTopConcerns(List<String> topConcerns) {
+        this.topConcerns = topConcerns;
+    }
+
+    public List<String> getPrioritySubjects() {
+        return prioritySubjects;
+    }
+
+    public void setPrioritySubjects(List<String> prioritySubjects) {
+        this.prioritySubjects = prioritySubjects;
+    }
+
     public List<String> getRecommendations() {
         return recommendations;
     }
@@ -67,6 +122,38 @@ public class GradeAnalysisResponse {
 
     public void setRiskLevel(String riskLevel) {
         this.riskLevel = riskLevel;
+    }
+
+    public String getPerformanceLevel() {
+        return performanceLevel;
+    }
+
+    public void setPerformanceLevel(String performanceLevel) {
+        this.performanceLevel = performanceLevel;
+    }
+
+    public String getSource() {
+        return source;
+    }
+
+    public void setSource(String source) {
+        this.source = source;
+    }
+
+    public Boolean getAiSuccess() {
+        return aiSuccess;
+    }
+
+    public void setAiSuccess(Boolean aiSuccess) {
+        this.aiSuccess = aiSuccess;
+    }
+
+    public String getAiError() {
+        return aiError;
+    }
+
+    public void setAiError(String aiError) {
+        this.aiError = aiError;
     }
 
     public Metadata getMetadata() {
