@@ -8,6 +8,7 @@ const normalizeRole = (roleName) => {
   if (role === 'ADMIN') return 'ADMIN';
   if (role === 'TEACHER') return 'TEACHER';
   if (role === 'STUDENT') return 'STUDENT';
+  if (role === 'PARENT') return 'PARENT';
   return 'GUEST';
 };
 

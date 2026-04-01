@@ -71,6 +71,8 @@ const ScheduleListPage = () => {
       setLoading(true);
       const userRole = user?.role?.name?.toUpperCase();
       const schoolId = user?.school?.id;
+      // Lấy ID con đang được chọn (ví dụ từ localStorage)
+      const activeStudentId = localStorage.getItem('activeStudentId');
 
       // Fetch classes
       const classesRes = await api.get('/classes');
@@ -78,10 +80,11 @@ const ScheduleListPage = () => {
 
       if (userRole === 'ADMIN' && schoolId) {
         allClasses = allClasses.filter(cls => cls.school?.id === schoolId);
-      } else if (userRole === 'STUDENT' && user?.id) {
-        // For student, fetch their enrollment to get their class
+      } else if ((userRole === 'STUDENT' && user?.id) || (userRole === 'PARENT' && activeStudentId)) {
+        // Nếu là học sinh hoặc phụ huynh đã chọn con
+        const targetStudentId = userRole === 'STUDENT' ? user.id : activeStudentId;
         try {
-          const enrollmentRes = await api.get(`/users/${user.id}/enrollment`);
+          const enrollmentRes = await api.get(`/users/${targetStudentId}/enrollment`);
           console.log('Enrollment API response:', enrollmentRes.data);
 
           // API tr? v? format: { enrollment: {...}, enrollments: [...] }
@@ -302,12 +305,13 @@ const ScheduleListPage = () => {
   const fetchSchedules = async () => {
     try {
       const userRole = user?.role?.name?.toUpperCase();
+      const activeStudentId = localStorage.getItem('activeStudentId');
       let schedulesData = [];
 
-      if (userRole === 'STUDENT' && user?.id) {
-        // For student, fetch their schedules directly
+      if ((userRole === 'STUDENT' && user?.id) || (userRole === 'PARENT' && activeStudentId)) {
+        const targetStudentId = userRole === 'STUDENT' ? user.id : activeStudentId;
         try {
-          const response = await api.get(`/schedules/student/${user.id}`);
+          const response = await api.get(`/schedules/student/${targetStudentId}`);
           schedulesData = response.data.schedules || [];
           console.log('Student schedules fetched:', schedulesData.length);
         } catch (studentError) {
@@ -864,20 +868,19 @@ const ScheduleListPage = () => {
   }, [currentWeekStart, schedules]);
 
   const userRole = user?.role?.name?.toUpperCase();
-  const isAdmin = userRole === 'ADMIN';
+  const isSuperAdmin = userRole === 'SUPER_ADMIN';
+  const isAdmin = userRole === 'ADMIN' || isSuperAdmin;
   const isStudent = userRole === 'STUDENT';
+  const isTeacher = userRole === 'TEACHER';
+  const isParent = userRole === 'PARENT';
   const canManage = isAdmin;
 
   if (loading) {
     return <div className="schedule-list-page"><div className="loading">Đang tải...</div></div>;
   }
 
-  const isTeacher = userRole === 'TEACHER';
-  const pageTitle = isStudent
-    ? 'Xem thời khóa biểu'
-    : isTeacher
-      ? 'Xem thời khóa biểu'
-      : 'Quản lý thời khóa biểu';
+  const isViewOnly = isStudent || isTeacher || isParent;
+  const pageTitle = isViewOnly ? 'Xem thời khóa biểu' : 'Quản lý thời khóa biểu';
 
   return (
     <div className="schedule-list-page">
@@ -1513,12 +1516,3 @@ const ScheduleListPage = () => {
 };
 
 export default ScheduleListPage;
-
-
-
-
-
-
-
-
-

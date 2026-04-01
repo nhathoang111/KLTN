@@ -17,6 +17,10 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.example.schoolmanagement.entity.ClassSection;
+import com.example.schoolmanagement.entity.Schedule;
+import com.example.schoolmanagement.repository.ScheduleRepository;
+
 import java.text.Normalizer;
 import java.util.*;
 
@@ -34,10 +38,12 @@ public class ExamScoreImportService {
 
     @Autowired
     private ExamScoreRepository examRepo;
+    @Autowired
+    private ScheduleRepository scheduleRepo;
 
     private static final DataFormatter F = new DataFormatter();
 
-    public ImportResult importExcel(MultipartFile file, Integer schoolId) {
+    public ImportResult importExcel(MultipartFile file, Integer schoolId, Integer currentUserId, String currentUserRole) {
         if (file == null || file.isEmpty()) {
             throw new RuntimeException("File rỗng");
         }
@@ -47,6 +53,52 @@ public class ExamScoreImportService {
 
         // Dùng map để tránh lưu trùng khi trong cùng file có nhiều dòng trùng key
         Map<String, ExamScore> saveMap = new LinkedHashMap<>();
+
+                boolean isTeacher = currentUserRole != null && currentUserRole.toUpperCase().contains("TEACHER");
+
+        Map<String, ClassSection> allowedClassSectionByPair = new HashMap<>();
+        Set<String> allowedPairs = new HashSet<>();
+
+        if (isTeacher) {
+            List<Schedule> teacherSchedules = scheduleRepo.findByTeacherId(currentUserId);
+
+            for (Schedule schedule : teacherSchedules) {
+                if (schedule == null) continue;
+
+                Integer classId = schedule.getClassEntity() != null ? schedule.getClassEntity().getId() : null;
+
+                Integer subjectId = null;
+                if (schedule.getSubject() != null) {
+                    subjectId = schedule.getSubject().getId();
+                } else if (schedule.getClassSection() != null && schedule.getClassSection().getSubject() != null) {
+                    subjectId = schedule.getClassSection().getSubject().getId();
+                }
+
+                if (classId == null || subjectId == null) continue;
+
+                Integer scheduleSchoolId = null;
+                if (schedule.getSchool() != null) {
+                    scheduleSchoolId = schedule.getSchool().getId();
+                } else if (schedule.getClassEntity() != null && schedule.getClassEntity().getSchool() != null) {
+                    scheduleSchoolId = schedule.getClassEntity().getSchool().getId();
+                }
+
+                if (scheduleSchoolId != null && !Objects.equals(scheduleSchoolId, schoolId)) {
+                    continue;
+                }
+
+                String pairKey = buildPairKey(classId, subjectId);
+                allowedPairs.add(pairKey);
+
+                if (!allowedClassSectionByPair.containsKey(pairKey) && schedule.getClassSection() != null) {
+                    allowedClassSectionByPair.put(pairKey, schedule.getClassSection());
+                }
+            }
+
+            if (allowedPairs.isEmpty()) {
+                throw new RuntimeException("Giáo viên chưa được phân công lớp/môn nào để import điểm");
+            }
+        }
 
         try (Workbook wb = WorkbookFactory.create(file.getInputStream())) {
             Sheet sheet = wb.getNumberOfSheets() > 0 ? wb.getSheetAt(0) : null;
@@ -109,12 +161,24 @@ public class ExamScoreImportService {
                     Subject subject = findSubjectByName(subjects, subjectName)
                             .orElseThrow(() -> new RuntimeException("Subject not found: " + rawSubjectName));
 
+                    ClassSection matchedClassSection = null;
+
+                    if (isTeacher) {
+                        String pairKey = buildPairKey(clazz.getId(), subject.getId());
+
+                        if (!allowedPairs.contains(pairKey)) {
+                            throw new RuntimeException("Bạn không có quyền import điểm cho lớp/môn này");
+                        }
+
+                        matchedClassSection = allowedClassSectionByPair.get(pairKey);
+                    }
+
                     boolean hasScore = false;
 
-                    hasScore |= processScore(row, col, "mieng", "MIENG", student, clazz, subject, saveMap);
-                    hasScore |= processScore(row, col, "15p", "15P", student, clazz, subject, saveMap);
-                    hasScore |= processScore(row, col, "1tiet", "1TIET", student, clazz, subject, saveMap);
-                    hasScore |= processScore(row, col, "cuoiki", "CUOIKI", student, clazz, subject, saveMap);
+                    hasScore |= processScore(row, col, "mieng", "MIENG", student, clazz, subject, matchedClassSection, saveMap);
+                    hasScore |= processScore(row, col, "15p", "15P", student, clazz, subject, matchedClassSection, saveMap);
+                    hasScore |= processScore(row, col, "1tiet", "1TIET", student, clazz, subject, matchedClassSection, saveMap);
+                    hasScore |= processScore(row, col, "cuoiki", "CUOIKI", student, clazz, subject, matchedClassSection, saveMap);
 
                     if (hasScore) {
                         result.success++;
@@ -151,6 +215,7 @@ public class ExamScoreImportService {
             User student,
             ClassEntity clazz,
             Subject subject,
+            ClassSection matchedClassSection,
             Map<String, ExamScore> saveMap
     ) {
         if (!col.containsKey(key)) {
@@ -184,10 +249,16 @@ public class ExamScoreImportService {
         }
 
         target.setScore(val);
+        if (matchedClassSection != null) {
+            target.setClassSection(matchedClassSection);
+        }
+
         saveMap.put(compositeKey, target);
         return true;
     }
-
+    private String buildPairKey(Integer classId, Integer subjectId) {
+        return classId + "-" + subjectId;
+    }
     private Map<String, Integer> mapHeader(Row row) {
         Map<String, Integer> m = new HashMap<>();
 

@@ -24,7 +24,7 @@ import ScheduleListPage from "../../features/schedules/pages/ScheduleListPage/Sc
 import ProfilePageWrapper from "../../features/dashboard/pages/ProfilePageWrapper";
 
 export const protectedRoutes = [
-  { path: "dashboard", Component: Dashboard, roles: ["SUPER_ADMIN", "ADMIN", "TEACHER", "STUDENT"] },
+  { path: "dashboard", Component: Dashboard, roles: ["SUPER_ADMIN", "ADMIN", "TEACHER", "STUDENT", "PARENT"] },
   { path: "schools", Component: SchoolListPage, roles: ["SUPER_ADMIN"] },
   { path: "schools/create", Component: SchoolCreatePage, roles: ["SUPER_ADMIN"] },
   { path: "schools/:id/edit", Component: SchoolEditPage, roles: ["SUPER_ADMIN"] },
@@ -42,10 +42,10 @@ export const protectedRoutes = [
   { path: "assignments", Component: AssignmentListPage, roles: ["SUPER_ADMIN", "ADMIN", "TEACHER", "STUDENT"] },
   { path: "reports", Component: ReportListPage, roles: ["SUPER_ADMIN", "ADMIN"] },
   { path: "documents", Component: DocumentListPage, roles: ["SUPER_ADMIN", "ADMIN"] },
-  { path: "announcements", Component: AnnouncementListPage, roles: ["SUPER_ADMIN", "ADMIN", "TEACHER", "STUDENT"] },
-  { path: "exam-scores", Component: ExamScoreManagement, roles: ["SUPER_ADMIN", "ADMIN", "TEACHER", "STUDENT"] },
-  { path: "attendance", Component: AttendanceManagement, roles: ["SUPER_ADMIN", "ADMIN", "TEACHER"] },
+  { path: "announcements", Component: AnnouncementListPage, roles: ["SUPER_ADMIN", "ADMIN", "TEACHER", "STUDENT", "PARENT"] },
+  { path: "exam-scores", Component: ExamScoreManagement, roles: ["SUPER_ADMIN", "ADMIN", "TEACHER", "STUDENT", "PARENT"] },
+  { path: "attendance", Component: AttendanceManagement, roles: ["SUPER_ADMIN", "ADMIN", "TEACHER", "PARENT"] },
   { path: "records", Component: RecordListPage, roles: ["SUPER_ADMIN", "ADMIN"] },
-  { path: "schedules", Component: ScheduleListPage, roles: ["SUPER_ADMIN", "ADMIN", "TEACHER", "STUDENT"] },
+  { path: "schedules", Component: ScheduleListPage, roles: ["SUPER_ADMIN", "ADMIN", "TEACHER", "STUDENT", "PARENT"] },
   { path: "profile", Component: ProfilePageWrapper, roles: ["STUDENT", "TEACHER"] },
 ];

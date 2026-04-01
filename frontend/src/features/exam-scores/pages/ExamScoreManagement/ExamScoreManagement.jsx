@@ -54,62 +54,6 @@ function buildAiStudentInsightDisplayText(data) {
 
 /** Khối "Xem điểm" admin: điểm + TBM từ GET /api/exam-scores/tbm-summary */
 function AdminXemDiemSection({ classes, subjects, user }) {
-const [file, setFile] = useState(null);
-
-const handleImport = async () => {
-  if (!file) {
-    alert('Chọn file trước');
-    return;
-  }
-
-  if (!user?.role?.name || !user?.school?.id) {
-    alert('Thiếu thông tin người dùng hoặc trường học');
-    return;
-  }
-
-  const formData = new FormData();
-  formData.append('file', file);
-
-  try {
-    const res = await api.post('/exam-scores/import', formData, {
-      headers: {
-        'X-User-Role': user.role.name,
-        'X-School-Id': user.school.id,
-      },
-    });
-
-    const data = res.data || {};
-    const success = data.success ?? 0;
-    const fail = data.fail ?? 0;
-    const errors = Array.isArray(data.errors) ? data.errors : [];
-
-    let message = `Import hoàn tất.\nSuccess: ${success}\nFail: ${fail}`;
-
-    if (errors.length > 0) {
-      const topErrors = errors
-        .slice(0, 20)
-        .map((e) => `- Dòng ${e.row}: ${e.error}`)
-        .join('\n');
-
-      message += `\n\nChi tiết lỗi:\n${topErrors}`;
-
-      if (errors.length > 20) {
-        message += `\n... và ${errors.length - 20} lỗi khác`;
-      }
-    }
-
-    alert(message);
-    setFile(null);
-  } catch (err) {
-    console.error(err);
-    const serverMessage =
-      err?.response?.data?.message ||
-      err?.response?.data ||
-      'Import failed';
-    alert(typeof serverMessage === 'string' ? serverMessage : 'Import failed');
-  }
-};
-
   const [selectedClassId, setSelectedClassId] = useState('');
   const [semester, setSemester] = useState('1');
   const [selectedSubjectId, setSelectedSubjectId] = useState('');
@@ -350,48 +294,6 @@ const handleImport = async () => {
           <Download className="h-4 w-4" />
           Tải xuống
         </button>
-<div className="exam-import-panel">
-  <div className="exam-import-panel__left">
-    <div className="exam-import-panel__title">Nhập điểm từ file Excel</div>
-    <div className="exam-import-panel__hint">
-      Hỗ trợ file .xlsx, .xls với các cột: email, class, subject, mieng, 15p, 1tiet, cuoiki
-    </div>
-  </div>
-
-  <div className="exam-import-panel__right">
-    <label className="exam-import-upload">
-      <input
-        type="file"
-        accept=".xlsx,.xls"
-        onChange={(e) => setFile(e.target.files?.[0] || null)}
-        className="exam-import-upload__input"
-      />
-      <span className="exam-import-upload__button">Chọn file</span>
-      <span className="exam-import-upload__name">
-        {file ? file.name : "Chưa chọn file"}
-      </span>
-    </label>
-
-    {file && (
-      <button
-        type="button"
-        className="exam-import-clear-btn"
-        onClick={() => setFile(null)}
-      >
-        Bỏ chọn
-      </button>
-    )}
-
-    <button
-      type="button"
-      className="exam-import-submit-btn"
-      onClick={handleImport}
-      disabled={!file}
-    >
-      Import
-    </button>
-  </div>
-</div>
       </div>
 
       <div className="flex flex-wrap gap-6 rounded-lg border border-blue-100 bg-blue-50/50 px-4 py-3">
@@ -505,7 +407,6 @@ const handleImport = async () => {
 }
 
 const ExamScoreManagement = () => {
-  const [file, setFile] = useState(null);
   const { user } = useAuth();
   const [examScores, setExamScores] = useState([]);
   const [students, setStudents] = useState([]);
@@ -532,7 +433,8 @@ const ExamScoreManagement = () => {
   const [teacherOuterShow15, setTeacherOuterShow15] = useState(true);
   const [teacherOuterShow1T, setTeacherOuterShow1T] = useState(true);
   const [teacherOuterShowCk, setTeacherOuterShowCk] = useState(true);
-
+  const [teacherImportFile, setTeacherImportFile] = useState(null);
+  const [teacherImporting, setTeacherImporting] = useState(false);
   // AI phân tích theo học sinh (cho giáo viên)
   const [aiStudentModal, setAiStudentModal] = useState(null); // { studentId, fullName, email }
   const [aiStudentLoading, setAiStudentLoading] = useState(false);
@@ -620,7 +522,67 @@ const ExamScoreManagement = () => {
       setIsScoreLocked(false);
     }
   };
+  const handleTeacherImport = async () => {
+    if (!teacherImportFile) {
+      alert('Chọn file trước');
+      return;
+    }
 
+    if (!user?.id || !user?.role?.name || !user?.school?.id) {
+      alert('Thiếu thông tin người dùng hoặc trường học');
+      return;
+    }
+
+    try {
+      setTeacherImporting(true);
+
+      const formData = new FormData();
+      formData.append('file', teacherImportFile);
+
+      const res = await api.post('/exam-scores/import', formData, {
+        headers: {
+          'X-User-Id': user.id,
+          'X-User-Role': user.role.name,
+          'X-School-Id': user.school.id,
+        },
+      });
+
+      const data = res.data || {};
+      const success = data.success ?? 0;
+      const fail = data.fail ?? 0;
+      const errors = Array.isArray(data.errors) ? data.errors : [];
+
+      let message = `Import hoàn tất.\nSuccess: ${success}\nFail: ${fail}`;
+
+      if (errors.length > 0) {
+        const topErrors = errors
+          .slice(0, 20)
+          .map((e) => `- Dòng ${e.row}: ${e.error}`)
+          .join('\n');
+
+        message += `\n\nChi tiết lỗi:\n${topErrors}`;
+
+        if (errors.length > 20) {
+          message += `\n... và ${errors.length - 20} lỗi khác`;
+        }
+      }
+
+      alert(message);
+      setTeacherImportFile(null);
+
+      await fetchExamScores();
+    } catch (err) {
+      console.error(err);
+      const serverMessage =
+        err?.response?.data?.message ||
+        err?.response?.data ||
+        'Import failed';
+
+      alert(typeof serverMessage === 'string' ? serverMessage : 'Import failed');
+    } finally {
+      setTeacherImporting(false);
+    }
+  };
   const fetchExamScores = async () => {
     try {
       const response = await api.get('/exam-scores');
@@ -1763,84 +1725,133 @@ const ExamScoreManagement = () => {
         <AdminXemDiemSection classes={classes} subjects={subjects} user={user} />
       )}
 
-      {/* Filter lớp cho Teacher */}
+      {/* Filter lớp cho Teacher + Import Excel */}
       {!isAdmin && userRole === 'TEACHER' && (
-        <div style={{
-          marginBottom: '20px',
-          padding: '15px',
-          backgroundColor: '#f8f9fa',
-          borderRadius: '8px',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '15px',
-          flexWrap: 'wrap'
-        }}>
-          <label style={{ fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <span>Lọc theo lớp:</span>
-            <select
-              value={displayFilterClassId}
-              onChange={(e) => {
-                setDisplayFilterClassId(e.target.value);
-                setDisplayFilterSubjectId('');
-              }}
-              style={{
-                padding: '8px 12px',
-                borderRadius: '6px',
-                border: '1px solid #ddd',
-                fontSize: '14px',
-                minWidth: '200px'
-              }}
-            >
-              <option value="">-- Tất cả các lớp --</option>
-              {classes.map(cls => (
-                <option key={cls.id} value={cls.id}>
-                  {cls.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label style={{ fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <span>Lọc theo môn:</span>
-            <select
-              value={displayFilterSubjectId}
-              onChange={(e) => setDisplayFilterSubjectId(e.target.value)}
-              style={{
-                padding: '8px 12px',
-                borderRadius: '6px',
-                border: '1px solid #ddd',
-                fontSize: '14px',
-                minWidth: '200px'
-              }}
-              disabled={!outerSubjectsForFilter || outerSubjectsForFilter.length === 0}
-            >
-              <option value="">-- Tất cả các môn --</option>
-              {(outerSubjectsForFilter || []).map(s => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          {(displayFilterClassId || displayFilterSubjectId) && (
-            <button
-              onClick={() => {
-                setDisplayFilterClassId('');
-                setDisplayFilterSubjectId('');
-              }}
-              style={{
-                padding: '6px 12px',
-                backgroundColor: '#6c757d',
-                color: 'white',
-                border: 'none',
-                borderRadius: '6px',
-                cursor: 'pointer',
-                fontSize: '14px'
-              }}
-            >
-              Xóa bộ lọc
-            </button>
-          )}
-        </div>
+        <>
+          <div style={{
+            marginBottom: '20px',
+            padding: '15px',
+            backgroundColor: '#f8f9fa',
+            borderRadius: '8px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '15px',
+            flexWrap: 'wrap'
+          }}>
+            <label style={{ fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <span>Lọc theo lớp:</span>
+              <select
+                value={displayFilterClassId}
+                onChange={(e) => {
+                  setDisplayFilterClassId(e.target.value);
+                  setDisplayFilterSubjectId('');
+                }}
+                style={{
+                  padding: '8px 12px',
+                  borderRadius: '6px',
+                  border: '1px solid #ddd',
+                  fontSize: '14px',
+                  minWidth: '200px'
+                }}
+              >
+                <option value="">-- Tất cả các lớp --</option>
+                {classes.map(cls => (
+                  <option key={cls.id} value={cls.id}>
+                    {cls.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label style={{ fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <span>Lọc theo môn:</span>
+              <select
+                value={displayFilterSubjectId}
+                onChange={(e) => setDisplayFilterSubjectId(e.target.value)}
+                style={{
+                  padding: '8px 12px',
+                  borderRadius: '6px',
+                  border: '1px solid #ddd',
+                  fontSize: '14px',
+                  minWidth: '200px'
+                }}
+                disabled={!outerSubjectsForFilter || outerSubjectsForFilter.length === 0}
+              >
+                <option value="">-- Tất cả các môn --</option>
+                {(outerSubjectsForFilter || []).map(s => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            {(displayFilterClassId || displayFilterSubjectId) && (
+              <button
+                onClick={() => {
+                  setDisplayFilterClassId('');
+                  setDisplayFilterSubjectId('');
+                }}
+                style={{
+                  padding: '6px 12px',
+                  backgroundColor: '#6c757d',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  fontSize: '14px'
+                }}
+              >
+                Xóa bộ lọc
+              </button>
+            )}
+          </div>
+
+          <div className="exam-import-panel" style={{ marginBottom: '20px' }}>
+            <div className="exam-import-panel__left">
+              <div className="exam-import-panel__title">Nhập điểm từ file Excel</div>
+              <div className="exam-import-panel__hint">
+                Hỗ trợ file .xlsx, .xls với các cột: email, class, subject, mieng, 15p, 1tiet, cuoiki
+              </div>
+            </div>
+
+            <div className="exam-import-panel__right">
+              <label className="exam-import-upload">
+                <input
+                  type="file"
+                  accept=".xlsx,.xls"
+                  onChange={(e) => setTeacherImportFile(e.target.files?.[0] || null)}
+                  className="exam-import-upload__input"
+                  disabled={teacherImporting}
+                />
+                <span className="exam-import-upload__button">Chọn file</span>
+                <span className="exam-import-upload__name">
+                  {teacherImportFile ? teacherImportFile.name : 'Chưa chọn file'}
+                </span>
+              </label>
+
+              {teacherImportFile && (
+                <button
+                  type="button"
+                  className="exam-import-clear-btn"
+                  onClick={() => setTeacherImportFile(null)}
+                  disabled={teacherImporting}
+                >
+                  Bỏ chọn
+                </button>
+              )}
+
+              <button
+                type="button"
+                className="exam-import-submit-btn"
+                onClick={handleTeacherImport}
+                disabled={!teacherImportFile || teacherImporting}
+              >
+                {teacherImporting ? 'Đang import...' : 'Import'}
+              </button>
+            </div>
+          </div>
+        </>
       )}
 
       {/* Bảng điểm — GV/HS: cùng kiểu bảng admin (header 2 cấp, es-score-pill, TBM từ API) */}
