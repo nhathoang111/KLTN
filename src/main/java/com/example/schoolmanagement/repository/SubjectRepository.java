@@ -20,4 +20,6 @@ public interface SubjectRepository extends JpaRepository<Subject, Integer> {
 
     @Query("SELECT s FROM Subject s WHERE s.school.id = :schoolId ORDER BY COALESCE(s.sortIndex, 9999) ASC, s.id ASC")
     List<Subject> findBySchoolIdOrderBySortIndex(@Param("schoolId") Integer schoolId);
+    @Query("SELECT s FROM Subject s WHERE s.name = :name AND s.school.id = :schoolId")
+    Optional<Subject> findByNameAndSchoolId(@Param("name") String name, @Param("schoolId") Integer schoolId);
 }

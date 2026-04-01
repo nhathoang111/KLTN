@@ -7,6 +7,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
+import java.util.Optional;
 
 @Repository
 public interface ExamScoreRepository extends JpaRepository<ExamScore, Integer> {
@@ -24,5 +25,20 @@ public interface ExamScoreRepository extends JpaRepository<ExamScore, Integer> {
     
     @Query("SELECT e FROM ExamScore e WHERE e.school.id = :schoolId AND e.student.id = :studentId")
     List<ExamScore> findBySchoolIdAndStudentId(@Param("schoolId") Integer schoolId, @Param("studentId") Integer studentId);
+    @Query("""
+    SELECT e FROM ExamScore e
+    WHERE e.student.id = :studentId
+    AND e.subject.id = :subjectId
+    AND e.classEntity.id = :classId
+    AND e.scoreType = :scoreType
+    AND e.attempt = :attempt
+    """)
+    Optional<ExamScore> findExact(
+            @Param("studentId") Integer studentId,
+            @Param("subjectId") Integer subjectId,
+            @Param("classId") Integer classId,
+            @Param("scoreType") String scoreType,
+            @Param("attempt") Integer attempt
+    );
 }
 

@@ -1,10 +1,12 @@
 package com.example.schoolmanagement.controller;
 
 import com.example.schoolmanagement.entity.ExamScore;
+import com.example.schoolmanagement.service.ExamScoreImportService;
 import com.example.schoolmanagement.service.ExamScoreService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 import java.util.Map;
@@ -16,6 +18,9 @@ public class ExamScoreController {
 
     @Autowired
     private ExamScoreService examScoreService;
+    
+    @Autowired
+    private ExamScoreImportService importService;
 
     @GetMapping
     public ResponseEntity<?> getExamScores(
@@ -81,5 +86,24 @@ public class ExamScoreController {
     @PutMapping("/lock-status/{schoolId}")
     public ResponseEntity<?> updateScoreLockStatus(@PathVariable Integer schoolId, @RequestBody Map<String, Object> lockData) {
         return ResponseEntity.ok(examScoreService.updateScoreLockStatus(schoolId, lockData));
+    }
+    
+     @PostMapping("/import")
+    public ResponseEntity<?> importExcel(
+            @RequestParam("file") MultipartFile file,
+            @RequestHeader(value = "X-User-Role", required = false) String role,
+            @RequestHeader(value = "X-School-Id", required = false) Integer schoolId
+    ) {
+        String roleUpper = role == null ? "" : role.trim().toUpperCase();
+
+        if (schoolId == null) {
+            return ResponseEntity.badRequest().body(Map.of("message", "Thiếu X-School-Id"));
+        }
+
+        if (!roleUpper.contains("ADMIN") && !roleUpper.contains("TEACHER")) {
+            return ResponseEntity.status(403).body(Map.of("message", "Forbidden"));
+        }
+
+        return ResponseEntity.ok(importService.importExcel(file, schoolId));
     }
 }

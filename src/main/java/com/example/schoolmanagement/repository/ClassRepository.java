@@ -23,4 +23,8 @@ public interface ClassRepository extends JpaRepository<ClassEntity, Integer> {
     
     @Query("SELECT c FROM ClassEntity c JOIN FETCH c.school WHERE c.id = :id")
     Optional<ClassEntity> findByIdWithSchool(@Param("id") Integer id);
+    
+    @Query("SELECT c FROM ClassEntity c WHERE c.name = :name AND c.school.id = :schoolId")
+    Optional<ClassEntity> findByNameAndSchoolId(@Param("name") String name, @Param("schoolId") Integer schoolId);
+    
 }

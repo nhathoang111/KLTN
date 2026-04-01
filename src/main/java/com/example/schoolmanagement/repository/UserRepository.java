@@ -25,4 +25,7 @@ public interface UserRepository extends JpaRepository<User, Integer> {
     
     @Query("SELECT DISTINCT u FROM User u LEFT JOIN FETCH u.school LEFT JOIN FETCH u.role WHERE u.role.name LIKE :roleNamePattern")
     List<User> findByRoleName(@Param("roleNamePattern") String roleNamePattern);
+    
+    @Query("SELECT u FROM User u WHERE u.email = :email AND u.school.id = :schoolId")
+    Optional<User> findByEmailAndSchoolId(@Param("email") String email, @Param("schoolId") Integer schoolId);
 }

@@ -349,4 +349,5 @@ public class ExamScoreService {
     private static boolean isScorePresent(Double d) {
         return d != null && !d.isNaN();
     }
+    
 }
