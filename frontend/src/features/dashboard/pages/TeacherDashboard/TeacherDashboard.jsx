@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../../../../shared/lib/api';
-import { formatGradeAnalysisForDisplay } from '../../../../shared/lib/formatGradeAnalysisForDisplay';
+import { formatTeacherManagementSummaryForDisplay } from '../../../../shared/lib/formatTeacherManagementSummaryForDisplay';
 import { scheduleSubjectDisplayName } from '../../../../shared/lib/scheduleLabels';
 import './TeacherDashboard.css';
 import { useAuth } from '../../../auth/context/AuthContext';
@@ -30,14 +30,18 @@ const TeacherDashboard = () => {
   const [assignments, setAssignments] = useState([]);
   const [studentCountByClassId, setStudentCountByClassId] = useState({});
   const [scoreStats, setScoreStats] = useState({ gioi: 0, kha: 0, trungBinh: 0, yeu: 0 });
-  const [teacherSubjectAverages, setTeacherSubjectAverages] = useState([]);
-  const [teacherSubjectTrends, setTeacherSubjectTrends] = useState({});
   const [classSections, setClassSections] = useState([]);
 
   const [aiLoading, setAiLoading] = useState(false);
   const [aiAnalysis, setAiAnalysis] = useState(null);
   const [aiError, setAiError] = useState('');
   const [aiRetryInSec, setAiRetryInSec] = useState(0);
+
+  const [infoQuestion, setInfoQuestion] = useState('');
+  const [infoLoading, setInfoLoading] = useState(false);
+  const [infoAnswer, setInfoAnswer] = useState('');
+  const [infoData, setInfoData] = useState(null);
+  const [infoError, setInfoError] = useState('');
 
   const teacherId = user?.id;
 
@@ -125,42 +129,6 @@ const TeacherDashboard = () => {
           else yeu++;
         });
         setScoreStats({ gioi, kha, trungBinh, yeu });
-
-        // Tính điểm TB theo môn để đưa vào AI phân tích
-        const bySubject = {};
-        const now = Date.now();
-        const DAY = 24 * 60 * 60 * 1000;
-        const currentStart = now - 30 * DAY;
-        const previousStart = now - 60 * DAY;
-        const trendBySubject = {};
-
-        teacherClassScores.forEach((s) => {
-          const subjectName = scheduleSubjectDisplayName(s, 'Môn');
-          const sc = Number(s.score);
-          if (!bySubject[subjectName]) bySubject[subjectName] = { min: sc };
-          else bySubject[subjectName].min = Math.min(bySubject[subjectName].min, sc);
-
-          const t = s.createdAt ? Date.parse(s.createdAt) : NaN;
-          if (!Number.isNaN(t)) {
-            if (!trendBySubject[subjectName]) {
-              trendBySubject[subjectName] = { cur: { min: null }, prev: { min: null } };
-            }
-            if (t >= currentStart) {
-              const curMin = trendBySubject[subjectName].cur.min;
-              trendBySubject[subjectName].cur.min = curMin == null ? sc : Math.min(curMin, sc);
-            } else if (t >= previousStart && t < currentStart) {
-              const prevMin = trendBySubject[subjectName].prev.min;
-              trendBySubject[subjectName].prev.min = prevMin == null ? sc : Math.min(prevMin, sc);
-            }
-          }
-        });
-        const subjectMinScores = Object.entries(bySubject).map(([name, v]) => ({
-          subject: name,
-          score: Number(v.min),
-        }));
-        subjectMinScores.sort((a, b) => a.score - b.score);
-        setTeacherSubjectAverages(subjectMinScores);
-        setTeacherSubjectTrends(trendBySubject);
       }
     } catch (e) {
       console.error('Error fetching teacher dashboard:', e);
@@ -257,24 +225,11 @@ const TeacherDashboard = () => {
         setAiError(`Gemini đang giới hạn tần suất. Vui lòng thử lại sau ${aiRetryInSec} giây.`);
         return;
       }
-      if (!teacherSubjectAverages.length) {
-        setAiError('Chưa có dữ liệu điểm để phân tích.');
-        return;
-      }
       setAiLoading(true);
 
-      const fullName = user?.fullName || '';
-      const payload = {
-        target: fullName ? `Giáo viên: ${fullName}` : 'Giáo viên',
-        subjects: teacherSubjectAverages.map((r) => {
-          const t = teacherSubjectTrends[r.subject];
-          const prevMin = t?.prev?.min ?? null;
-          return { name: r.subject, score: Number(r.score), previousScore: prevMin != null ? Number(prevMin.toFixed(2)) : null };
-        }),
-      };
-      const res = await api.post('/ai/grade-analysis', payload);
+      const res = await api.post('/ai/teacher-management-summary', {});
       setAiRetryInSec(0);
-      setAiAnalysis(formatGradeAnalysisForDisplay(res.data) || '');
+      setAiAnalysis(formatTeacherManagementSummaryForDisplay(res.data) || '');
     } catch (e) {
       const status = Number(e?.response?.status);
       const msg = e?.response?.data?.message || e?.response?.data?.error || e?.message || 'Phân tích AI thất bại';
@@ -296,12 +251,39 @@ const TeacherDashboard = () => {
     }
   };
 
-  const aiDisabled = aiLoading || teacherSubjectAverages.length === 0 || aiRetryInSec > 0;
+  const aiDisabled = aiLoading || aiRetryInSec > 0;
   const aiButtonText = aiLoading
-    ? 'Đang phân tích...'
+    ? 'Đang tạo tổng quan...'
     : aiRetryInSec > 0
       ? `Thử lại sau ${aiRetryInSec}s`
-      : 'Phân tích bằng AI';
+      : 'AI tổng quan quản lý';
+
+  const queryInformation = async () => {
+    try {
+      const q = String(infoQuestion || '').trim();
+      setInfoError('');
+      setInfoAnswer('');
+      setInfoData(null);
+      if (!q) {
+        setInfoError('Vui lòng nhập câu hỏi.');
+        return;
+      }
+      setInfoLoading(true);
+      const res = await api.post('/ai/information-query', { question: q });
+      const r = res?.data || {};
+      if (r?.success === false) {
+        setInfoError(r?.answer || r?.message || 'Tra cứu thất bại');
+        return;
+      }
+      setInfoAnswer(String(r?.answer || '').trim());
+      setInfoData(r?.data ?? null);
+    } catch (e) {
+      const msg = e?.response?.data?.message || e?.response?.data?.error || e?.message || 'Tra cứu thất bại';
+      setInfoError(String(msg));
+    } finally {
+      setInfoLoading(false);
+    }
+  };
 
   return (
     <div className="td-wrap">
@@ -335,6 +317,55 @@ const TeacherDashboard = () => {
             <span className="td-stat-value">{lessonsTodayCount} tiết</span>
           </div>
         </div>
+      </div>
+
+      {/* AI tra cứu thông tin (đặt dưới 4 card) */}
+      <div className="td-card td-aiq-card">
+        <div className="td-card-head">
+          <h3 className="td-card-title">AI Tra cứu thông tin</h3>
+        </div>
+        <div className="td-aiq-row">
+          <input
+            className="td-aiq-input"
+            value={infoQuestion}
+            onChange={(e) => setInfoQuestion(e.target.value)}
+            placeholder="Ví dụ: 10A1 có mấy bạn yếu Toán? · Tôi đang dạy những lớp nào? · GVCN lớp 10A1 là ai?"
+            disabled={infoLoading}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                queryInformation();
+              }
+            }}
+          />
+          <button
+            type="button"
+            className="td-aiq-btn"
+            onClick={queryInformation}
+            disabled={infoLoading}
+          >
+            {infoLoading ? 'Đang tra cứu...' : 'Tra cứu'}
+          </button>
+        </div>
+
+        {infoError && (
+          <div className="td-aiq-error">
+            {infoError}
+          </div>
+        )}
+
+        {infoAnswer && (
+          <div className="td-aiq-answer">
+            {infoAnswer}
+          </div>
+        )}
+
+        {infoData && (
+          <details className="td-aiq-details">
+            <summary className="td-aiq-summary">Xem dữ liệu trả về</summary>
+            <pre className="td-aiq-pre">{JSON.stringify(infoData, null, 2)}</pre>
+          </details>
+        )}
       </div>
 
       {/* 2 cột nội dung */}
@@ -410,7 +441,7 @@ const TeacherDashboard = () => {
 
           <div className="td-card" style={{ marginTop: '16px' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
-              <h3 className="td-card-title" style={{ margin: 0 }}>AI phân tích điểm</h3>
+              <h3 className="td-card-title" style={{ margin: 0 }}>AI tổng quan quản lý lớp</h3>
               <button
                 type="button"
                 className="td-view-all"

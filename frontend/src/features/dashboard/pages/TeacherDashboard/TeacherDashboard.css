@@ -110,6 +110,93 @@
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
 }
 
+.td-aiq-card {
+  margin-bottom: 24px;
+  border: 1px solid rgba(124, 58, 237, 0.12);
+  box-shadow: 0 2px 10px rgba(124, 58, 237, 0.08);
+}
+
+.td-aiq-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 12px;
+  align-items: center;
+}
+
+.td-aiq-input {
+  width: 100%;
+  height: 42px;
+  padding: 0 12px;
+  border-radius: 12px;
+  border: 1px solid #e5e7eb;
+  outline: none;
+  font-size: 14px;
+}
+
+.td-aiq-input:focus {
+  border-color: rgba(124, 58, 237, 0.55);
+  box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.14);
+}
+
+.td-aiq-btn {
+  height: 42px;
+  padding: 0 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(124, 58, 237, 0.35);
+  background: #7c3aed;
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.td-aiq-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.td-aiq-error {
+  margin-top: 10px;
+  padding: 10px 12px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 12px;
+  color: #b91c1c;
+  font-size: 0.9rem;
+}
+
+.td-aiq-answer {
+  margin-top: 10px;
+  padding: 10px 12px;
+  background: #f5f3ff;
+  border: 1px solid #ddd6fe;
+  border-radius: 12px;
+  color: #312e81;
+  font-size: 0.95rem;
+  white-space: pre-line;
+}
+
+.td-aiq-details {
+  margin-top: 10px;
+}
+
+.td-aiq-summary {
+  cursor: pointer;
+  color: #4f46e5;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.td-aiq-pre {
+  margin-top: 8px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: #0b1020;
+  color: #e5e7eb;
+  overflow: auto;
+  max-height: 240px;
+  font-size: 12px;
+}
+
 .td-card-title {
   font-size: 16px;
   font-weight: 600;

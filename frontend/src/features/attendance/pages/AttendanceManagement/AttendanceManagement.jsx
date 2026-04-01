@@ -116,18 +116,17 @@ const AttendanceManagement = () => {
     setMessage("Đã đánh dấu tất cả có mặt (chưa lưu).");
   };
 
-  const updateStatus = (studentId, status) => {
-    setItems((prev) => prev.map((it) => (it.studentId === studentId ? { ...it, status } : it)));
+  /** Chỉ còn PRESENT / ABSENT trên UI; bản ghi cũ LATE vẫn hiển thị như "có mặt", lưu sẽ chuẩn hóa thành PRESENT. */
+  const isPresentStatus = (status) => {
+    const s = (status || 'PRESENT').toString().toUpperCase();
+    return s === 'PRESENT' || s === 'LATE';
   };
 
-  const updateStatusFromCheckbox = (studentId, statusValue, checked) => {
-    // Checkbox đóng vai trò "chọn 1 trong 4 trạng thái" (tương đương radio).
-    // Nếu người dùng bỏ tick checkbox đang chọn thì mặc định quay về PRESENT.
+  const togglePresent = (studentId, present) => {
     setItems((prev) =>
-      prev.map((it) => {
-        if (it.studentId !== studentId) return it;
-        return { ...it, status: checked ? statusValue : "PRESENT" };
-      })
+      prev.map((it) =>
+        it.studentId === studentId ? { ...it, status: present ? 'PRESENT' : 'ABSENT' } : it
+      )
     );
   };
 
@@ -180,12 +179,6 @@ const AttendanceManagement = () => {
       </div>
     );
   }
-
-  const statusOptions = [
-    { value: 'PRESENT', label: 'Có mặt' },
-    { value: 'ABSENT', label: 'Vắng' },
-    { value: 'LATE', label: 'Muộn' },
-  ];
 
   return (
     <div className="min-h-screen bg-slate-100 px-4 py-6">
@@ -299,18 +292,28 @@ const AttendanceManagement = () => {
                     <td className="px-4 py-3 font-medium">{it.fullName || '—'}</td>
                     <td className="px-4 py-3 text-slate-600">{it.email || '—'}</td>
                     <td className="px-4 py-3">
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', alignItems: 'center' }}>
-                        {statusOptions.map((o) => (
-                          <label key={o.value} style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: canEdit ? 'pointer' : 'not-allowed' }}>
-                            <input
-                              type="checkbox"
-                              checked={(it.status || 'PRESENT') === o.value}
-                              onChange={(e) => updateStatusFromCheckbox(it.studentId, o.value, e.target.checked)}
-                              disabled={!canEdit}
-                            />
-                            <span style={{ fontSize: '0.85rem', color: '#0f172a' }}>{o.label}</span>
-                          </label>
-                        ))}
+                      <div className="attendance-status-toggle-wrap">
+                        <span className="attendance-status-label-muted">Vắng</span>
+                        <button
+                          type="button"
+                          role="switch"
+                          aria-checked={isPresentStatus(it.status)}
+                          aria-label={`Trạng thái: ${isPresentStatus(it.status) ? 'Có mặt' : 'Vắng'}`}
+                          className={`attendance-switch ${isPresentStatus(it.status) ? 'attendance-switch--on' : ''}`}
+                          disabled={!canEdit}
+                          onClick={() => togglePresent(it.studentId, !isPresentStatus(it.status))}
+                        >
+                          <span className="attendance-switch-thumb" />
+                        </button>
+                        <span
+                          className={
+                            isPresentStatus(it.status)
+                              ? 'attendance-status-label-active'
+                              : 'attendance-status-label-muted'
+                          }
+                        >
+                          Có mặt
+                        </span>
                       </div>
                     </td>
                     <td className="px-4 py-3">
