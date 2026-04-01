@@ -401,6 +401,7 @@ const ExamScoreManagement = () => {
   const [classScoreData, setClassScoreData] = useState({}); // {studentId: {scoreMieng, score15P, ...}}
   const [filteredSubjectsForClass, setFilteredSubjectsForClass] = useState([]); // Môn theo TKB + học kỳ (GV)
   const [displayFilterClassId, setDisplayFilterClassId] = useState(''); // Lớp đã chọn để filter hiển thị (cho Teacher)
+  const [displayFilterSubjectId, setDisplayFilterSubjectId] = useState(''); // Môn đã chọn để filter hiển thị (cho Teacher)
   const [isEditMode, setIsEditMode] = useState(false); // Phân biệt giữa nhập điểm mới và sửa điểm
   /** Học kỳ trong modal nhập điểm (lọc môn theo TKB, khớp admin) */
   const [teacherModalSemester, setTeacherModalSemester] = useState('1');
@@ -1442,17 +1443,43 @@ const ExamScoreManagement = () => {
     }
   };
 
+  const outerSubjectsForFilter = useMemo(() => {
+    if (user?.role?.name?.toUpperCase() !== 'TEACHER') return [];
+
+    const sourceScores = displayFilterClassId
+      ? examScores.filter((score) => {
+          const scoreClassId = score.classEntity?.id || score.class_id;
+          return scoreClassId && String(scoreClassId) === String(displayFilterClassId);
+        })
+      : examScores;
+
+    const map = new Map();
+    sourceScores.forEach((score) => {
+      const subject = score.subject;
+      if (subject?.id && !map.has(subject.id)) {
+        map.set(subject.id, { id: subject.id, name: subject.name || `Môn #${subject.id}` });
+      }
+    });
+
+    return Array.from(map.values()).sort((a, b) => (a.name || '').localeCompare(b.name || '', 'vi'));
+  }, [examScores, displayFilterClassId, user]);
+
   // Nhóm điểm theo học sinh và môn học
   const groupScoresByStudentAndSubject = () => {
     const grouped = {};
     const userRole = user?.role?.name?.toUpperCase();
 
-    // Filter scores theo lớp đã chọn nếu là Teacher và đã chọn lớp
+    // Filter scores theo lớp/môn đã chọn nếu là Teacher
     let filteredScores = examScores;
-    if (userRole === 'TEACHER' && displayFilterClassId) {
-      filteredScores = examScores.filter(score => {
+    if (userRole === 'TEACHER') {
+      filteredScores = examScores.filter((score) => {
         const scoreClassId = score.classEntity?.id || score.class_id;
-        return scoreClassId && scoreClassId.toString() === displayFilterClassId.toString();
+        const scoreSubjectId = score.subject?.id || score.subject_id;
+
+        const matchClass = !displayFilterClassId || (scoreClassId && String(scoreClassId) === String(displayFilterClassId));
+        const matchSubject = !displayFilterSubjectId || (scoreSubjectId && String(scoreSubjectId) === String(displayFilterSubjectId));
+
+        return matchClass && matchSubject;
       });
     }
 
@@ -1496,7 +1523,7 @@ const ExamScoreManagement = () => {
     return Object.values(grouped);
   };
 
-  const scoreGroups = useMemo(() => groupScoresByStudentAndSubject(), [examScores, displayFilterClassId, user]);
+  const scoreGroups = useMemo(() => groupScoresByStudentAndSubject(), [examScores, displayFilterClassId, displayFilterSubjectId, user]);
 
   useEffect(() => {
     const role = user?.role?.name?.toUpperCase();
