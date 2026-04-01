@@ -164,6 +164,24 @@ public class UserService {
                 map.put("subject", subjectsList.get(0));
             }
         }
+
+        // PARENT: Thêm danh sách con em để hiển thị trên ParentDashboard
+        if (roleNameUpper.contains("PARENT") || roleNameUpper.contains("HUYNH")) {
+            List<ParentStudent> psList = parentStudentRepository.findByParentIdFetchStudent(u.getId());
+            List<Map<String, Object>> childrenList = new ArrayList<>();
+            for (ParentStudent ps : psList) {
+                if (ps.getStudent() != null) {
+                    Map<String, Object> child = new HashMap<>();
+                    child.put("id", ps.getStudent().getId());
+                    child.put("fullName", ps.getStudent().getFullName());
+                    child.put("email", ps.getStudent().getEmail());
+                    childrenList.add(child);
+                }
+            }
+            map.put("children", childrenList);
+            map.put("childrenCount", childrenList.size());
+        }
+
         return map;
     }
 

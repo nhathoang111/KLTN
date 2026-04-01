@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import api from '../../../../shared/lib/api';
-import { formatGradeAnalysisForDisplay } from '../../../../shared/lib/formatGradeAnalysisForDisplay';
 import './ExamScoreManagement.css';
 import { useAuth } from '../../../auth/context/AuthContext';
 import { Pencil, Trash2, Search, Download } from 'lucide-react';
@@ -33,83 +32,8 @@ function adminUniqueSubjectsFromSchedules(schedules) {
   return Array.from(map.values()).sort((a, b) => (a.name || '').localeCompare(b.name || '', 'vi'));
 }
 
-/** Response /api/ai/insights/student: gộp top-level + nested `analysis` rồi format. */
-function buildAiStudentInsightDisplayText(data) {
-  if (!data) return '';
-  const nested = data.analysis || {};
-  const merged = {
-    ...nested,
-    analysis: nested.analysis,
-    summary: data.summary ?? nested.summary,
-    trend: data.trend ?? nested.trend,
-    severity: data.severity ?? nested.severity,
-    underAverageSubjects: data.underAverageSubjects ?? nested.underAverageSubjects,
-    topConcerns: nested.topConcerns,
-    prioritySubjects: nested.prioritySubjects,
-    recommendations: data.recommendations ?? nested.recommendations,
-    riskLevel: data.riskLevel ?? nested.riskLevel,
-  };
-  return formatGradeAnalysisForDisplay(merged);
-}
-
 /** Khối "Xem điểm" admin: điểm + TBM từ GET /api/exam-scores/tbm-summary */
 function AdminXemDiemSection({ classes, subjects, user }) {
-const [file, setFile] = useState(null);
-
-const handleImport = async () => {
-  if (!file) {
-    alert('Chọn file trước');
-    return;
-  }
-
-  if (!user?.role?.name || !user?.school?.id) {
-    alert('Thiếu thông tin người dùng hoặc trường học');
-    return;
-  }
-
-  const formData = new FormData();
-  formData.append('file', file);
-
-  try {
-    const res = await api.post('/exam-scores/import', formData, {
-      headers: {
-        'X-User-Role': user.role.name,
-        'X-School-Id': user.school.id,
-      },
-    });
-
-    const data = res.data || {};
-    const success = data.success ?? 0;
-    const fail = data.fail ?? 0;
-    const errors = Array.isArray(data.errors) ? data.errors : [];
-
-    let message = `Import hoàn tất.\nSuccess: ${success}\nFail: ${fail}`;
-
-    if (errors.length > 0) {
-      const topErrors = errors
-        .slice(0, 20)
-        .map((e) => `- Dòng ${e.row}: ${e.error}`)
-        .join('\n');
-
-      message += `\n\nChi tiết lỗi:\n${topErrors}`;
-
-      if (errors.length > 20) {
-        message += `\n... và ${errors.length - 20} lỗi khác`;
-      }
-    }
-
-    alert(message);
-    setFile(null);
-  } catch (err) {
-    console.error(err);
-    const serverMessage =
-      err?.response?.data?.message ||
-      err?.response?.data ||
-      'Import failed';
-    alert(typeof serverMessage === 'string' ? serverMessage : 'Import failed');
-  }
-};
-
   const [selectedClassId, setSelectedClassId] = useState('');
   const [semester, setSemester] = useState('1');
   const [selectedSubjectId, setSelectedSubjectId] = useState('');
@@ -350,48 +274,6 @@ const handleImport = async () => {
           <Download className="h-4 w-4" />
           Tải xuống
         </button>
-<div className="exam-import-panel">
-  <div className="exam-import-panel__left">
-    <div className="exam-import-panel__title">Nhập điểm từ file Excel</div>
-    <div className="exam-import-panel__hint">
-      Hỗ trợ file .xlsx, .xls với các cột: email, class, subject, mieng, 15p, 1tiet, cuoiki
-    </div>
-  </div>
-
-  <div className="exam-import-panel__right">
-    <label className="exam-import-upload">
-      <input
-        type="file"
-        accept=".xlsx,.xls"
-        onChange={(e) => setFile(e.target.files?.[0] || null)}
-        className="exam-import-upload__input"
-      />
-      <span className="exam-import-upload__button">Chọn file</span>
-      <span className="exam-import-upload__name">
-        {file ? file.name : "Chưa chọn file"}
-      </span>
-    </label>
-
-    {file && (
-      <button
-        type="button"
-        className="exam-import-clear-btn"
-        onClick={() => setFile(null)}
-      >
-        Bỏ chọn
-      </button>
-    )}
-
-    <button
-      type="button"
-      className="exam-import-submit-btn"
-      onClick={handleImport}
-      disabled={!file}
-    >
-      Import
-    </button>
-  </div>
-</div>
       </div>
 
       <div className="flex flex-wrap gap-6 rounded-lg border border-blue-100 bg-blue-50/50 px-4 py-3">
@@ -505,7 +387,6 @@ const handleImport = async () => {
 }
 
 const ExamScoreManagement = () => {
-  const [file, setFile] = useState(null);
   const { user } = useAuth();
   const [examScores, setExamScores] = useState([]);
   const [students, setStudents] = useState([]);
@@ -520,7 +401,6 @@ const ExamScoreManagement = () => {
   const [classScoreData, setClassScoreData] = useState({}); // {studentId: {scoreMieng, score15P, ...}}
   const [filteredSubjectsForClass, setFilteredSubjectsForClass] = useState([]); // Môn theo TKB + học kỳ (GV)
   const [displayFilterClassId, setDisplayFilterClassId] = useState(''); // Lớp đã chọn để filter hiển thị (cho Teacher)
-  const [displayFilterSubjectId, setDisplayFilterSubjectId] = useState(''); // Môn đã chọn để filter hiển thị (cho Teacher)
   const [isEditMode, setIsEditMode] = useState(false); // Phân biệt giữa nhập điểm mới và sửa điểm
   /** Học kỳ trong modal nhập điểm (lọc môn theo TKB, khớp admin) */
   const [teacherModalSemester, setTeacherModalSemester] = useState('1');
@@ -539,11 +419,6 @@ const ExamScoreManagement = () => {
   const [aiStudentError, setAiStudentError] = useState('');
   const [aiStudentResult, setAiStudentResult] = useState(null); // response from /api/ai/insights/student
 
-  const aiStudentDisplayText = useMemo(
-    () => buildAiStudentInsightDisplayText(aiStudentResult),
-    [aiStudentResult]
-  );
-
   useEffect(() => {
     fetchExamScores();
     fetchStudents();
@@ -552,8 +427,7 @@ const ExamScoreManagement = () => {
     fetchScoreLockStatus();
   }, [user]);
 
-  const runAiStudentInsight = async (group) => {
-    const student = group?.student || group;
+  const runAiStudentInsight = async (student) => {
     const sid = student?.id ?? student?.studentId;
     if (!sid) return;
     try {
@@ -566,24 +440,9 @@ const ExamScoreManagement = () => {
       });
       setAiStudentLoading(true);
 
-      const classId =
-        group?.classEntity?.id ??
-        group?.class_id ??
-        null;
-      const subjectId =
-        group?.subject?.id ??
-        group?.subject_id ??
-        null;
-
       const res = await api.post(
         '/ai/insights/student',
-        {
-          studentId: Number(sid),
-          classId: classId != null ? Number(classId) : null,
-          subjectId: subjectId != null ? Number(subjectId) : null,
-          currentWindowDays: 30,
-          previousWindowDays: 30,
-        },
+        { studentId: Number(sid), currentWindowDays: 30, previousWindowDays: 30 },
         {
           headers: {
             'X-User-Id': user?.id,
@@ -626,9 +485,10 @@ const ExamScoreManagement = () => {
       const response = await api.get('/exam-scores');
       let allScores = response.data.examScores || [];
       const userRole = user?.role?.name?.toUpperCase();
+      const activeStudentId = localStorage.getItem('activeStudentId');
 
-      // Filter exam scores for admin, teacher, and student - only show scores from their own school
-      if ((userRole === 'ADMIN' || userRole === 'TEACHER' || userRole === 'STUDENT') && user?.school?.id) {
+      // Lọc điểm theo trường học cho các vai trò tương ứng (Admin, GV, HS, PH)
+      if ((userRole === 'ADMIN' || userRole === 'TEACHER' || userRole === 'STUDENT' || userRole === 'PARENT') && user?.school?.id) {
         allScores = allScores.filter(score => {
           const studentSchoolId = score.student?.school?.id || score.school?.id;
           return studentSchoolId === user.school.id;
@@ -640,6 +500,17 @@ const ExamScoreManagement = () => {
         allScores = allScores.filter(score => score.student?.id === user.id);
       }
 
+      // Nếu là Phụ huynh, chỉ hiển thị điểm của người con đang được chọn
+      if (userRole === 'PARENT' && activeStudentId) {
+        allScores = allScores.filter(score => {
+          const studentId = score.student?.id || score.student_id;
+          return String(studentId) === String(activeStudentId);
+        });
+      } else if (userRole === 'PARENT' && !activeStudentId) {
+        // Nếu chưa chọn con thì không hiện điểm nào để đảm bảo bảo mật
+        allScores = [];
+      }
+
       // For teachers, only show scores for subjects they teach
       if (userRole === 'TEACHER' && user?.id) {
         try {
@@ -647,31 +518,21 @@ const ExamScoreManagement = () => {
           const schedulesResponse = await api.get(`/schedules/teacher/${user.id}`);
           const teacherSchedules = schedulesResponse.data.schedules || [];
 
-          // Get valid pairs (classId, subjectId) the teacher actually teaches.
-          // Important: we must filter by the combination, not independently by subject or class.
+          // Get unique subject IDs from schedules
           const assignedSubjectIds = new Set();
-          const taughtClassSubjectPairs = new Set();
           teacherSchedules.forEach(schedule => {
             const subjectId = schedule.subject?.id || schedule.subject_id;
             if (subjectId) {
               assignedSubjectIds.add(subjectId);
             }
-
-            const classId = schedule.classEntity?.id || schedule.class_id;
-            if (classId && subjectId) {
-              taughtClassSubjectPairs.add(`${classId}-${subjectId}`);
-            }
           });
 
           console.log('Teacher assigned subject IDs:', Array.from(assignedSubjectIds));
 
-          // Filter scores to only show those for the taught (classId, subjectId) pair
+          // Filter scores to only show those for assigned subjects
           allScores = allScores.filter(score => {
             const scoreSubjectId = score.subject?.id || score.subject_id;
-            const scoreClassId = score.classEntity?.id || score.class_id;
-            if (!scoreSubjectId || !scoreClassId) return false;
-            // Keep combo-check as the single source of truth
-            return taughtClassSubjectPairs.has(`${scoreClassId}-${scoreSubjectId}`);
+            return assignedSubjectIds.has(scoreSubjectId);
           });
 
           console.log('Filtered exam scores for teacher:', allScores.length);
@@ -1171,18 +1032,21 @@ const ExamScoreManagement = () => {
       const response = await api.get('/exam-scores');
       let allScores = response.data.examScores || [];
       const userRole = user?.role?.name?.toUpperCase();
+      const activeStudentId = localStorage.getItem('activeStudentId');
 
-      // Filter exam scores for admin, teacher, and student - only show scores from their own school
-      if ((userRole === 'ADMIN' || userRole === 'TEACHER' || userRole === 'STUDENT') && user?.school?.id) {
+      // Lọc theo trường học
+      if ((userRole === 'ADMIN' || userRole === 'TEACHER' || userRole === 'STUDENT' || userRole === 'PARENT') && user?.school?.id) {
         allScores = allScores.filter(score => {
           const studentSchoolId = score.student?.school?.id || score.school?.id;
           return studentSchoolId === user.school.id;
         });
       }
 
-      // For students, only show their own scores
+      // Nếu là Học sinh hoặc Phụ huynh, lọc theo ID tương ứng
       if (userRole === 'STUDENT' && user?.id) {
         allScores = allScores.filter(score => score.student?.id === user.id);
+      } else if (userRole === 'PARENT' && activeStudentId) {
+        allScores = allScores.filter(score => String(score.student?.id) === String(activeStudentId));
       }
 
       // For teachers, only show scores for subjects they teach
@@ -1475,7 +1339,6 @@ const ExamScoreManagement = () => {
         const userRole = user?.role?.name?.toUpperCase();
         if (userRole === 'TEACHER') {
           setDisplayFilterClassId(selectedClassForScore);
-          setDisplayFilterSubjectId('');
         }
 
         // Reset form
@@ -1531,12 +1394,6 @@ const ExamScoreManagement = () => {
         return scoreClassId && scoreClassId.toString() === displayFilterClassId.toString();
       });
     }
-    if (userRole === 'TEACHER' && displayFilterSubjectId) {
-      filteredScores = filteredScores.filter(score => {
-        const scoreSubjectId = score.subject?.id || score.subject_id;
-        return scoreSubjectId && scoreSubjectId.toString() === displayFilterSubjectId.toString();
-      });
-    }
 
     filteredScores.forEach(score => {
       const studentId = score.student?.id;
@@ -1578,25 +1435,7 @@ const ExamScoreManagement = () => {
     return Object.values(grouped);
   };
 
-  const outerSubjectsForFilter = useMemo(() => {
-    const userRole = user?.role?.name?.toUpperCase();
-    if (userRole !== 'TEACHER') return subjects || [];
-    if (!displayFilterClassId) return subjects || [];
-
-    // Khi đã chọn lớp, chỉ hiển thị các môn thực sự có điểm trong bảng của giáo viên cho lớp đó.
-    const cid = displayFilterClassId.toString();
-    const subjectIds = new Set();
-    (examScores || []).forEach(score => {
-      const scoreClassId = score.classEntity?.id || score.class_id;
-      if (!scoreClassId || scoreClassId.toString() !== cid) return;
-      const sid = score.subject?.id || score.subject_id;
-      if (sid) subjectIds.add(sid.toString());
-    });
-
-    return (subjects || []).filter(s => s && s.id != null && subjectIds.has(String(s.id)));
-  }, [subjects, examScores, displayFilterClassId, user]);
-
-  const scoreGroups = useMemo(() => groupScoresByStudentAndSubject(), [examScores, displayFilterClassId, displayFilterSubjectId, user]);
+  const scoreGroups = useMemo(() => groupScoresByStudentAndSubject(), [examScores, displayFilterClassId, user]);
 
   useEffect(() => {
     const role = user?.role?.name?.toUpperCase();
@@ -1670,7 +1509,9 @@ const ExamScoreManagement = () => {
 
   const userRole = user?.role?.name?.toUpperCase();
   const isStudent = userRole === 'STUDENT';
+  const isParent = userRole === 'PARENT';
   const isAdmin = userRole === 'ADMIN' || (userRole && userRole.startsWith('ADMIN'));
+  const isViewOnly = isStudent || isParent;
 
   const handleToggleLock = async () => {
     const userRole = user?.role?.name?.toUpperCase();
@@ -1706,11 +1547,12 @@ const ExamScoreManagement = () => {
     <div className="min-h-screen bg-slate-100 px-4 py-6">
       <div className={`mx-auto space-y-4 ${isAdmin || !isStudent ? 'max-w-[96rem]' : 'max-w-6xl'}`}>
       <div className="rounded-2xl bg-white/95 px-4 py-3 shadow-lg shadow-slate-900/5 flex flex-wrap items-center justify-between gap-3">
-        {!isAdmin && (
+        {!isAdmin && !isParent && (
           <h2 className="text-2xl font-bold text-slate-800">
             {isStudent ? 'Xem điểm và nhận xét' : 'Quản lý điểm số'}
           </h2>
         )}
+        {isParent && <h2 className="text-2xl font-bold text-slate-800">Bảng điểm của con</h2>}
         {isAdmin && <span className="text-lg font-semibold text-slate-700">Điểm số</span>}
         <div className="header-actions">
           {isAdmin && (
@@ -1733,8 +1575,8 @@ const ExamScoreManagement = () => {
               ⚠️ Điểm số đã bị khóa
             </span>
           )}
-          {/* Only show "Nhập điểm" button for TEACHER, not for ADMIN */}
-          {!isStudent && !isAdmin && (
+          {/* Ẩn nút Nhập điểm đối với Phụ huynh và Học sinh */}
+          {!isViewOnly && !isAdmin && (
             <button
               className="btn btn-primary"
               onClick={() => {
@@ -1779,10 +1621,7 @@ const ExamScoreManagement = () => {
             <span>Lọc theo lớp:</span>
             <select
               value={displayFilterClassId}
-              onChange={(e) => {
-                setDisplayFilterClassId(e.target.value);
-                setDisplayFilterSubjectId('');
-              }}
+              onChange={(e) => setDisplayFilterClassId(e.target.value)}
               style={{
                 padding: '8px 12px',
                 borderRadius: '6px',
@@ -1799,34 +1638,9 @@ const ExamScoreManagement = () => {
               ))}
             </select>
           </label>
-          <label style={{ fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <span>Lọc theo môn:</span>
-            <select
-              value={displayFilterSubjectId}
-              onChange={(e) => setDisplayFilterSubjectId(e.target.value)}
-              style={{
-                padding: '8px 12px',
-                borderRadius: '6px',
-                border: '1px solid #ddd',
-                fontSize: '14px',
-                minWidth: '200px'
-              }}
-              disabled={!outerSubjectsForFilter || outerSubjectsForFilter.length === 0}
-            >
-              <option value="">-- Tất cả các môn --</option>
-              {(outerSubjectsForFilter || []).map(s => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          {(displayFilterClassId || displayFilterSubjectId) && (
+          {displayFilterClassId && (
             <button
-              onClick={() => {
-                setDisplayFilterClassId('');
-                setDisplayFilterSubjectId('');
-              }}
+              onClick={() => setDisplayFilterClassId('')}
               style={{
                 padding: '6px 12px',
                 backgroundColor: '#6c757d',
@@ -1852,7 +1666,7 @@ const ExamScoreManagement = () => {
           </div>
         ) : (
           <>
-            {!isStudent && !isAdmin && (
+            {!isViewOnly && !isAdmin && (
               <div className="flex flex-wrap gap-6 border-b border-blue-100 bg-blue-50/50 px-4 py-3">
                 <label className="inline-flex cursor-pointer items-center gap-2 text-sm text-blue-900">
                   <input
@@ -1911,22 +1725,22 @@ const ExamScoreManagement = () => {
                     <th rowSpan={2} className="border border-slate-200 px-2 py-2 text-left min-w-[80px]">
                       Lớp
                     </th>
-                    {(isStudent || teacherOuterShowOral) && (
+                    {(isViewOnly || teacherOuterShowOral) && (
                       <th colSpan={1} className="border border-slate-200 px-2 py-2 text-center bg-sky-50">
                         Điểm miệng
                       </th>
                     )}
-                    {(isStudent || teacherOuterShow15) && (
+                    {(isViewOnly || teacherOuterShow15) && (
                       <th colSpan={1} className="border border-slate-200 px-2 py-2 text-center bg-sky-50">
                         Điểm 15 phút
                       </th>
                     )}
-                    {(isStudent || teacherOuterShow1T) && (
+                    {(isViewOnly || teacherOuterShow1T) && (
                       <th colSpan={1} className="border border-slate-200 px-2 py-2 text-center bg-sky-50">
                         Điểm 1 tiết
                       </th>
                     )}
-                    {(isStudent || teacherOuterShowCk) && (
+                    {(isViewOnly || teacherOuterShowCk) && (
                       <th colSpan={1} className="border border-slate-200 px-2 py-2 text-center bg-sky-50">
                         Điểm cuối kỳ
                       </th>
@@ -1934,23 +1748,23 @@ const ExamScoreManagement = () => {
                     <th rowSpan={2} className="border border-slate-200 px-2 py-2 text-center bg-emerald-50">
                       TBM
                     </th>
-                    {!isStudent && !isAdmin && (
+                    {!isViewOnly && !isAdmin && (
                       <th rowSpan={2} className="border border-slate-200 px-2 py-2 text-center">
                         Thao tác
                       </th>
                     )}
                   </tr>
                   <tr className="bg-white text-[11px] text-slate-600">
-                    {(isStudent || teacherOuterShowOral) && (
+                    {(isViewOnly || teacherOuterShowOral) && (
                       <th className="border border-slate-200 px-1 py-1">Miệng 1</th>
                     )}
-                    {(isStudent || teacherOuterShow15) && (
+                    {(isViewOnly || teacherOuterShow15) && (
                       <th className="border border-slate-200 px-1 py-1">15P-1</th>
                     )}
-                    {(isStudent || teacherOuterShow1T) && (
+                    {(isViewOnly || teacherOuterShow1T) && (
                       <th className="border border-slate-200 px-1 py-1">1T-1</th>
                     )}
-                    {(isStudent || teacherOuterShowCk) && (
+                    {(isViewOnly || teacherOuterShowCk) && (
                       <th className="border border-slate-200 px-1 py-1">CK-1</th>
                     )}
                   </tr>
@@ -1983,22 +1797,22 @@ const ExamScoreManagement = () => {
                         </td>
                         <td className="border border-slate-200 px-2 py-2">{group.subject?.name}</td>
                         <td className="border border-slate-200 px-2 py-2">{group.classEntity?.name}</td>
-                        {(isStudent || teacherOuterShowOral) && (
+                        {(isViewOnly || teacherOuterShowOral) && (
                           <td className="border border-slate-200 px-1 py-1 text-center">
                             {renderOuterScoreCell(scoreMieng)}
                           </td>
                         )}
-                        {(isStudent || teacherOuterShow15) && (
+                        {(isViewOnly || teacherOuterShow15) && (
                           <td className="border border-slate-200 px-1 py-1 text-center">
                             {renderOuterScoreCell(score15P)}
                           </td>
                         )}
-                        {(isStudent || teacherOuterShow1T) && (
+                        {(isViewOnly || teacherOuterShow1T) && (
                           <td className="border border-slate-200 px-1 py-1 text-center">
                             {renderOuterScoreCell(score1Tiet)}
                           </td>
                         )}
-                        {(isStudent || teacherOuterShowCk) && (
+                        {(isViewOnly || teacherOuterShowCk) && (
                           <td className="border border-slate-200 px-1 py-1 text-center">
                             {renderOuterScoreCell(scoreCuoiKi)}
                           </td>
@@ -2006,7 +1820,7 @@ const ExamScoreManagement = () => {
                         <td className="border border-slate-200 px-1 py-1 text-center font-semibold">
                           {renderOuterScoreCell(tbmVal)}
                         </td>
-                        {!isStudent && !isAdmin && (
+                        {!isViewOnly && !isAdmin && (
                           <td className="border border-slate-200 px-2 py-2">
                             <div className="flex items-center justify-center gap-2">
                               <button
@@ -2032,7 +1846,7 @@ const ExamScoreManagement = () => {
                               <button
                                 type="button"
                                 className="rounded-full bg-violet-100 px-3 py-1.5 text-xs font-semibold text-violet-700 hover:bg-violet-200 disabled:opacity-60"
-                                onClick={() => runAiStudentInsight(group)}
+                                onClick={() => runAiStudentInsight(group.student)}
                                 disabled={aiStudentLoading}
                                 title="AI phân tích theo học sinh (gửi PH nếu có môn < 5)"
                                 aria-label="AI phân tích học sinh"
@@ -2477,35 +2291,7 @@ const ExamScoreManagement = () => {
                 </div>
               )}
 
-              {(() => {
-                const analysis = aiStudentResult?.analysis;
-                const source = aiStudentResult?.source ?? analysis?.source;
-                const aiSuccess = aiStudentResult?.aiSuccess ?? analysis?.aiSuccess;
-                const aiError = aiStudentResult?.aiError ?? analysis?.aiError;
-
-                if (!source) return null;
-                const label = source === 'GEMINI' ? 'Gemini' : 'Local';
-                const reason = aiSuccess === false && aiError ? ` (${aiError})` : '';
-
-                return (
-                  <div
-                    style={{
-                      marginBottom: '0.75rem',
-                      fontSize: '0.85rem',
-                      color: '#64748b',
-                    }}
-                  >
-                    Nguồn: <strong>{label}</strong>
-                    {reason}
-                  </div>
-                );
-              })()}
-
-              {!aiStudentLoading && !aiStudentError && aiStudentResult && !aiStudentDisplayText ? (
-                <div style={{ color: '#64748b', fontSize: '0.9rem' }}>Không có nội dung phân tích để hiển thị.</div>
-              ) : null}
-
-              {aiStudentDisplayText ? (
+              {aiStudentResult?.analysis?.analysis ? (
                 <>
                   <div
                     style={{
@@ -2519,7 +2305,7 @@ const ExamScoreManagement = () => {
                       overflow: 'auto',
                     }}
                   >
-                    {aiStudentDisplayText}
+                    {aiStudentResult.analysis.analysis}
                   </div>
                   <div style={{ marginTop: '0.75rem', fontSize: '0.9rem', color: '#475569' }}>
                     {aiStudentResult.hasUnderAverage ? (
@@ -2541,4 +2327,3 @@ const ExamScoreManagement = () => {
 };
 
 export default ExamScoreManagement;
-
