@@ -30,6 +30,7 @@ const LeftSideBar = ({ user, onLogout }) => {
         if (roleName === "ADMIN") return "ADMIN";
         if (roleName === "TEACHER") return "TEACHER";
         if (roleName === "STUDENT") return "STUDENT";
+        if (roleName === "PARENT") return "PARENT";
 
         return "GUEST";
     };
@@ -46,8 +47,10 @@ const LeftSideBar = ({ user, onLogout }) => {
                 return "Giáo viên";
             case "STUDENT":
                 return "Học sinh";
+            case "PARENT":
+                return "Phụ huynh";
             default:
-                return "Người dùng";
+                return "Người dùng chưa đăng nhập";
         }
     };
 
@@ -88,11 +91,12 @@ const LeftSideBar = ({ user, onLogout }) => {
     };
 
     const menuItems = useMemo(() => {
+        const hasSelectedChild = !!localStorage.getItem('activeStudentId');
         const allMenuItems = [
             {
                 path: "/dashboard",
                 label: "Dashboard",
-                roles: ["SUPER_ADMIN", "ADMIN", "TEACHER", "STUDENT", "GUEST"],
+                roles: ["SUPER_ADMIN", "ADMIN", "TEACHER", "STUDENT", "PARENT", "GUEST"],
             },
 
             { path: "/schools", label: "Quản lý trường học", roles: ["SUPER_ADMIN"] },
@@ -115,24 +119,42 @@ const LeftSideBar = ({ user, onLogout }) => {
             { path: "/announcements", label: "Thông báo", roles: ["TEACHER"] },
 
             { path: "/profile", label: "Thông tin cá nhân", roles: ["STUDENT", "TEACHER"] },
-            { path: "/schedules", label: "Xem thời khóa biểu", roles: ["STUDENT"] },
-            { path: "/exam-scores", label: "Xem điểm", roles: ["STUDENT"] },
+            { path: "/schedules", label: "Xem thời khóa biểu", roles: ["STUDENT", "PARENT"] },
+            { path: "/exam-scores", label: "Xem điểm", roles: ["STUDENT", "PARENT"] },
             { path: "/assignments", label: "Bài tập", roles: ["STUDENT"] },
-            { path: "/announcements", label: "Thông báo", roles: ["STUDENT"] },
+            { path: "/announcements", label: "Thông báo", roles: ["STUDENT", "PARENT"] },
+            { path: "/attendance", label: "Xem điểm danh", roles: ["PARENT","STUDENT"] },
         ];
 
         return allMenuItems
-            .filter((item) => item.roles.includes(userRole))
+            .filter((item) => {
+                // 1. Kiểm tra quyền truy cập cơ bản theo Role
+                if (!item.roles.includes(userRole)) return false;
+
+                // 2. Nếu là PHỤ HUYNH và CHƯA chọn con em -> Ẩn các chức năng chi tiết của học sinh
+                if (userRole === "PARENT" && !hasSelectedChild) {
+                    const studentRelatedPaths = [
+                        "/schedules",
+                        "/exam-scores",
+                        "/announcements",
+                        "/attendance"
+                    ];
+                    // Chỉ cho phép xem Dashboard và Profile nếu chưa chọn con
+                    if (studentRelatedPaths.includes(item.path)) return false;
+                }
+
+                return true;
+            })
             .map((item) => ({
                 ...item,
                 Icon: iconByPath(item.path),
             }));
-    }, [userRole]);
+    }, [userRole, location.pathname]); // Thêm location.pathname để re-calculate khi chuyển hướng
 
     return (
         <aside className="!w-[280px] border-r border-slate-200 bg-slate-50 !px-5 !py-6 flex flex-col">
             {/* LOGO */}
-            <div className="flex items-center !gap-4 !mb-12">
+            <div className="flex items-center !gap-4 !mb-8">
                 <img
                     src={logo}
                     alt="logo"
@@ -152,10 +174,21 @@ const LeftSideBar = ({ user, onLogout }) => {
 
             {/* USER ROLE */}
             {user && (
-                <div className="!mb-8 text-center">
+                <div className="!mb-6 text-center border-b border-slate-200 pb-6">
                     <div className="font-bold text-slate-900">{user.fullName}</div>
-
                     <div className="text-slate-500 !text-sm">{getUserRoleLabel()}</div>
+
+                    {userRole === 'PARENT' && localStorage.getItem('activeStudentName') && (
+                        <div className="!mt-4 !p-3 bg-emerald-50 rounded-xl border border-emerald-100">
+                            <div className="!text-[10px] uppercase tracking-wider text-emerald-600 font-bold !mb-1">Đang xem con:</div>
+                            <div className="font-bold text-emerald-800 !text-sm !mb-2">
+                                {localStorage.getItem('activeStudentName')}
+                            </div>
+                            <Link to="/dashboard" className="!text-[11px] text-emerald-600 hover:underline font-bold">
+                                🔄 Đổi con khác
+                            </Link>
+                        </div>
+                    )}
                 </div>
             )}
 
@@ -204,7 +237,11 @@ const LeftSideBar = ({ user, onLogout }) => {
 
             {/* LOGOUT */}
             <button
-                onClick={onLogout}
+                onClick={() => {
+                    localStorage.removeItem('activeStudentId');
+                    localStorage.removeItem('activeStudentName');
+                    onLogout();
+                }}
                 className="
           !mt-12
           flex items-center justify-center !gap-2
@@ -226,4 +263,3 @@ const LeftSideBar = ({ user, onLogout }) => {
 };
 
 export default LeftSideBar;
-

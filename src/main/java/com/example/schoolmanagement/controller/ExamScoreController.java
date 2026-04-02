@@ -88,9 +88,10 @@ public class ExamScoreController {
         return ResponseEntity.ok(examScoreService.updateScoreLockStatus(schoolId, lockData));
     }
     
-     @PostMapping("/import")
+    @PostMapping("/import")
     public ResponseEntity<?> importExcel(
             @RequestParam("file") MultipartFile file,
+            @RequestHeader(value = "X-User-Id", required = false) Integer currentUserId,
             @RequestHeader(value = "X-User-Role", required = false) String role,
             @RequestHeader(value = "X-School-Id", required = false) Integer schoolId
     ) {
@@ -100,10 +101,14 @@ public class ExamScoreController {
             return ResponseEntity.badRequest().body(Map.of("message", "Thiếu X-School-Id"));
         }
 
-        if (!roleUpper.contains("ADMIN") && !roleUpper.contains("TEACHER")) {
-            return ResponseEntity.status(403).body(Map.of("message", "Forbidden"));
+        if (currentUserId == null) {
+            return ResponseEntity.badRequest().body(Map.of("message", "Thiếu X-User-Id"));
         }
 
-        return ResponseEntity.ok(importService.importExcel(file, schoolId));
+        if (!roleUpper.contains("TEACHER")) {
+            return ResponseEntity.status(403).body(Map.of("message", "Chỉ giáo viên mới có quyền import điểm"));
+        }
+
+        return ResponseEntity.ok(importService.importExcel(file, schoolId, currentUserId, roleUpper));
     }
 }

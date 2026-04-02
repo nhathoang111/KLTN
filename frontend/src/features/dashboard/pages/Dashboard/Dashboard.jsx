@@ -4,12 +4,15 @@ import SuperAdminDashboard from '../../../super-admin/pages/SuperAdminDashboard/
 import AdminDashboard from '../../../admin/pages/AdminDashboard/AdminDashboard';
 import TeacherDashboard from '../TeacherDashboard/TeacherDashboard';
 import StudentDashboard from '../StudentDashboard/StudentDashboard';
+import ParentDashboard from '../ParentDashboard/ParentDashboard';
 import './Dashboard.css';
 
 const Dashboard = () => {
   const { user, logout } = useAuth();
 
   const handleLogout = () => {
+    localStorage.removeItem('activeStudentId');
+    localStorage.removeItem('activeStudentName');
     logout();
     window.location.href = '/login';
   };
@@ -18,11 +21,12 @@ const Dashboard = () => {
   const getUserRole = () => {
     if (!user) return 'GUEST';
 
-    const roleName = user.role?.name;
+    const roleName = user.role?.name?.toUpperCase();
     if (roleName === 'SUPER_ADMIN') return 'SUPER_ADMIN';
     if (roleName === 'ADMIN') return 'ADMIN';
     if (roleName === 'TEACHER') return 'TEACHER';
     if (roleName === 'STUDENT') return 'STUDENT';
+    if (roleName === 'PARENT') return 'PARENT';
     return 'GUEST';
   };
 
@@ -38,6 +42,8 @@ const Dashboard = () => {
       return <TeacherDashboard />;
     case 'STUDENT':
       return <StudentDashboard />;
+    case 'PARENT':
+      return <ParentDashboard />;
     default:
       return (
         <div className="dashboard">
@@ -113,4 +119,3 @@ const Dashboard = () => {
 };
 
 export default Dashboard;
-
