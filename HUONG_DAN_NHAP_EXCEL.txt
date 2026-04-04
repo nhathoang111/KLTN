@@ -1,0 +1,35 @@
+ĐỊNH DẠNG FILE EXCEL NHẬP NGƯỜI DÙNG
+=====================================
+
+Tải file mẫu: Nút "Tải file mẫu" trên trang Quản lý người dùng (hoặc GET /api/users/import-template).
+
+Dòng 1 (bắt buộc) - Tiêu đề cột:
+  Email | Họ tên | Mật khẩu | Vai trò | Mã trường | Mã lớp | Ngày sinh | Giới tính | SĐT | Phòng ban | Quan hệ | Bộ môn (nhiều) | Email con (nhiều)
+
+Cột bắt buộc:
+  - Email:      Bắt buộc, không trùng trong hệ thống.
+  - Họ tên:     Bắt buộc.
+  - Mật khẩu:   Nếu để trống sẽ dùng mặc định Password@123
+  - Vai trò:    STUDENT, TEACHER hoặc PARENT (phải tồn tại role tương ứng của trường).
+  - Mã trường:  ID trường (số). Admin đăng nhập có thể để trống → dùng trường của admin.
+
+Cột theo vai trò:
+  - Mã lớp:     Chỉ dùng cho STUDENT (ID lớp). TEACHER/PARENT để trống.
+
+Cột tùy chọn (dùng chung hoặc theo role):
+  - Ngày sinh:  Định dạng YYYY-MM-DD (vd: 2010-05-15). Thường dùng cho học sinh.
+  - Giới tính:  Nam / Nữ / Khác.
+  - SĐT:        Số điện thoại.
+  - Phòng ban:  Thường dùng cho giáo viên (vd: Tổ Toán).
+  - Quan hệ:    Thường dùng cho phụ huynh: Cha / Mẹ / Khác.
+
+Cột đặc thù:
+  - Bộ môn (nhiều): Chỉ cho TEACHER. Nhiều môn cách nhau bởi dấu phẩy hoặc chấm phẩy (vd: Toán, Lý hoặc Toán; Lý). Ghi tên môn hoặc mã môn theo danh sách môn của trường.
+  - Email con (nhiều): Chỉ cho PARENT. Nhiều email học sinh cách nhau bởi dấu phẩy hoặc chấm phẩy (vd: hs1@school.vn, hs2@school.vn). Học sinh phải tồn tại, cùng trường với phụ huynh.
+
+Ví dụ:
+  - Học sinh:  email | Họ tên | Password@123 | STUDENT | 1 | 1 | 2010-05-15 | Nam | | | | |
+  - Giáo viên: email | Họ tên | Password@123 | TEACHER | 1 | | | Nữ | 0912345678 | Tổ Toán | | Toán, Lý |
+  - Phụ huynh: email | Họ tên | Password@123 | PARENT | 1 | | | | 0987654321 | | Cha | | hocsinh1@school.edu.vn
+
+Lưu ý: Mã trường, Mã lớp, Bộ môn, Email con phải tồn tại trong hệ thống và đúng trường.
