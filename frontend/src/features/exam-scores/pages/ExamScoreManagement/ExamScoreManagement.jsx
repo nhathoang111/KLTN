@@ -2456,7 +2456,7 @@ const ExamScoreManagement = () => {
                 </div>
               )}
 
-              {aiStudentResult?.analysis?.analysis ? (
+              {aiStudentResult?.analysis ? (
                 <>
                   <div
                     style={{
@@ -2470,8 +2470,34 @@ const ExamScoreManagement = () => {
                       overflow: 'auto',
                     }}
                   >
-                    {aiStudentResult.analysis.analysis}
+                    {(() => {
+                      const a = aiStudentResult.analysis || {};
+                      // Backward/forward compatibility: if BE ever returns raw text at analysis.analysis
+                      const raw = a.analysis;
+                      if (typeof raw === 'string' && raw.trim()) return raw;
+
+                      const summary = a.summary || aiStudentResult.summary || '';
+                      const under = a.underAverageSubjects || aiStudentResult.underAverageSubjects || [];
+                      const trend = a.trend || aiStudentResult.trend || '';
+                      const rec = a.recommendations || aiStudentResult.recommendations || [];
+                      const risk = a.riskLevel || aiStudentResult.riskLevel || '';
+
+                      const lines = [];
+                      if (summary) lines.push(`Tóm tắt:\n${summary}`);
+                      if (under && under.length) lines.push(`\nMôn dưới trung bình:\n${under.join(', ')}`);
+                      if (trend) lines.push(`\nXu hướng:\n${trend}`);
+                      if (rec && rec.length) lines.push(`\nKhuyến nghị:\n${rec.slice(0, 3).map((x) => `- ${x}`).join('\n')}`);
+                      if (risk) lines.push(`\nMức rủi ro:\n${risk}`);
+                      return lines.join('\n').trim() || 'Không có nội dung phân tích.';
+                    })()}
                   </div>
+
+                  {aiStudentResult?.analysis?.source === 'GEMINI' && aiStudentResult?.analysis?.aiSuccess === true ? (
+                    <div style={{ marginTop: '0.5rem', fontSize: '0.85rem', color: '#64748b' }}>
+                      Nguồn: <strong style={{ color: '#0f172a' }}>GEMINI</strong>
+                    </div>
+                  ) : null}
+
                   <div style={{ marginTop: '0.75rem', fontSize: '0.9rem', color: '#475569' }}>
                     {aiStudentResult.hasUnderAverage ? (
                       <div>

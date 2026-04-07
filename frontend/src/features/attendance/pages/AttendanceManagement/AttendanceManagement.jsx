@@ -192,13 +192,11 @@ const AttendanceManagement = () => {
     setItems((prev) => prev.map((it) => (it.studentId === studentId ? { ...it, status } : it)));
   };
 
-  const updateStatusFromCheckbox = (studentId, statusValue, checked) => {
-    // Checkbox đóng vai trò "chọn 1 trong 4 trạng thái" (tương đương radio).
-    // Nếu người dùng bỏ tick checkbox đang chọn thì mặc định quay về PRESENT.
+  const togglePresent = (studentId, checked) => {
     setItems((prev) =>
       prev.map((it) => {
         if (it.studentId !== studentId) return it;
-        return { ...it, status: checked ? statusValue : "PRESENT" };
+        return { ...it, status: checked ? "PRESENT" : "ABSENT" };
       })
     );
   };
@@ -252,12 +250,6 @@ const AttendanceManagement = () => {
       </div>
     );
   }
-
-  const statusOptions = [
-    { value: 'PRESENT', label: 'Có mặt' },
-    { value: 'ABSENT', label: 'Vắng' },
-    { value: 'LATE', label: 'Muộn' },
-  ];
 
   return (
     <div className="min-h-screen bg-slate-100 px-4 py-6">
@@ -371,18 +363,22 @@ const AttendanceManagement = () => {
                     <td className="px-4 py-3 font-medium">{it.fullName || '—'}</td>
                     <td className="px-4 py-3 text-slate-600">{it.email || '—'}</td>
                     <td className="px-4 py-3">
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', alignItems: 'center' }}>
-                        {statusOptions.map((o) => (
-                          <label key={o.value} style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: canEdit ? 'pointer' : 'not-allowed' }}>
-                            <input
-                              type="checkbox"
-                              checked={(it.status || 'PRESENT') === o.value}
-                              onChange={(e) => updateStatusFromCheckbox(it.studentId, o.value, e.target.checked)}
-                              disabled={!canEdit}
-                            />
-                            <span style={{ fontSize: '0.85rem', color: '#0f172a' }}>{o.label}</span>
-                          </label>
-                        ))}
+                      <div className="inline-flex items-center gap-3">
+                        <label className={`relative inline-flex items-center ${canEdit ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'}`}>
+                          <input
+                            type="checkbox"
+                            className="sr-only peer"
+                            checked={String(it.status || 'PRESENT').toUpperCase() !== 'ABSENT'}
+                            onChange={(e) => togglePresent(it.studentId, e.target.checked)}
+                            disabled={!canEdit}
+                            aria-label="Bật: có mặt, tắt: vắng"
+                          />
+                          <span className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-emerald-300 rounded-full peer peer-checked:bg-emerald-500 transition-colors" />
+                          <span className="absolute left-1 top-1 h-4 w-4 bg-white rounded-full transition-transform peer-checked:translate-x-5" />
+                        </label>
+                        <span className="text-[0.85rem] font-semibold text-slate-900">
+                          {String(it.status || 'PRESENT').toUpperCase() === 'ABSENT' ? 'Vắng' : 'Có mặt'}
+                        </span>
                       </div>
                     </td>
                     <td className="px-4 py-3">
