@@ -1,0 +1,190 @@
+═══════════════════════════════════════════════════════════════════════════════
+                        GITHUB / GIT - CÁC LỆNH CƠ BẢN VÀ NÂNG CAO
+═══════════════════════════════════════════════════════════════════════════════
+
+1. CẤU HÌNH BAN ĐẦU
+───────────────────────────────────────────────────────────────────────────────
+git config --global user.name "Tên của bạn"
+git config --global user.email "email@example.com"
+git config --list                           # Xem cấu hình hiện tại
+
+2. TẠO & CLONE REPOSITORY
+───────────────────────────────────────────────────────────────────────────────
+git init                                    # Tạo repo trống
+git clone <url>                             # Clone một repo từ GitHub
+git clone <url> <tên_folder>                # Clone vào folder cụ thể
+
+3. KIỂM TRA TRẠNG THÁI
+───────────────────────────────────────────────────────────────────────────────
+git status                                  # Xem trạng thái working directory
+git log                                     # Xem lịch sử commits
+git log --oneline                           # Xem log gọn
+git log --graph --all --oneline             # Xem graph các branch
+git diff                                    # Xem thay đổi chưa staged
+git diff --staged                           # Xem thay đổi đã staged
+
+4. THÊM & COMMIT THAY ĐỔI
+───────────────────────────────────────────────────────────────────────────────
+git add <file>                              # Thêm file vào staging area
+git add .                                   # Thêm tất cả files
+git commit -m "Nội dung commit"             # Commit với message
+git commit -am "Nội dung"                   # Add + Commit tất cả files tracked
+git commit --amend                          # Chỉnh sửa commit cuối cùng
+
+5. PUSH & PULL
+───────────────────────────────────────────────────────────────────────────────
+git push                                    # Push commits lên remote
+git push origin <branch>                    # Push nhánh cụ thể
+git push -u origin <branch>                 # Push & set upstream
+git pull                                    # Fetch + Merge từ remote
+git fetch                                   # Chỉ fetch, không merge
+git pull --rebase                           # Pull với rebase thay vì merge
+
+6. BRANCH - QUẢN LÝ NHÁNH
+───────────────────────────────────────────────────────────────────────────────
+git branch                                  # Xem danh sách branch cục bộ
+git branch -a                               # Xem tất cả branch (local + remote)
+git branch <tên_branch>                     # Tạo branch mới
+git checkout <tên_branch>                   # Chuyển sang branch
+git switch <tên_branch>                     # Chuyển sang branch (mới hơn)
+git checkout -b <tên_branch>                # Tạo & chuyển sang branch mới
+git switch -c <tên_branch>                  # Tạo & chuyển sang (mới hơn)
+git branch -d <tên_branch>                  # Xóa branch
+git branch -D <tên_branch>                  # Xóa branch (bắt buộc)
+git merge <tên_branch>                      # Merge branch vào branch hiện tại
+
+7. STASH - LƯU TẠM THAY ĐỔI
+───────────────────────────────────────────────────────────────────────────────
+git stash                                   # Lưu tạm thay đổi
+git stash save "Tên stash"                  # Lưu tạm với tên
+git stash list                              # Xem danh sách stash
+git stash pop                               # Lấy stash mới nhất & xóa
+git stash apply                             # Áp dụng stash mới nhất (không xóa)
+git stash apply stash@{0}                   # Áp dụng stash cụ thể
+git stash drop                              # Xóa stash mới nhất
+git stash clear                             # Xóa tất cả stash
+
+8. RESET & REVERT - HOÀN TỬC THAY ĐỔI
+───────────────────────────────────────────────────────────────────────────────
+git restore <file>                          # Hoàn tác thay đổi của file (before staged)
+git restore --staged <file>                 # Bỏ file khỏi staging area
+git reset <file>                            # Bỏ file khỏi staging area
+git reset --soft HEAD~1                     # Hoàn tác commit mới nhất (giữ thay đổi)
+git reset --mixed HEAD~1                    # Hoàn tác commit & staging
+git reset --hard HEAD~1                     # Hoàn tác commit (XÓA thay đổi)
+git revert <commit_hash>                    # Tạo commit mới để revert
+git clean -fd                               # Xóa untracked files & folders
+
+9. REBASE & CHERRY-PICK
+───────────────────────────────────────────────────────────────────────────────
+git rebase <branch>                         # Rebase branch hiện tại
+git rebase -i HEAD~3                        # Interactive rebase 3 commit gần đây
+git cherry-pick <commit_hash>               # Áp dụng commit khác vào branch
+
+10. REMOTE - QUẢN LÝ KHO REMOTE
+───────────────────────────────────────────────────────────────────────────────
+git remote                                  # Xem danh sách remote
+git remote -v                               # Xem chi tiết remote (URL)
+git remote add <tên> <url>                  # Thêm remote mới
+git remote remove <tên>                     # Xóa remote
+git remote rename <cũ> <mới>                # Đổi tên remote
+git remote set-url origin <url_mới>         # Đổi URL remote
+
+11. TAG - ĐẶT CỜ CHO COMMITS
+───────────────────────────────────────────────────────────────────────────────
+git tag                                     # Xem danh sách tag
+git tag <tên_tag>                           # Tạo tag cho commit hiện tại
+git tag <tên_tag> <commit_hash>             # Tạo tag cho commit cụ thể
+git push origin <tên_tag>                   # Push tag lên
+git push origin --tags                      # Push tất cả tags
+git tag -d <tên_tag>                        # Xóa tag cục bộ
+git push origin --delete <tên_tag>          # Xóa tag trên remote
+
+12. SEARCH & FIND
+───────────────────────────────────────────────────────────────────────────────
+git log --grep="keyword"                    # Tìm kiếm trong commit message
+git log -S "code"                           # Tìm kiếm code thay đổi
+git blame <file>                            # Xem ai thay đổi từng dòng
+git show <commit_hash>                      # Xem chi tiết commit
+git show <commit_hash>:<file>               # Xem file ở commit cụ thể
+
+13. REWRITE HISTORY
+───────────────────────────────────────────────────────────────────────────────
+git filter-branch                           # Rewrite git history (cẩn thận!)
+git reflog                                  # Xem tất cả thay đổi HEAD
+
+14. CREDENTIALS - LƯUẬT THÔNG TIN ĐĂNG NHẬP
+───────────────────────────────────────────────────────────────────────────────
+git config --global credential.helper store # Lưu credentials (không an toàn)
+git config --global credential.helper cache # Lưu credentials tạm thời
+git config --global credential.helper wincred # Windows credential manager
+
+15. MERGE CONFLICTS - GIẢI QUYẾT XUNG ĐỘT
+───────────────────────────────────────────────────────────────────────────────
+# Khi merge xảy ra conflict:
+# 1. Mở file conflict, sửa chỗ có <<<<<<, ======, >>>>>>
+# 2. Chọn phần code cần giữ
+git add <file>
+git commit -m "Resolved merge conflict"
+# HOẶC:
+git merge --abort                           # Hủy merge
+
+16. PULL REQUEST / MERGE REQUEST (GitHub Web)
+───────────────────────────────────────────────────────────────────────────────
+# Các bước tạo PR:
+1. Tạo branch mới: git checkout -b feature/new-feature
+2. Commit thay đổi: git commit -am "Add new feature"
+3. Push: git push -u origin feature/new-feature
+4. Vào GitHub → New Pull Request
+5. Chọn base (main/master) và compare (feature branch)
+6. Mô tả thay đổi, click "Create Pull Request"
+
+17. WORKFLOW THỰC TẾ
+───────────────────────────────────────────────────────────────────────────────
+# Scenario 1: Lấy code mới nhất & commit thay đổi
+git pull origin main
+git checkout -b feature/new-feature
+# ... sửa code ...
+git add .
+git commit -m "Implement new feature"
+git push -u origin feature/new-feature
+# Rồi tạo PR trên GitHub
+
+# Scenario 2: Có thay đổi chưa commit, cần chuyển branch
+git stash
+git checkout other-branch
+git switch another-branch
+# ... làm việc ...
+git push
+git checkout feature-branch
+git stash pop
+
+# Scenario 3: Merge branch vào main
+git checkout main
+git pull origin main
+git merge feature-branch
+git push origin main
+
+18. LỆNH GIÚP ĐỠ
+───────────────────────────────────────────────────────────────────────────────
+git help                                    # Xem trợ giúp
+git help <command>                          # Xem trợ giúp lệnh cụ thể
+git <command> --help                        # Xem chi tiết lệnh
+
+═══════════════════════════════════════════════════════════════════════════════
+                            MẸO & BEST PRACTICES
+═══════════════════════════════════════════════════════════════════════════════
+
+✓ Luôn pull trước khi push
+✓ Commit thường xuyên với message rõ ràng
+✓ Tránh commit trực tiếp lên main/master, dùng branch
+✓ Xóa branch sau khi merge
+✓ Sử dụng .gitignore để bỏ qua files không cần thiết
+✓ Không commit passwords, API keys, sensitive data
+✓ Viết commit message tốt:
+  - Format: "Action: Description"
+  - Ví dụ: "Fix: Correct login validation error"
+  - Ví dụ: "Feature: Add user profile page"
+  - Ví dụ: "Docs: Update README"
+
+═══════════════════════════════════════════════════════════════════════════════
