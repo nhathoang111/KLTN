@@ -21,6 +21,7 @@ const AttendanceManagement = () => {
 
   const [selectedClassId, setSelectedClassId] = useState("");
   const [selectedClassSectionId, setSelectedClassSectionId] = useState("");
+  const [studentClassId, setStudentClassId] = useState(null);
   const [date, setDate] = useState(() => {
     const d = new Date();
     const yyyy = d.getFullYear();
@@ -32,18 +33,72 @@ const AttendanceManagement = () => {
   const [items, setItems] = useState([]); // AttendanceItemDto list
   const classIdNum = useMemo(() => (selectedClassId ? Number(selectedClassId) : null), [selectedClassId]);
 
+  const getRowStudentId = useCallback((row) => {
+    const v = row?.studentId ?? row?.student_id ?? row?.userId ?? row?.user_id ?? row?.id;
+    if (v == null) return null;
+    const n = Number(v);
+    return Number.isNaN(n) ? String(v) : n;
+  }, []);
+
+  // STUDENT: xác định lớp từ enrollment giống dashboard/profile
+  useEffect(() => {
+    const resolveStudentClassId = async () => {
+      if (!isStudent || !user?.id) {
+        setStudentClassId(null);
+        return;
+      }
+      try {
+        // ưu tiên nếu user đã có class
+        let cId = user?.class?.id ?? null;
+        if (!cId) {
+          const enrRes = await api.get(`/users/${user.id}/enrollment`);
+          const enr = enrRes.data?.enrollment;
+          if (enr?.classId) cId = enr.classId;
+        }
+        setStudentClassId(cId ? Number(cId) : null);
+      } catch {
+        setStudentClassId(null);
+      }
+    };
+    resolveStudentClassId();
+  }, [isStudent, user?.id]);
+
   useEffect(() => {
     const fetchClasses = async () => {
       try {
         setLoading(true);
         setError("");
-        const res = await api.get("/classes");
-        let allClasses = res.data.classes || [];
-        const userRole = user?.role?.name?.toUpperCase();
-        if ((userRole === "ADMIN" || userRole === "TEACHER") && user?.school?.id) {
-          allClasses = allClasses.filter((c) => c.school?.id === user.school.id);
+        // STUDENT: chỉ hiển thị đúng lớp của học sinh, không ảnh hưởng role khác
+        if (isStudent) {
+          if (!studentClassId) {
+            setClasses([]);
+            setSelectedClassId("");
+            setSelectedClassSectionId("");
+            setItems([]);
+            return;
+          }
+          try {
+            const classRes = await api.get(`/classes/${studentClassId}`);
+            const raw = classRes.data?.class ?? classRes.data;
+            setClasses(raw ? [raw] : []);
+            setSelectedClassId(String(studentClassId));
+          } catch {
+            // fallback: nếu không có endpoint /classes/:id thì vẫn gọi /classes và lọc
+            const res = await api.get("/classes");
+            const all = res.data.classes || [];
+            const filtered = all.filter((c) => String(c.id) === String(studentClassId));
+            setClasses(filtered);
+            setSelectedClassId(String(studentClassId));
+          }
+        } else {
+          const res = await api.get("/classes");
+          let allClasses = res.data.classes || [];
+          const userRole = user?.role?.name?.toUpperCase();
+          if ((userRole === "ADMIN" || userRole === "TEACHER") && user?.school?.id) {
+            allClasses = allClasses.filter((c) => c.school?.id === user.school.id);
+          }
+          setClasses(allClasses);
         }
-        setClasses(allClasses);
       } catch (e) {
         setError("Không tải được danh sách lớp.");
       } finally {
@@ -51,7 +106,7 @@ const AttendanceManagement = () => {
       }
     };
     fetchClasses();
-  }, [user]);
+  }, [user, isStudent, studentClassId]);
 
   useEffect(() => {
     const fetchSections = async () => {
@@ -73,12 +128,17 @@ const AttendanceManagement = () => {
         }
 
         setClassSections(list);
+
+        // STUDENT: auto chọn lớp học phần đầu tiên để khỏi phải thao tác nhiều
+        if (isStudent && (list || []).length > 0) {
+          setSelectedClassSectionId((prev) => (prev ? prev : String(list[0].id)));
+        }
       } catch (e) {
         setError("Không tải được danh sách lớp học phần.");
       }
     };
     fetchSections();
-  }, [classIdNum, user?.id, userRole]);
+  }, [classIdNum, user?.id, userRole, isStudent]);
 
   const selectedClassSection = useMemo(() => {
     if (!selectedClassSectionId) return null;
@@ -101,9 +161,9 @@ const AttendanceManagement = () => {
       const activeStudentId = localStorage.getItem('activeStudentId');
       // Nếu là Phụ huynh, chỉ giữ lại đúng con mình trong danh sách
       if (isParent && activeStudentId) {
-        roster = roster.filter(it => String(it.studentId) === String(activeStudentId));
+        roster = roster.filter((it) => String(getRowStudentId(it)) === String(activeStudentId));
       } else if (isStudent && user?.id) {
-        roster = roster.filter(it => String(it.studentId) === String(user.id));
+        roster = roster.filter((it) => String(getRowStudentId(it)) === String(user.id));
       }
       setItems(roster);
     } catch (e) {
@@ -112,7 +172,7 @@ const AttendanceManagement = () => {
     } finally {
       setLoadingRoster(false);
     }
-  }, [date, selectedClassSectionId]);
+  }, [date, selectedClassSectionId, getRowStudentId, isParent, isStudent, user?.id]);
 
   useEffect(() => {
     loadRoster();

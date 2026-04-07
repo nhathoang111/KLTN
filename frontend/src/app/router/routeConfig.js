@@ -44,7 +44,7 @@ export const protectedRoutes = [
   { path: "documents", Component: DocumentListPage, roles: ["SUPER_ADMIN", "ADMIN"] },
   { path: "announcements", Component: AnnouncementListPage, roles: ["SUPER_ADMIN", "ADMIN", "TEACHER", "STUDENT", "PARENT"] },
   { path: "exam-scores", Component: ExamScoreManagement, roles: ["SUPER_ADMIN", "ADMIN", "TEACHER", "STUDENT", "PARENT"] },
-  { path: "attendance", Component: AttendanceManagement, roles: ["SUPER_ADMIN", "ADMIN", "TEACHER", "PARENT"] },
+  { path: "attendance", Component: AttendanceManagement, roles: ["SUPER_ADMIN", "ADMIN", "TEACHER", "STUDENT", "PARENT"] },
   { path: "records", Component: RecordListPage, roles: ["SUPER_ADMIN", "ADMIN"] },
   { path: "schedules", Component: ScheduleListPage, roles: ["SUPER_ADMIN", "ADMIN", "TEACHER", "STUDENT", "PARENT"] },
   { path: "profile", Component: ProfilePageWrapper, roles: ["STUDENT", "TEACHER"] },
