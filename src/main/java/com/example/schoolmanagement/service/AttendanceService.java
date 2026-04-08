@@ -128,7 +128,7 @@ public class AttendanceService {
                         s.getId(),
                         s.getFullName(),
                         s.getEmail(),
-                        "PRESENT",
+                        null,
                         null
                 ));
             }

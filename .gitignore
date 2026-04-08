@@ -45,4 +45,4 @@ frontend/node_modules/
 node_modules/
 frontend/node_modules/.vite/
 dist/
-src/main/resources/application.properties
+src/main/resources/

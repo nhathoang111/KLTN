@@ -31,6 +31,11 @@ const AttendanceManagement = () => {
   });
 
   const [items, setItems] = useState([]); // AttendanceItemDto list
+  // Trạng thái lựa chọn trên UI (tri-state):
+  // - null: chưa điểm danh (chưa chốt)
+  // - true: PRESENT
+  // - false: ABSENT
+  const [selectionByStudentId, setSelectionByStudentId] = useState({});
   const classIdNum = useMemo(() => (selectedClassId ? Number(selectedClassId) : null), [selectedClassId]);
 
   const getRowStudentId = useCallback((row) => {
@@ -166,6 +171,21 @@ const AttendanceManagement = () => {
         roster = roster.filter((it) => String(getRowStudentId(it)) === String(user.id));
       }
       setItems(roster);
+      // init selection state from backend status
+      const map = {};
+      (roster || []).forEach((it) => {
+        const sid = it?.studentId;
+        const raw = it?.status == null ? null : String(it.status).toUpperCase();
+        if (sid == null) return;
+        if (raw === 'PRESENT') map[sid] = true;
+        else if (raw === 'ABSENT') map[sid] = false;
+        else if (raw == null) map[sid] = null;
+        else {
+          // LATE/EXCUSED/...: hiện tại UI không thao tác; map về "đã điểm danh" (coi như có mặt)
+          map[sid] = true;
+        }
+      });
+      setSelectionByStudentId(map);
     } catch (e) {
       const msg = e?.response?.data?.error || e?.message;
       setError(msg ? String(msg) : "Không tải được dữ liệu điểm danh.");
@@ -182,9 +202,16 @@ const AttendanceManagement = () => {
     setItems((prev) =>
       prev.map((it) => ({
         ...it,
-        status: "PRESENT",
+        status: it.status, // giữ nguyên dữ liệu gốc; trạng thái hiển thị/lưu dùng selectionByStudentId
       }))
     );
+    setSelectionByStudentId((prev) => {
+      const next = { ...(prev || {}) };
+      (items || []).forEach((it) => {
+        if (it?.studentId != null) next[it.studentId] = true;
+      });
+      return next;
+    });
     setMessage("Đã đánh dấu tất cả có mặt (chưa lưu).");
   };
 
@@ -193,12 +220,10 @@ const AttendanceManagement = () => {
   };
 
   const togglePresent = (studentId, checked) => {
-    setItems((prev) =>
-      prev.map((it) => {
-        if (it.studentId !== studentId) return it;
-        return { ...it, status: checked ? "PRESENT" : "ABSENT" };
-      })
-    );
+    setSelectionByStudentId((prev) => ({
+      ...(prev || {}),
+      [studentId]: checked ? true : false,
+    }));
   };
 
   const updateNote = (studentId, note) => {
@@ -221,11 +246,26 @@ const AttendanceManagement = () => {
       const payload = {
         classSectionId: Number(selectedClassSectionId),
         attendanceDate: date,
-        items: items.map((it) => ({
-          studentId: it.studentId,
-          status: it.status,
-          note: it.note || null,
-        })),
+        // Chỉ gửi những học sinh đã được giáo viên chọn PRESENT/ABSENT.
+        // status=null (chưa điểm danh) sẽ KHÔNG bị ngầm map thành PRESENT/ABSENT.
+        items: items
+          .filter((it) => {
+            const sid = it?.studentId;
+            if (sid == null) return false;
+            const sel = Object.prototype.hasOwnProperty.call(selectionByStudentId || {}, sid)
+              ? selectionByStudentId[sid]
+              : null;
+            return sel === true || sel === false;
+          })
+          .map((it) => {
+            const sid = it.studentId;
+            const sel = selectionByStudentId[sid];
+            return {
+              studentId: sid,
+              status: sel === true ? "PRESENT" : "ABSENT",
+              note: it.note || null,
+            };
+          }),
       };
       const res = await api.post("/attendance/bulk", payload);
       setMessage(`Đã lưu điểm danh (${res.data.savedCount || 0} bản ghi).`);
@@ -363,23 +403,46 @@ const AttendanceManagement = () => {
                     <td className="px-4 py-3 font-medium">{it.fullName || '—'}</td>
                     <td className="px-4 py-3 text-slate-600">{it.email || '—'}</td>
                     <td className="px-4 py-3">
-                      <div className="inline-flex items-center gap-3">
-                        <label className={`relative inline-flex items-center ${canEdit ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'}`}>
-                          <input
-                            type="checkbox"
-                            className="sr-only peer"
-                            checked={String(it.status || 'PRESENT').toUpperCase() !== 'ABSENT'}
-                            onChange={(e) => togglePresent(it.studentId, e.target.checked)}
-                            disabled={!canEdit}
-                            aria-label="Bật: có mặt, tắt: vắng"
-                          />
-                          <span className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-emerald-300 rounded-full peer peer-checked:bg-emerald-500 transition-colors" />
-                          <span className="absolute left-1 top-1 h-4 w-4 bg-white rounded-full transition-transform peer-checked:translate-x-5" />
-                        </label>
-                        <span className="text-[0.85rem] font-semibold text-slate-900">
-                          {String(it.status || 'PRESENT').toUpperCase() === 'ABSENT' ? 'Vắng' : 'Có mặt'}
-                        </span>
-                      </div>
+                      {(() => {
+                        const sid = it?.studentId;
+                        const sel = sid != null && Object.prototype.hasOwnProperty.call(selectionByStudentId || {}, sid)
+                          ? selectionByStudentId[sid]
+                          : null;
+                        const isUnmarked = sel == null;
+                        const checked = sel === true;
+                        const label = isUnmarked ? 'Chưa điểm danh' : (sel === false ? 'Vắng' : 'Có mặt');
+                        const labelClass = isUnmarked ? 'text-slate-500' : 'text-slate-900';
+                        return (
+                          <div className="inline-flex items-center gap-3">
+                            <label className={`relative inline-flex items-center ${canEdit ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'}`}>
+                              <input
+                                type="checkbox"
+                                className="sr-only peer"
+                                checked={checked}
+                                ref={(el) => {
+                                  // Tri-state: indeterminate khi chưa điểm danh
+                                  if (el) el.indeterminate = isUnmarked;
+                                }}
+                                onChange={(e) => togglePresent(it.studentId, e.target.checked)}
+                                disabled={!canEdit}
+                                aria-label="Bật: có mặt, tắt: vắng"
+                              />
+                              <span
+                                className={[
+                                  "w-11 h-6 rounded-full transition-colors peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-emerald-300",
+                                  isUnmarked ? "bg-slate-200" : "",
+                                  "peer-checked:bg-emerald-500",
+                                  // khi indeterminate thì không có peer-checked, giữ màu xám
+                                ].join(" ")}
+                              />
+                              <span className="absolute left-1 top-1 h-4 w-4 bg-white rounded-full transition-transform peer-checked:translate-x-5" />
+                            </label>
+                            <span className={`text-[0.85rem] font-semibold ${labelClass}`}>
+                              {label}
+                            </span>
+                          </div>
+                        );
+                      })()}
                     </td>
                     <td className="px-4 py-3">
                       <input
