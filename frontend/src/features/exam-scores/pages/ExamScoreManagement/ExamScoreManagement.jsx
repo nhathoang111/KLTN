@@ -2458,6 +2458,21 @@ const ExamScoreManagement = () => {
 
               {aiStudentResult?.analysis ? (
                 <>
+                  {(() => {
+                    const analysis = aiStudentResult.analysis || {};
+                    const source = analysis.source || aiStudentResult.source;
+                    if (!source) return null;
+                    const aiSuccess = analysis.aiSuccess ?? aiStudentResult.aiSuccess;
+                    const aiError = analysis.aiError || aiStudentResult.aiError;
+                    const label = source === 'GEMINI' ? 'Gemini' : 'Hệ thống / dự phòng';
+                    const reason = aiSuccess === false && aiError ? ` (${aiError})` : '';
+                    return (
+                      <div style={{ marginBottom: '0.5rem', fontSize: '0.85rem', color: '#64748b' }}>
+                        Nguồn phần mềm: <strong style={{ color: '#0f172a' }}>{label}</strong>{reason}
+                      </div>
+                    );
+                  })()}
+
                   <div
                     style={{
                       padding: '0.75rem',
@@ -2491,12 +2506,6 @@ const ExamScoreManagement = () => {
                       return lines.join('\n').trim() || 'Không có nội dung phân tích.';
                     })()}
                   </div>
-
-                  {aiStudentResult?.analysis?.source === 'GEMINI' && aiStudentResult?.analysis?.aiSuccess === true ? (
-                    <div style={{ marginTop: '0.5rem', fontSize: '0.85rem', color: '#64748b' }}>
-                      Nguồn: <strong style={{ color: '#0f172a' }}>GEMINI</strong>
-                    </div>
-                  ) : null}
 
                   <div style={{ marginTop: '0.75rem', fontSize: '0.9rem', color: '#475569' }}>
                     {aiStudentResult.hasUnderAverage ? (

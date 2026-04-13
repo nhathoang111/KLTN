@@ -43,6 +43,11 @@ public class EntityExtractionService {
             out.student = resolveStudentByName(schoolId, studentNameRaw);
         }
 
+        String teacherNameRaw = rawEntities.get("teacherName");
+        if (teacherNameRaw != null && !teacherNameRaw.isBlank() && schoolId != null) {
+            out.teacher = resolveTeacherCandidate(schoolId, teacherNameRaw, rawEntities);
+        }
+
         out.raw = new HashMap<>(rawEntities);
         return out;
     }
@@ -130,6 +135,72 @@ public class EntityExtractionService {
         throw new BadRequestException("Không tìm thấy học sinh \"" + studentNameRaw + "\" trong trường.");
     }
 
+    private User resolveTeacherCandidate(Integer schoolId, String teacherNameRaw, Map<String, String> rawEntities) {
+        // If intent is homeroom lookup and class was extracted, teacher should NOT be pre-filled.
+        String intent = rawEntities != null ? rawEntities.get("_intent") : null;
+        String className = rawEntities != null ? rawEntities.get("className") : null;
+        if ((equalsAny(intent, "HOMEROOM_LOOKUP", "ASK_HOMEROOM_TEACHER")) && className != null && !className.isBlank()) {
+            return null;
+        }
+
+        String candidate = teacherNameRaw == null ? "" : teacherNameRaw.trim();
+        if (candidate.isBlank()) return null;
+        if (isQuestionPhrase(candidate)) return null;
+        if (!looksLikePersonName(candidate)) return null;
+
+        List<User> teachers = userRepository.findBySchoolIdAndRoleName(schoolId, "%TEACHER%");
+        if (teachers == null || teachers.isEmpty()) return null;
+        String want = norm(teacherNameRaw);
+        List<User> exact = teachers.stream()
+                .filter(Objects::nonNull)
+                .filter(u -> u.getFullName() != null)
+                .filter(u -> norm(u.getFullName()).equals(want))
+                .toList();
+        if (exact.size() == 1) return exact.get(0);
+        if (exact.size() > 1) return null;
+        List<User> contains = teachers.stream()
+                .filter(Objects::nonNull)
+                .filter(u -> u.getFullName() != null)
+                .filter(u -> norm(u.getFullName()).contains(want))
+                .toList();
+        if (contains.size() == 1) return contains.get(0);
+        return null;
+    }
+
+    private boolean isQuestionPhrase(String text) {
+        String n = norm(text);
+        if (n.isBlank()) return true;
+        if (n.equals("ai") || n.equals("nao") || n.equals("giao vien nao")) return true;
+        return n.contains(" ai ") || n.endsWith(" ai") || n.contains(" nao ") || n.endsWith(" nao")
+                || n.contains("do giao vien nao") || n.contains("ai la giao vien");
+    }
+
+    private boolean looksLikePersonName(String text) {
+        String trimmed = text == null ? "" : text.trim();
+        if (trimmed.isBlank()) return false;
+        String n = norm(trimmed);
+        if (isQuestionPhrase(n)) return false;
+        if (n.matches(".*\\d.*")) return false;
+        String[] parts = trimmed.split("\\s+");
+        if (parts.length < 2 || parts.length > 6) return false;
+        for (String p : parts) {
+            if (p.length() < 2) return false;
+            String pn = norm(p);
+            if (pn.isBlank()) return false;
+            if (equalsAny(pn, "giao", "vien", "co", "thay", "thay", "ai", "nao", "chu", "nhiem")) return false;
+        }
+        return true;
+    }
+
+    private boolean equalsAny(String value, String... options) {
+        if (value == null) return false;
+        String v = value.trim();
+        for (String o : options) {
+            if (o != null && v.equalsIgnoreCase(o.trim())) return true;
+        }
+        return false;
+    }
+
     private static String norm(String s) {
         String x = s == null ? "" : s;
         x = x.trim().toLowerCase(Locale.ROOT);
@@ -145,11 +216,13 @@ public class EntityExtractionService {
         private ClassEntity classEntity;
         private Subject subject;
         private User student;
+        private User teacher;
 
         public Map<String, String> getRaw() { return raw; }
         public ClassEntity getClassEntity() { return classEntity; }
         public Subject getSubject() { return subject; }
         public User getStudent() { return student; }
+        public User getTeacher() { return teacher; }
     }
 }
 

@@ -34,6 +34,7 @@ public class AiInformationQueryService {
     @Autowired private StudentInfoQueryService studentInfoQueryService;
     @Autowired private TeacherAssignmentQueryService teacherAssignmentQueryService;
     @Autowired private ManagementInfoQueryService managementInfoQueryService;
+    @Autowired private AiInformationReadQueryService aiInformationReadQueryService;
     @Autowired private ParentStudentRepository parentStudentRepository;
 
     public AiInformationQueryResponse handle(AiInformationQueryRequest req, Integer userIdHeader, String roleHeader) {
@@ -47,7 +48,10 @@ public class AiInformationQueryService {
             IntentResult intentRes = intentParsingService.parse(question);
             AiInformationIntent intent = parseIntent(intentRes.getIntent());
 
-            EntityExtractionService.NormalizedEntities ne = entityExtractionService.normalizeEntities(ctx.getSchoolId(), intentRes.getEntities());
+            Map<String, String> entitiesForNormalize = new LinkedHashMap<>();
+            if (intentRes.getEntities() != null) entitiesForNormalize.putAll(intentRes.getEntities());
+            entitiesForNormalize.put("_intent", intentRes.getIntent());
+            EntityExtractionService.NormalizedEntities ne = entityExtractionService.normalizeEntities(ctx.getSchoolId(), entitiesForNormalize);
             Map<String, Object> entitiesOut = buildEntitiesOut(intentRes, ne);
 
             if (intent == AiInformationIntent.UNKNOWN) {
@@ -61,7 +65,7 @@ public class AiInformationQueryService {
                 return resp;
             }
 
-            QueryResult qr = dispatch(intent, ctx, ne);
+            QueryResult qr = dispatch(intent, ctx, ne, intentRes.getEntities());
             resp.setIntent(intent.name());
             resp.setEntities(entitiesOut);
             resp.setData(qr.data);
@@ -104,8 +108,8 @@ public class AiInformationQueryService {
         }
     }
 
-    private QueryResult dispatch(AiInformationIntent intent, AuthorizationService.AuthContext ctx, EntityExtractionService.NormalizedEntities ne) {
-        if (intent == AiInformationIntent.TEACHER_ASSIGNMENTS) {
+    private QueryResult dispatch(AiInformationIntent intent, AuthorizationService.AuthContext ctx, EntityExtractionService.NormalizedEntities ne, Map<String, String> entities) {
+        if (intent == AiInformationIntent.TEACHER_ASSIGNMENTS || intent == AiInformationIntent.ASK_TEACHER_ASSIGNMENTS) {
             if (!"TEACHER".equals(ctx.getRole())) throw new ForbiddenException("Chỉ giáo viên mới dùng truy vấn này.");
             var r = teacherAssignmentQueryService.getAssignments(ctx.getUserId());
             Map<String, Object> data = Map.of("assignments", r.getAssignments());
@@ -176,6 +180,14 @@ public class AiInformationQueryService {
                 Map<String, Object> data = Map.of("belowFiveCount", cnt);
                 return new QueryResult(data, "Lớp " + cls.getName() + " hiện có " + cnt + " học sinh có điểm thành phần < 5 ở môn " + subj.getName() + ".");
             }
+            case ASK_WEAK_STUDENTS_BY_CLASS_SUBJECT -> {
+                if (cls == null) throw new BadRequestException("Thiếu lớp.");
+                if (subj == null) throw new BadRequestException("Thiếu môn học.");
+                authorizationService.requireCanAccessClassSubject(ctx, cls.getId(), subj.getId());
+                int cnt = classInfoQueryService.classSubjectRiskStudentsCount(cls.getId(), subj.getId(), THRESHOLD);
+                Map<String, Object> data = Map.of("belowFiveCount", cnt);
+                return new QueryResult(data, "Lớp " + cls.getName() + " có " + cnt + " học sinh dưới ngưỡng ở môn " + subj.getName() + ".");
+            }
             case STUDENT_WEAK_SUBJECTS -> {
                 if (student == null) throw new BadRequestException("Thiếu tên học sinh. Ví dụ: \"Học sinh Nguyễn Văn A yếu môn nào?\"");
 
@@ -219,6 +231,116 @@ public class AiInformationQueryService {
                 }
                 return new QueryResult(data, answer);
             }
+            case ASK_CLASS_SIZE -> {
+                if (cls == null) throw new BadRequestException("Thiếu tên lớp.");
+                authorizationService.requireCanAccessClassFull(ctx, cls.getId());
+                long count = classInfoQueryService.classStudentCount(cls.getId());
+                Map<String, Object> data = Map.of("studentCount", count);
+                return new QueryResult(data, "Lớp " + cls.getName() + " hiện có " + count + " học sinh.");
+            }
+            case ASK_STUDENT_PROFILE -> {
+                var p = aiInformationReadQueryService.studentProfile(ctx, ne, entities);
+                return new QueryResult(p.data(), p.answer());
+            }
+            case ASK_STUDENT_CLASS -> {
+                var p = aiInformationReadQueryService.studentClass(ctx, ne, entities);
+                return new QueryResult(p.data(), p.answer());
+            }
+            case ASK_PARENT_CONTACT -> {
+                var p = aiInformationReadQueryService.studentProfile(ctx, ne, entities);
+                @SuppressWarnings("unchecked")
+                Map<String, Object> base = new LinkedHashMap<>((Map<String, Object>) p.data());
+                // Số điện thoại PH nằm ở quan hệ parent_student; lấy danh sách phụ huynh của học sinh.
+                Integer studentId = base.get("studentId") instanceof Number n ? n.intValue() : null;
+                if (studentId == null) throw new BadRequestException("Không xác định được học sinh để tra cứu phụ huynh.");
+                List<Map<String, Object>> contacts = parentStudentRepository.findByStudentId(studentId).stream()
+                        .map(ps -> ps != null ? ps.getParent() : null)
+                        .filter(Objects::nonNull)
+                        .map(par -> {
+                            Map<String, Object> m = new LinkedHashMap<>();
+                            m.put("parentId", par.getId());
+                            m.put("fullName", par.getFullName());
+                            m.put("phone", par.getPhone());
+                            m.put("relationship", par.getRelationship());
+                            return m;
+                        }).toList();
+                base.put("parentContacts", contacts);
+                String answer = contacts.isEmpty()
+                        ? "Chưa có thông tin liên hệ phụ huynh trong hệ thống."
+                        : "Đã tìm thấy " + contacts.size() + " liên hệ phụ huynh.";
+                return new QueryResult(base, answer);
+            }
+            case ASK_STUDENTS_BY_CLASS -> {
+                if (cls == null) throw new BadRequestException("Thiếu lớp.");
+                authorizationService.requireCanAccessClassFull(ctx, cls.getId());
+                var p = aiInformationReadQueryService.studentsByClass(ne);
+                return new QueryResult(p.data(), p.answer());
+            }
+            case ASK_STUDENT_SUBJECT_SCORE -> {
+                var p = aiInformationReadQueryService.studentSubjectScore(ctx, ne, entities);
+                return new QueryResult(p.data(), p.answer());
+            }
+            case ASK_STUDENT_AVERAGE_SCORE -> {
+                var p = aiInformationReadQueryService.studentAverageScore(ctx, ne, entities);
+                return new QueryResult(p.data(), p.answer());
+            }
+            case ASK_STUDENT_ATTENDANCE -> {
+                var p = aiInformationReadQueryService.studentAttendance(ctx, ne, entities);
+                return new QueryResult(p.data(), p.answer());
+            }
+            case ASK_TOP_STUDENTS_BY_CLASS -> {
+                if (cls == null) throw new BadRequestException("Thiếu lớp.");
+                if (subj != null) authorizationService.requireCanAccessClassSubject(ctx, cls.getId(), subj.getId());
+                else authorizationService.requireCanAccessClassFull(ctx, cls.getId());
+                var p = aiInformationReadQueryService.topStudentsByClass(ctx, ne, entities);
+                return new QueryResult(p.data(), p.answer());
+            }
+            case ASK_LOWEST_STUDENT_BY_CLASS -> {
+                if (cls == null) throw new BadRequestException("Thiếu lớp.");
+                if (subj != null) authorizationService.requireCanAccessClassSubject(ctx, cls.getId(), subj.getId());
+                else authorizationService.requireCanAccessClassFull(ctx, cls.getId());
+                var p = aiInformationReadQueryService.lowestStudentByClass(ctx, ne, entities);
+                return new QueryResult(p.data(), p.answer());
+            }
+            case ASK_STUDENT_RANK_IN_CLASS -> {
+                var p = aiInformationReadQueryService.studentRankInClass(ctx, ne, entities);
+                return new QueryResult(p.data(), p.answer());
+            }
+            case ASK_CLASS_ATTENDANCE_OVERVIEW -> {
+                if (cls == null) throw new BadRequestException("Thiếu lớp.");
+                authorizationService.requireCanAccessClassFull(ctx, cls.getId());
+                var p = aiInformationReadQueryService.classAttendanceOverview(ne, entities);
+                return new QueryResult(p.data(), p.answer());
+            }
+            case ASK_STUDENT_TIMETABLE -> {
+                var p = aiInformationReadQueryService.studentTimetable(ctx, ne, entities);
+                return new QueryResult(p.data(), p.answer());
+            }
+            case ASK_STUDENT_OVERVIEW -> {
+                var p = aiInformationReadQueryService.studentOverview(ctx, ne, entities, THRESHOLD);
+                return new QueryResult(p.data(), p.answer());
+            }
+            case ASK_SCHOOL_STATISTICS -> {
+                authorizationService.requireAdmin(ctx);
+                var p = aiInformationReadQueryService.schoolStatistics(ctx.getSchoolId());
+                return new QueryResult(p.data(), p.answer());
+            }
+            case ASK_STUDENT_PREDICTION -> {
+                var p = aiInformationReadQueryService.studentPrediction(ctx, ne, entities);
+                return new QueryResult(p.data(), p.answer());
+            }
+            case ASK_TEACHER_TIMETABLE -> {
+                var p = aiInformationReadQueryService.teacherTimetable(ctx, ne, entities);
+                return new QueryResult(p.data(), p.answer());
+            }
+            case ASK_TEACHER_WORKLOAD -> {
+                var p = aiInformationReadQueryService.teacherWorkload(ctx, ne);
+                return new QueryResult(p.data(), p.answer());
+            }
+            case ASK_TEACHER_PERFORMANCE_OVERVIEW -> {
+                var p = aiInformationReadQueryService.teacherPerformanceOverview(ctx, ne);
+                return new QueryResult(p.data(), p.answer());
+            }
             default -> throw new BadRequestException("Intent chưa được hỗ trợ: " + intent.name());
         }
     }
@@ -235,14 +357,16 @@ public class AiInformationQueryService {
     private Map<String, Object> buildEntitiesOut(IntentResult ir, EntityExtractionService.NormalizedEntities ne) {
         Map<String, Object> out = new LinkedHashMap<>();
         if (ir != null && ir.getEntities() != null) {
-            if (ir.getEntities().get("className") != null) out.put("className", ir.getEntities().get("className"));
-            if (ir.getEntities().get("subjectName") != null) out.put("subjectName", ir.getEntities().get("subjectName"));
-            if (ir.getEntities().get("studentName") != null) out.put("studentName", ir.getEntities().get("studentName"));
+            for (Map.Entry<String, String> e : ir.getEntities().entrySet()) {
+                if (e.getKey() != null && e.getKey().startsWith("_")) continue;
+                out.put(e.getKey(), e.getValue());
+            }
         }
         if (ne != null) {
             if (ne.getClassEntity() != null) out.put("classId", ne.getClassEntity().getId());
             if (ne.getSubject() != null) out.put("subjectId", ne.getSubject().getId());
             if (ne.getStudent() != null) out.put("studentId", ne.getStudent().getId());
+            if (ne.getTeacher() != null) out.put("teacherId", ne.getTeacher().getId());
         }
         return out;
     }
