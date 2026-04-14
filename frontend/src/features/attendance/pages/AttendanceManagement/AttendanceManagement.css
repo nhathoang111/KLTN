@@ -1,4 +1,8 @@
 /* Attendance Management Styles */
+/* Version: 2.1.0 - Updated: 2026-05-07 */
+/* Enhanced toggle switch design, improved period status visual indicators */
+/* Previous version: 2.0.0 - 2026-04-14 - Added dark mode support */
+
 @import '../../../../styles/CommonPageStyles.css';
 
 /* Toggle: Vắng (off) | Có mặt (on) — thay checkbox */

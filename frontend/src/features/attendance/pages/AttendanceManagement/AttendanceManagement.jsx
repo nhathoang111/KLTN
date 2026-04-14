@@ -1,3 +1,7 @@
+// Attendance Management Component - Quản lý điểm danh cho giáo viên và phụ huynh
+// Updated: 2026-05-07 - Cải tiến UI/UX, thêm real-time period detection
+// Previous: 2026-04-14 - Fix bug điểm danh không lưu đúng classSectionId
+
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import api from '../../../../shared/lib/api';
 import './AttendanceManagement.css';
