@@ -1817,6 +1817,20 @@ const ExamScoreManagement = () => {
               >
                 {teacherImporting ? 'Đang import...' : 'Import'}
               </button>
+              <a
+                href="/MauFileNhapdiem.xlsx"
+                download
+                style={{
+                  padding: '8px 12px',
+                  borderRadius: '6px',
+                  backgroundColor: '#28a745',
+                  color: 'white',
+                  textDecoration: 'none',
+                  display: 'inline-block'
+                }}
+              >
+                ⬇ Tải file mẫu
+              </a>
             </div>
           </div>
         </>

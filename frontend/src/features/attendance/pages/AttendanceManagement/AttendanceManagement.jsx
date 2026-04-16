@@ -2,8 +2,264 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import api from '../../../../shared/lib/api';
 import './AttendanceManagement.css';
 import { useAuth } from '../../../auth/context/AuthContext';
+import { scheduleSubjectDisplayName } from '../../../../shared/lib/scheduleLabels';
 
-const AttendanceManagement = () => {
+const PERIOD_TIMES = [
+  { start: '07:00', end: '07:45' }, { start: '07:50', end: '08:35' },
+  { start: '08:40', end: '09:25' }, { start: '09:30', end: '10:15' },
+  { start: '10:20', end: '11:05' }, { start: '13:00', end: '13:45' },
+  { start: '13:50', end: '14:35' }, { start: '14:40', end: '15:25' },
+  { start: '15:30', end: '16:15' }, { start: '16:20', end: '17:05' },
+];
+
+function periodTimeRange(period) {
+  const p = Number(period);
+  if (!p || p < 1 || p > PERIOD_TIMES.length) return '—';
+  const { start, end } = PERIOD_TIMES[p - 1];
+  return `${start} - ${end}`;
+}
+
+// COMPONENT ĐIỀU HƯỚNG THEO ROLE
+export default function AttendanceManagementWrapper() {
+  const { user } = useAuth();
+  const userRole = (user?.role?.name || "").toString().toUpperCase();
+  const isParent = userRole === "PARENT";
+
+  if (isParent) {
+    return <AttendanceParentView />;
+  }
+
+  return <AttendanceDefaultLegacy />;
+}
+
+// =========================================================================
+// LUỒNG DÀNH RIÊNG CHO PHỤ HUYNH — Xem điểm danh theo ngày
+// =========================================================================
+function AttendanceParentView() {
+  const activeStudentId = localStorage.getItem('activeStudentId');
+
+  const [date, setDate] = useState(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  });
+
+  const [schedules, setSchedules] = useState([]);
+  const [attendance, setAttendance] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [classId, setClassId] = useState(null);
+
+  // Bước 1: Resolve classId một lần duy nhất khi mount
+  useEffect(() => {
+    if (!activeStudentId) return;
+    const resolveClass = async () => {
+      try {
+        const res = await api.get(`/users/${activeStudentId}`);
+        let cId = res.data?.class?.id || null;
+        if (!cId) {
+          const enrRes = await api.get(`/users/${activeStudentId}/enrollment`);
+          cId = enrRes.data?.enrollment?.classId || null;
+        }
+        setClassId(cId);
+      } catch (e) {
+        console.error('Không lấy được classId của học sinh', e);
+      }
+    };
+    resolveClass();
+  }, [activeStudentId]);
+
+  // Bước 2: Fetch TKB + điểm danh khi classId hoặc date thay đổi
+  useEffect(() => {
+    if (!activeStudentId) return;
+
+    const fetchData = async () => {
+      try {
+        setLoading(true);
+
+        // Fetch TKB — ưu tiên theo classId để có đủ classSectionId
+        let allSchedules = [];
+        if (classId) {
+          try {
+            const schRes = await api.get(`/schedules/class/${classId}`);
+            allSchedules = schRes.data?.schedules || [];
+          } catch (e) {}
+        }
+        if (!allSchedules.length) {
+          const schRes = await api.get(`/schedules/student/${activeStudentId}`).catch(() => ({ data: { schedules: [] } }));
+          allSchedules = schRes.data?.schedules || [];
+        }
+
+        // Filter TKB theo ngày chọn
+        const targetDateObj = new Date(date);
+        const targetDow = targetDateObj.getDay() === 0 ? 7 : targetDateObj.getDay();
+
+        const getDateStr = (s) => {
+          if (!s.date) return null;
+          if (typeof s.date === 'string') return s.date.slice(0, 10);
+          if (Array.isArray(s.date) && s.date.length >= 3) {
+            const [y, m, d] = s.date;
+            return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+          }
+          if (s.date?.year != null) {
+            const mo = s.date.monthValue ?? s.date.month ?? 1;
+            const dy = s.date.dayOfMonth ?? s.date.day ?? 1;
+            return `${s.date.year}-${String(mo).padStart(2, '0')}-${String(dy).padStart(2, '0')}`;
+          }
+          return null;
+        };
+
+        const checkDate = (s) => {
+          const ds = getDateStr(s);
+          if (ds && ds === date) return true;
+          const raw = s.dayOfWeek ?? s.day_of_week;
+          if (raw == null || raw === '') return false;
+          const n = Number(raw);
+          if (Number.isNaN(n)) return false;
+          return (n === 0 ? 7 : n) === targetDow;
+        };
+
+        const filtered = allSchedules.filter(checkDate).sort((a, b) => (a.period || 0) - (b.period || 0));
+
+        // Fetch điểm danh theo từng classSectionId
+        const csIds = [...new Set(filtered.map(s => s.classSection?.id || s.classSectionId).filter(Boolean))];
+        const attPromises = csIds.map(async (csid) => {
+          try {
+            const res = await api.get('/attendance', { params: { classSectionId: csid, date } });
+            const items = res.data?.items || [];
+            const rec = items.find(it => String(it.studentId) === String(activeStudentId));
+            if (rec) return { ...rec, boundClassSectionId: csid };
+          } catch (e) {}
+          return null;
+        });
+
+        const attResults = (await Promise.all(attPromises)).filter(Boolean);
+        setSchedules(filtered);
+        setAttendance(attResults);
+      } catch (err) {
+        console.error('Lỗi fetch dữ liệu điểm danh:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [activeStudentId, date, classId]);
+
+  if (!activeStudentId) {
+    return (
+      <div style={{ padding: '48px 24px', textAlign: 'center', background: '#f8fafc', minHeight: '100vh' }}>
+        <div style={{ maxWidth: '480px', margin: '0 auto', background: '#fff', borderRadius: '20px', padding: '40px', border: '1px solid #e2e8f0', boxShadow: '0 4px 20px rgba(0,0,0,0.04)' }}>
+          <div style={{ fontSize: '2.5rem', marginBottom: '16px' }}>📋</div>
+          <h2 style={{ fontSize: '1.3rem', fontWeight: '700', color: '#1e293b', marginBottom: '12px' }}>Thông tin điểm danh</h2>
+          <p style={{ color: '#64748b', fontSize: '0.95rem', marginBottom: '24px' }}>
+            Vui lòng chọn một học sinh tại màn hình <strong>Tổng quan</strong> để xem thông tin điểm danh.
+          </p>
+          <button
+            style={{ background: '#4f46e5', color: '#fff', border: 'none', borderRadius: '10px', padding: '10px 24px', fontWeight: '600', cursor: 'pointer', fontSize: '0.95rem' }}
+            onClick={() => window.location.href = '/dashboard'}
+          >
+            Về trang Tổng quan
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const combinedRows = schedules.map(s => {
+    const sid = String(s.classSectionId || s.classSection?.id);
+    const rec = attendance.find(a => String(a.boundClassSectionId) === sid);
+    let status = 'pending'; let statusText = 'Chưa điểm danh';
+    if (rec?.status) {
+      const st = String(rec.status).toUpperCase();
+      if (st === 'PRESENT') { status = 'present'; statusText = 'Đã điểm danh'; }
+      if (st === 'ABSENT')  { status = 'absent';  statusText = 'Vắng mặt'; }
+      if (st === 'LATE')    { status = 'late';    statusText = 'Đi trễ'; }
+    }
+    return { schedule: s, status, statusText };
+  });
+
+  return (
+    <div style={{ minHeight: '100vh', background: '#f8fafc', padding: '32px 16px' }}>
+      <div style={{ maxWidth: '900px', margin: '0 auto' }}>
+
+        {/* Header */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px', marginBottom: '24px' }}>
+          <div>
+            <h2 style={{ fontSize: '1.4rem', fontWeight: '700', color: '#1e293b', margin: 0 }}>📋 Điểm danh theo ngày</h2>
+            <p style={{ color: '#64748b', fontSize: '0.9rem', margin: '4px 0 0' }}>Theo dõi sự chuyên cần của con bạn</p>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <label style={{ fontWeight: '600', fontSize: '0.88rem', color: '#475569' }}>Chọn ngày:</label>
+            <input
+              type="date"
+              value={date}
+              onChange={e => setDate(e.target.value)}
+              style={{ border: '1.5px solid #cbd5e1', borderRadius: '10px', padding: '8px 14px', fontSize: '0.9rem', fontWeight: '500', color: '#334155', outline: 'none', cursor: 'pointer' }}
+            />
+          </div>
+        </div>
+
+        {/* Bảng */}
+        <div style={{ background: '#fff', borderRadius: '20px', border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 2px 12px rgba(0,0,0,0.03)' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
+            <thead>
+              <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+                <th style={{ padding: '14px 20px', textAlign: 'left', fontWeight: '600', color: '#64748b', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Tiết học</th>
+                <th style={{ padding: '14px 20px', textAlign: 'left', fontWeight: '600', color: '#64748b', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Môn học</th>
+                <th style={{ padding: '14px 20px', textAlign: 'left', fontWeight: '600', color: '#64748b', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Giáo viên</th>
+                <th style={{ padding: '14px 20px', textAlign: 'center', fontWeight: '600', color: '#64748b', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Trạng thái</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr><td colSpan={4} style={{ padding: '40px', textAlign: 'center', color: '#94a3b8' }}>
+                  <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '10px' }}>
+                    <div style={{ width: '20px', height: '20px', borderRadius: '50%', border: '2px solid #e0e7ff', borderTopColor: '#6366f1', animation: 'spin 0.8s linear infinite' }} />
+                    Đang tải dữ liệu...
+                  </div>
+                </td></tr>
+              ) : combinedRows.length === 0 ? (
+                <tr><td colSpan={4} style={{ padding: '40px', textAlign: 'center', color: '#94a3b8' }}>
+                  Không có môn học nào trong thời khóa biểu ngày đã chọn.
+                </td></tr>
+              ) : combinedRows.map((row, idx) => {
+                const subj = scheduleSubjectDisplayName(row.schedule, '—');
+                const tchr = row.schedule.teacher?.fullName || row.schedule.teacher?.full_name || '—';
+                const badgeStyle = {
+                  padding: '5px 14px', borderRadius: '20px', fontSize: '0.78rem', fontWeight: '700', display: 'inline-block',
+                  ...(row.status === 'present' ? { background: '#dcfce7', color: '#15803d' }
+                    : row.status === 'absent'  ? { background: '#fee2e2', color: '#dc2626' }
+                    : row.status === 'late'    ? { background: '#ffedd5', color: '#ea580c' }
+                    : { background: '#f1f5f9', color: '#64748b' }),
+                };
+                return (
+                  <tr key={row.schedule.id || idx} style={{ borderTop: idx > 0 ? '1px solid #f1f5f9' : 'none' }}>
+                    <td style={{ padding: '16px 20px', fontWeight: '500', color: '#1e293b' }}>
+                      Tiết {row.schedule.period}
+                      <span style={{ fontSize: '0.78rem', color: '#94a3b8', marginLeft: '6px' }}>
+                        ({periodTimeRange(row.schedule.period)})
+                      </span>
+                    </td>
+                    <td style={{ padding: '16px 20px', fontWeight: '600', color: '#1e293b' }}>{subj}</td>
+                    <td style={{ padding: '16px 20px', color: '#475569' }}>{tchr}</td>
+                    <td style={{ padding: '16px 20px', textAlign: 'center' }}>
+                      <span style={badgeStyle}>{row.statusText}</span>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+
+      </div>
+    </div>
+  );
+}
+
+// =========================================================================
+
+// =========================================================================
+function AttendanceDefaultLegacy() {
   const { user } = useAuth();
   const userRole = (user?.role?.name || "").toString().toUpperCase();
   const isParent = userRole === "PARENT";
@@ -30,11 +286,7 @@ const AttendanceManagement = () => {
     return `${yyyy}-${mm}-${dd}`;
   });
 
-  const [items, setItems] = useState([]); // AttendanceItemDto list
-  // Trạng thái lựa chọn trên UI (tri-state):
-  // - null: chưa điểm danh (chưa chốt)
-  // - true: PRESENT
-  // - false: ABSENT
+  const [items, setItems] = useState([]); 
   const [selectionByStudentId, setSelectionByStudentId] = useState({});
   const classIdNum = useMemo(() => (selectedClassId ? Number(selectedClassId) : null), [selectedClassId]);
 
@@ -53,7 +305,6 @@ const AttendanceManagement = () => {
         return;
       }
       try {
-        // ưu tiên nếu user đã có class
         let cId = user?.class?.id ?? null;
         if (!cId) {
           const enrRes = await api.get(`/users/${user.id}/enrollment`);
@@ -73,7 +324,7 @@ const AttendanceManagement = () => {
       try {
         setLoading(true);
         setError("");
-        // STUDENT: chỉ hiển thị đúng lớp của học sinh, không ảnh hưởng role khác
+        
         if (isStudent) {
           if (!studentClassId) {
             setClasses([]);
@@ -88,7 +339,6 @@ const AttendanceManagement = () => {
             setClasses(raw ? [raw] : []);
             setSelectedClassId(String(studentClassId));
           } catch {
-            // fallback: nếu không có endpoint /classes/:id thì vẫn gọi /classes và lọc
             const res = await api.get("/classes");
             const all = res.data.classes || [];
             const filtered = all.filter((c) => String(c.id) === String(studentClassId));
@@ -98,8 +348,8 @@ const AttendanceManagement = () => {
         } else {
           const res = await api.get("/classes");
           let allClasses = res.data.classes || [];
-          const userRole = user?.role?.name?.toUpperCase();
-          if ((userRole === "ADMIN" || userRole === "TEACHER") && user?.school?.id) {
+          const roleUpper = user?.role?.name?.toUpperCase();
+          if ((roleUpper === "ADMIN" || roleUpper === "TEACHER") && user?.school?.id) {
             allClasses = allClasses.filter((c) => c.school?.id === user.school.id);
           }
           setClasses(allClasses);
@@ -124,8 +374,6 @@ const AttendanceManagement = () => {
       try {
         const res = await api.get(`/class-sections/class/${classIdNum}`);
         let list = res.data.classSections || [];
-
-        // Nghiệp vụ: giáo viên chỉ được điểm danh cho môn/lớp học phần mà họ phụ trách (classSection.teacher)
         const teacherId = user?.id;
         const isTeacherRole = userRole === "TEACHER" || userRole.startsWith("TEACHER") || userRole === "GIÁO VIÊN";
         if (isTeacherRole && teacherId != null) {
@@ -134,7 +382,6 @@ const AttendanceManagement = () => {
 
         setClassSections(list);
 
-        // STUDENT: auto chọn lớp học phần đầu tiên để khỏi phải thao tác nhiều
         if (isStudent && (list || []).length > 0) {
           setSelectedClassSectionId((prev) => (prev ? prev : String(list[0].id)));
         }
@@ -164,14 +411,14 @@ const AttendanceManagement = () => {
       
       let roster = res.data.items || [];
       const activeStudentId = localStorage.getItem('activeStudentId');
-      // Nếu là Phụ huynh, chỉ giữ lại đúng con mình trong danh sách
+      
       if (isParent && activeStudentId) {
         roster = roster.filter((it) => String(getRowStudentId(it)) === String(activeStudentId));
       } else if (isStudent && user?.id) {
         roster = roster.filter((it) => String(getRowStudentId(it)) === String(user.id));
       }
       setItems(roster);
-      // init selection state from backend status
+      
       const map = {};
       (roster || []).forEach((it) => {
         const sid = it?.studentId;
@@ -181,7 +428,6 @@ const AttendanceManagement = () => {
         else if (raw === 'ABSENT') map[sid] = false;
         else if (raw == null) map[sid] = null;
         else {
-          // LATE/EXCUSED/...: hiện tại UI không thao tác; map về "đã điểm danh" (coi như có mặt)
           map[sid] = true;
         }
       });
@@ -202,7 +448,7 @@ const AttendanceManagement = () => {
     setItems((prev) =>
       prev.map((it) => ({
         ...it,
-        status: it.status, // giữ nguyên dữ liệu gốc; trạng thái hiển thị/lưu dùng selectionByStudentId
+        status: it.status,
       }))
     );
     setSelectionByStudentId((prev) => {
@@ -246,8 +492,6 @@ const AttendanceManagement = () => {
       const payload = {
         classSectionId: Number(selectedClassSectionId),
         attendanceDate: date,
-        // Chỉ gửi những học sinh đã được giáo viên chọn PRESENT/ABSENT.
-        // status=null (chưa điểm danh) sẽ KHÔNG bị ngầm map thành PRESENT/ABSENT.
         items: items
           .filter((it) => {
             const sid = it?.studentId;
@@ -294,7 +538,7 @@ const AttendanceManagement = () => {
   return (
     <div className="min-h-screen bg-slate-100 px-4 py-6">
       <div className="mx-auto max-w-6xl space-y-4">
-        <h2 className="text-2xl font-bold text-slate-800">{isViewOnly ? 'Xem điểm danh của con' : 'Quản lý điểm danh'}</h2>
+        <h2 className="text-2xl font-bold text-slate-800">{isViewOnly ? 'Xem điểm danh' : 'Quản lý điểm danh'}</h2>
 
         {error && (
           <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">{error}</div>
@@ -420,7 +664,6 @@ const AttendanceManagement = () => {
                                 className="sr-only peer"
                                 checked={checked}
                                 ref={(el) => {
-                                  // Tri-state: indeterminate khi chưa điểm danh
                                   if (el) el.indeterminate = isUnmarked;
                                 }}
                                 onChange={(e) => togglePresent(it.studentId, e.target.checked)}
@@ -432,7 +675,6 @@ const AttendanceManagement = () => {
                                   "w-11 h-6 rounded-full transition-colors peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-emerald-300",
                                   isUnmarked ? "bg-slate-200" : "",
                                   "peer-checked:bg-emerald-500",
-                                  // khi indeterminate thì không có peer-checked, giữ màu xám
                                 ].join(" ")}
                               />
                               <span className="absolute left-1 top-1 h-4 w-4 bg-white rounded-full transition-transform peer-checked:translate-x-5" />
@@ -467,6 +709,4 @@ const AttendanceManagement = () => {
       </div>
     </div>
   );
-};
-
-export default AttendanceManagement;
+}
