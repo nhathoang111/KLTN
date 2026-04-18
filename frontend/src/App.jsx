@@ -1,5 +1,6 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { ToastContainer } from 'react-toastify';
 import { AuthProvider } from './app/providers/AuthProvider';
 import LoginPage from './features/auth/pages/LoginPage/LoginPage';
 import ProtectedRoute from './features/auth/components/ProtectedRoute';
@@ -35,6 +36,17 @@ function App() {
               ))}
             </Route>
           </Routes>
+          <ToastContainer
+            position="top-right"
+            autoClose={3000}
+            hideProgressBar={false}
+            newestOnTop
+            closeOnClick
+            pauseOnHover
+            draggable
+            theme="colored"
+            style={{ zIndex: 999999 }}
+          />
         </div>
       </Router>
     </AuthProvider>

@@ -12,7 +12,9 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import com.example.schoolmanagement.entity.User;
@@ -132,6 +134,48 @@ public class SchoolService {
         return schoolRepository.save(school);
     }
 
+    /**
+     * Chuỗi địa chỉ đầy đủ (giống cách ghép trên UI): địa chỉ chi tiết + phường + quận + tỉnh.
+     * Dùng để phát hiện trùng địa chỉ thực tế, không chỉ trường {@code address}.
+     */
+    private String normalizedFullLocationKey(School school) {
+        if (school == null) {
+            return "";
+        }
+        List<String> parts = new ArrayList<>();
+        if (school.getAddress() != null && !school.getAddress().trim().isEmpty()) {
+            parts.add(school.getAddress().trim());
+        }
+        if (school.getWard() != null && !school.getWard().trim().isEmpty()) {
+            parts.add(school.getWard().trim());
+        }
+        if (school.getDistrict() != null && !school.getDistrict().trim().isEmpty()) {
+            parts.add(school.getDistrict().trim());
+        }
+        if (school.getProvince() != null && !school.getProvince().trim().isEmpty()) {
+            parts.add(school.getProvince().trim());
+        }
+        String joined = String.join(", ", parts);
+        return joined.toLowerCase(Locale.ROOT).replaceAll("\\s+", " ").trim();
+    }
+
+    /** True nếu đã có trường khác trùng địa chỉ đầy đủ (sau chuẩn hóa). */
+    private boolean existsAnotherSchoolWithSameFullLocation(School candidate, Integer excludeSchoolId) {
+        String key = normalizedFullLocationKey(candidate);
+        if (key.isEmpty()) {
+            return false;
+        }
+        for (School s : schoolRepository.findAll()) {
+            if (excludeSchoolId != null && s.getId() != null && s.getId().equals(excludeSchoolId)) {
+                continue;
+            }
+            if (normalizedFullLocationKey(s).equals(key)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     public School createSchool(School school) {
         if (school.getCode() != null && !school.getCode().trim().isEmpty()) {
             String normalizedCode = school.getCode().trim();
@@ -155,11 +199,19 @@ public class SchoolService {
             }
         }
         if (school.getAddress() != null && !school.getAddress().trim().isEmpty()) {
-            String normalizedAddress = school.getAddress().trim();
-            school.setAddress(normalizedAddress);
-            if (existsByAddress(normalizedAddress)) {
-                throw new BadRequestException("Địa chỉ đã tồn tại");
-            }
+            school.setAddress(school.getAddress().trim());
+        }
+        if (school.getWard() != null) {
+            school.setWard(school.getWard().trim());
+        }
+        if (school.getDistrict() != null) {
+            school.setDistrict(school.getDistrict().trim());
+        }
+        if (school.getProvince() != null) {
+            school.setProvince(school.getProvince().trim());
+        }
+        if (existsAnotherSchoolWithSameFullLocation(school, null)) {
+            throw new BadRequestException("Địa chỉ này đã được dùng cho một trường khác.");
         }
         if (school.getStatus() == null || school.getStatus().isEmpty()) {
             school.setStatus("ACTIVE");
@@ -221,21 +273,21 @@ public class SchoolService {
                 throw new BadRequestException("Email đã tồn tại");
             }
         }
-        if (school.getAddress() != null && !school.getAddress().trim().isEmpty()) {
-            String normalizedAddress = school.getAddress().trim();
-            if (existsByAddressExcludingId(normalizedAddress, id)) {
-                throw new BadRequestException("Địa chỉ đã tồn tại");
-            }
-        }
         if (school.getName() != null) existing.setName(school.getName());
         if (school.getCode() != null) existing.setCode(school.getCode());
         if (school.getAddress() != null) existing.setAddress(school.getAddress());
+        if (school.getWard() != null) existing.setWard(school.getWard());
+        if (school.getDistrict() != null) existing.setDistrict(school.getDistrict());
+        if (school.getProvince() != null) existing.setProvince(school.getProvince());
         if (school.getPhone() != null) existing.setPhone(school.getPhone());
         if (school.getEmail() != null) existing.setEmail(school.getEmail());
         if (school.getStatus() != null) existing.setStatus(school.getStatus());
         if (school.getLogo() != null) existing.setLogo(school.getLogo());
         if (school.getEstablishmentYear() != null) existing.setEstablishmentYear(school.getEstablishmentYear());
         if (school.getManagementType() != null) existing.setManagementType(school.getManagementType());
+        if (existsAnotherSchoolWithSameFullLocation(existing, id)) {
+            throw new BadRequestException("Địa chỉ này đã được dùng cho một trường khác.");
+        }
         return saveSchool(existing);
     }
 

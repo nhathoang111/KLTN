@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { Pencil, Trash2 } from 'lucide-react';
+import { toast } from 'react-toastify';
 import { useAuth } from '../../../auth/context/AuthContext';
 import api from '../../../../shared/lib/api';
 import './UserListPage.css';
@@ -428,10 +429,10 @@ const UserListPage = () => {
 
       <CreateUserModal
         open={showCreateModal}
+        isSuperAdmin={isSuperAdmin}
         onClose={() => setShowCreateModal(false)}
         onCreated={() => {
-          setSuccess('Tạo người dùng thành công.');
-          setTimeout(() => setSuccess(''), 3000);
+          toast.success(isSuperAdmin ? 'Tạo quản trị viên thành công.' : 'Tạo người dùng thành công.');
           fetchUsers();
         }}
       />

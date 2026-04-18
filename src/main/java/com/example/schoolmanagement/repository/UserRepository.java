@@ -28,4 +28,17 @@ public interface UserRepository extends JpaRepository<User, Integer> {
     
     @Query("SELECT u FROM User u WHERE u.email = :email AND u.school.id = :schoolId")
     Optional<User> findByEmailAndSchoolId(@Param("email") String email, @Param("schoolId") Integer schoolId);
+
+    /** Admin trường (không tính Super Admin). */
+    @Query("SELECT COUNT(u) FROM User u JOIN u.role r WHERE UPPER(r.name) LIKE 'ADMIN%' AND UPPER(r.name) NOT LIKE '%SUPER%'")
+    long countSchoolAdminUsers();
+
+    @Query("SELECT COUNT(u) FROM User u JOIN u.role r WHERE UPPER(r.name) LIKE 'STUDENT%'")
+    long countStudentUsers();
+
+    @Query("SELECT COUNT(u) FROM User u JOIN u.role r WHERE UPPER(r.name) LIKE 'TEACHER%'")
+    long countTeacherUsers();
+
+    @Query("SELECT COUNT(u) FROM User u JOIN u.role r WHERE UPPER(r.name) LIKE 'PARENT%'")
+    long countParentUsers();
 }

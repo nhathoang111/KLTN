@@ -307,15 +307,15 @@
   background: #22c55e;
 }
 
-.sa-bar--pending {
+.sa-bar--inactive {
   height: 55px;
-  background: #f97316;
+  background: #94a3b8;
 }
 
 /* Bottom row */
 .sa-bottom-row {
   display: grid;
-  grid-template-columns: 1.6fr 1.2fr 1.1fr;
+  grid-template-columns: 1.8fr 1fr;
   gap: 16px;
 }
 
@@ -342,6 +342,11 @@
 .sa-badge--paused {
   background: #fee2e2;
   color: #b91c1c;
+}
+
+.sa-badge--inactive {
+  background: #f1f5f9;
+  color: #64748b;
 }
 
 /* Recent activities */

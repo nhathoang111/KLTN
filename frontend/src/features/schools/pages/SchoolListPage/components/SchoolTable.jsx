@@ -1,6 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { MoreVertical, Edit3, Lock, Unlock, Trash2 } from 'lucide-react';
 
+const statusLabelVi = (status) => {
+  const u = String(status || '').toUpperCase();
+  if (u === 'ACTIVE') return 'Hoạt động';
+  if (u === 'LOCKED') return 'Tạm khóa';
+  if (u === 'INACTIVE') return 'Ngưng hoạt động';
+  return status || '—';
+};
+
 const SchoolTable = ({ schools, onEdit, onToggleLock, onDeleteClick }) => {
   const [actionMenuOpenId, setActionMenuOpenId] = useState(null);
   const [menuPos, setMenuPos] = useState({ top: 0, left: 0 });
@@ -73,8 +81,8 @@ const SchoolTable = ({ schools, onEdit, onToggleLock, onDeleteClick }) => {
               displayAddress = school.address || '';
             }
 
-            const isLocked =
-              school.status === 'LOCKED' || school.status === 'INACTIVE';
+            const st = String(school.status || '').toUpperCase();
+            const isLocked = st === 'LOCKED' || st === 'INACTIVE';
 
             return (
               <tr key={school.id} className="border-t border-slate-100 hover:bg-slate-50/80 transition-colors">
@@ -86,12 +94,12 @@ const SchoolTable = ({ schools, onEdit, onToggleLock, onDeleteClick }) => {
                 <td className="schools-col-status px-4 py-3">
                   <span
                     className={`schools-status-badge ${
-                      school.status === 'ACTIVE'
+                      st === 'ACTIVE'
                         ? 'schools-status-badge--active'
                         : 'schools-status-badge--locked'
                     }`}
                   >
-                    {school.status}
+                    {statusLabelVi(school.status)}
                   </span>
                 </td>
                 <td className="px-4 py-3">

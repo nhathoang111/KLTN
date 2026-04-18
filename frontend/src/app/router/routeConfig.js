@@ -14,6 +14,7 @@ import UserCreatePage from "../../features/users/pages/UserCreatePage/UserCreate
 import UserEditPage from "../../features/users/pages/UserEditPage/UserEditPage";
 import AssignmentListPage from "../../features/assignments/pages/AssignmentListPage/AssignmentListPage";
 import ReportListPage from "../../features/reports/pages/ReportListPage/ReportListPage";
+import SuperAdminReportsPage from "../../features/reports/pages/SuperAdminReportsPage/SuperAdminReportsPage";
 import DocumentListPage from "../../features/documents/pages/DocumentListPage/DocumentListPage";
 import AnnouncementListPage from "../../features/announcements/pages/AnnouncementListPage/AnnouncementListPage";
 import RoleManagement from "../../features/roles/pages/RoleManagement/RoleManagement";
@@ -40,7 +41,8 @@ export const protectedRoutes = [
   { path: "users/:id/edit", Component: UserEditPage, roles: ["SUPER_ADMIN", "ADMIN"] },
   { path: "roles", Component: RoleManagement, roles: ["SUPER_ADMIN", "ADMIN"] },
   { path: "assignments", Component: AssignmentListPage, roles: ["SUPER_ADMIN", "ADMIN", "TEACHER", "STUDENT"] },
-  { path: "reports", Component: ReportListPage, roles: ["SUPER_ADMIN", "ADMIN"] },
+  { path: "reports", Component: ReportListPage, roles: ["ADMIN"] },
+  { path: "platform-reports", Component: SuperAdminReportsPage, roles: ["SUPER_ADMIN"] },
   { path: "documents", Component: DocumentListPage, roles: ["SUPER_ADMIN", "ADMIN"] },
   { path: "announcements", Component: AnnouncementListPage, roles: ["SUPER_ADMIN", "ADMIN", "TEACHER", "STUDENT", "PARENT"] },
   { path: "exam-scores", Component: ExamScoreManagement, roles: ["SUPER_ADMIN", "ADMIN", "TEACHER", "STUDENT", "PARENT"] },

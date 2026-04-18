@@ -9,6 +9,7 @@ import com.example.schoolmanagement.service.ClassService;
 import com.example.schoolmanagement.repository.RecordRepository;
 import com.example.schoolmanagement.repository.SchoolRepository;
 import com.example.schoolmanagement.repository.ClassRepository;
+import com.example.schoolmanagement.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -40,6 +41,32 @@ public class ReportController {
     @Autowired
     private ClassRepository classRepository;
 
+    @Autowired
+    private UserRepository userRepository;
+
+    /**
+     * Thống kê tổng hợp toàn hệ thống cho Super Admin (không chi tiết lớp/học sinh).
+     */
+    @GetMapping("/platform-summary")
+    public ResponseEntity<?> getPlatformSummary() {
+        try {
+            Map<String, Object> summary = new HashMap<>();
+            summary.put("totalSchools", schoolRepository.count());
+            summary.put("activeSchools", schoolRepository.countByStatus("ACTIVE"));
+            summary.put("lockedSchools", schoolRepository.countByStatus("LOCKED"));
+            summary.put("inactiveSchools", schoolRepository.countByStatus("INACTIVE"));
+            summary.put("totalClasses", classRepository.count());
+            summary.put("totalUserAccounts", userRepository.count());
+            summary.put("schoolAdminCount", userRepository.countSchoolAdminUsers());
+            summary.put("teacherCount", userRepository.countTeacherUsers());
+            summary.put("studentCount", userRepository.countStudentUsers());
+            summary.put("parentCount", userRepository.countParentUsers());
+            return ResponseEntity.ok(summary);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Không tải được thống kê nền tảng"));
+        }
+    }
+
     @GetMapping("/stats")
     public ResponseEntity<?> getSystemStats() {
         try {
@@ -48,19 +75,17 @@ public class ReportController {
             // Get basic counts
             long totalSchools = schoolRepository.count();
             long totalClasses = classRepository.count();
-            long totalUsers = recordRepository.count();
-            
-            // Get record counts by type
+            long totalUserAccounts = userRepository.count();
+
             long examRecords = recordRepository.countByType("EXAM");
             long attendanceRecords = recordRepository.countByType("ATTENDANCE");
-            long behaviorRecords = recordRepository.countByType("BEHAVIOR");
-            
+
             stats.put("totalSchools", totalSchools);
             stats.put("totalClasses", totalClasses);
-            stats.put("totalUsers", totalUsers);
+            stats.put("totalUsers", totalUserAccounts);
+            stats.put("totalUserAccounts", totalUserAccounts);
             stats.put("examRecords", examRecords);
             stats.put("attendanceRecords", attendanceRecords);
-            stats.put("behaviorRecords", behaviorRecords);
             
             // Get recent activity (last 30 days)
             LocalDateTime thirtyDaysAgo = LocalDateTime.now().minusDays(30);
@@ -93,11 +118,9 @@ public class ReportController {
             // Get record counts by type for this school
             long examRecords = recordRepository.countBySchoolIdAndType(schoolId, "EXAM");
             long attendanceRecords = recordRepository.countBySchoolIdAndType(schoolId, "ATTENDANCE");
-            long behaviorRecords = recordRepository.countBySchoolIdAndType(schoolId, "BEHAVIOR");
-            
+
             stats.put("examRecords", examRecords);
             stats.put("attendanceRecords", attendanceRecords);
-            stats.put("behaviorRecords", behaviorRecords);
             
             return ResponseEntity.ok(stats);
         } catch (Exception e) {
@@ -121,11 +144,9 @@ public class ReportController {
             // Get record counts by type for this class
             long examRecords = recordRepository.countByClassEntityIdAndType(classId, "EXAM");
             long attendanceRecords = recordRepository.countByClassEntityIdAndType(classId, "ATTENDANCE");
-            long behaviorRecords = recordRepository.countByClassEntityIdAndType(classId, "BEHAVIOR");
-            
+
             stats.put("examRecords", examRecords);
             stats.put("attendanceRecords", attendanceRecords);
-            stats.put("behaviorRecords", behaviorRecords);
             
             // Get average scores
             List<Record> examRecordsList = recordRepository.findByClassEntityIdAndType(classId, "EXAM");
@@ -247,44 +268,6 @@ public class ReportController {
             return ResponseEntity.ok(report);
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("error", "Failed to generate attendance report"));
-        }
-    }
-
-    @GetMapping("/behavior")
-    public ResponseEntity<?> getBehaviorReport(@RequestParam(required = false) Integer schoolId,
-                                              @RequestParam(required = false) Integer classId,
-                                              @RequestParam(required = false) String startDate,
-                                              @RequestParam(required = false) String endDate) {
-        try {
-            List<Record> records = recordService.getBehaviorRecords(schoolId, classId);
-            
-            // Filter by date range if provided
-            if (startDate != null && endDate != null) {
-                LocalDateTime start = LocalDateTime.parse(startDate + "T00:00:00");
-                LocalDateTime end = LocalDateTime.parse(endDate + "T23:59:59");
-                records = records.stream()
-                    .filter(r -> r.getDate() != null && 
-                               r.getDate().isAfter(start) && 
-                               r.getDate().isBefore(end))
-                    .collect(Collectors.toList());
-            }
-            
-            // Calculate behavior statistics
-            Map<String, Object> report = new HashMap<>();
-            report.put("records", records);
-            report.put("totalRecords", records.size());
-            
-            if (!records.isEmpty()) {
-                Map<String, Long> behaviorCounts = records.stream()
-                    .filter(r -> r.getStatus() != null)
-                    .collect(Collectors.groupingBy(Record::getStatus, Collectors.counting()));
-                
-                report.put("behaviorCounts", behaviorCounts);
-            }
-            
-            return ResponseEntity.ok(report);
-        } catch (Exception e) {
-            return ResponseEntity.badRequest().body(Map.of("error", "Failed to generate behavior report"));
         }
     }
 

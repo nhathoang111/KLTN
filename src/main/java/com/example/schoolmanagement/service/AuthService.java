@@ -40,6 +40,11 @@ public class AuthService {
             throw new BadRequestException("Invalid credentials");
         }
 
+        String userStatus = user.getStatus() != null ? user.getStatus().trim().toUpperCase() : "";
+        if (!userStatus.isEmpty() && !"ACTIVE".equals(userStatus)) {
+            throw new BadRequestException("Tài khoản của bạn đang bị khóa hoặc ngưng hoạt động. Vui lòng liên hệ quản trị viên.");
+        }
+
         String roleName = user.getRole().getName().toUpperCase();
         String roleType = "GUEST";
         boolean isSuperAdmin = false;
@@ -71,6 +76,9 @@ public class AuthService {
                     (schoolStatus.equals("LOCKED") || schoolStatus.equals("INACTIVE"))) {
                 throw new BadRequestException("Tài khoản của bạn không thể đăng nhập vì trường học đã bị khóa. Vui lòng liên hệ quản trị viên.");
             }
+        }
+        if (!isSuperAdmin && user.getSchool() == null) {
+            throw new BadRequestException("Tài khoản của bạn chưa được gán trường. Vui lòng liên hệ Super Admin.");
         }
 
         Map<String, Object> response = new HashMap<>();

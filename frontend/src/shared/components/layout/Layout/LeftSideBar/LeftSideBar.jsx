@@ -14,6 +14,7 @@ import {
     NotebookPen,
     LogOut,
     UserCircle,
+    BarChart3,
 } from "lucide-react";
 
 import logo from "../../../../../assets/logo.jpg";
@@ -85,6 +86,8 @@ const LeftSideBar = ({ user, onLogout }) => {
                 return Megaphone;
             case "/profile":
                 return UserCircle;
+            case "/platform-reports":
+                return BarChart3;
             default:
                 return School;
         }
@@ -101,6 +104,7 @@ const LeftSideBar = ({ user, onLogout }) => {
 
             { path: "/schools", label: "Quản lý trường học", roles: ["SUPER_ADMIN"] },
             { path: "/users", label: "Quản lý Admin trường", roles: ["SUPER_ADMIN"] },
+            { path: "/platform-reports", label: "Thống kê toàn hệ thống", roles: ["SUPER_ADMIN"] },
 
             { path: "/users", label: "Quản lý người dùng", roles: ["ADMIN"] },
             { path: "/roles", label: "Quản lý phân quyền", roles: ["ADMIN"] },

@@ -31,6 +31,7 @@ const UserEditForm = ({
   const [loadingRoles, setLoadingRoles] = useState(false);
   const [showRoleChangeConfirm, setShowRoleChangeConfirm] = useState(false);
   const [pendingRoleId, setPendingRoleId] = useState(null);
+  const [loadedRoleSnapshot, setLoadedRoleSnapshot] = useState(null);
 
   const [formData, setFormData] = useState({
     email: '',
@@ -131,12 +132,20 @@ const UserEditForm = ({
       }
 
       const schoolId = user.school?.id;
+      setLoadedRoleSnapshot(user.role || null);
       if (schoolId) {
         try {
           const rolesRes = await api.get(`/roles/school/${schoolId}`);
           let allRoles = rolesRes.data.roles || [];
           if (isSchoolAdmin) allRoles = (allRoles || []).filter((r) => isAllowedRoleForSchoolAdmin(r?.name));
           setRoles(allRoles);
+        } catch (error) {
+          console.error(error);
+        }
+      } else if (currentUserRole === 'SUPER_ADMIN') {
+        try {
+          const rolesRes = await api.get('/roles?userRole=SUPER_ADMIN');
+          setRoles(rolesRes.data.roles || []);
         } catch (error) {
           console.error(error);
         }
@@ -217,8 +226,11 @@ const UserEditForm = ({
   }, [formData.schoolId]);
 
   const selectedRole = useMemo(() => {
-    return roles.find((r) => r.id === parseInt(formData.roleId, 10) || r.id === formData.roleId);
-  }, [roles, formData.roleId]);
+    const fromList = roles.find((r) => r.id === parseInt(formData.roleId, 10) || r.id === formData.roleId);
+    if (fromList) return fromList;
+    if (loadedRoleSnapshot && String(loadedRoleSnapshot.id) === String(formData.roleId)) return loadedRoleSnapshot;
+    return null;
+  }, [roles, formData.roleId, loadedRoleSnapshot]);
 
   const isStudent = isRoleStudent(selectedRole?.name);
   const isParent = isRoleParent(selectedRole?.name);
@@ -271,6 +283,12 @@ const UserEditForm = ({
     }
     if (!formData.roleId) return setError('Vai trò là bắt buộc') || false;
     if (!formData.schoolId) return setError('Trường là bắt buộc') || false;
+    const roleUpper = (selectedRole?.name || '').toUpperCase();
+    const isAdminRole = roleUpper === 'ADMIN' || roleUpper.startsWith('ADMIN_');
+    if (isAdminRole && !formData.schoolId) {
+      setError('Tài khoản Admin bắt buộc phải gán trường');
+      return false;
+    }
     if (isSchoolAdmin && !isAllowedRoleForSchoolAdmin(selectedRole?.name)) {
       setError('Admin chỉ được gán vai trò: Phụ huynh / Học sinh / Giáo viên');
       return false;
@@ -472,19 +490,46 @@ const UserEditForm = ({
             <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
               <div>
                 <label className="block text-sm font-semibold text-slate-700">Trường</label>
-                <div className="relative mt-1">
-                  <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-slate-400">
-                    <School size={18} />
-                  </span>
-                  <input
-                    type="text"
-                    value={schoolName}
-                    disabled
-                    readOnly
-                    className="block w-full rounded-2xl border border-slate-200 bg-slate-50 pl-10 pr-3 py-3 text-base shadow-sm"
-                  />
-                </div>
-                <input type="hidden" name="schoolId" value={formData.schoolId} />
+                {currentUserRole === 'SUPER_ADMIN' ? (
+                  <div className="relative mt-1">
+                    <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-slate-400">
+                      <School size={18} />
+                    </span>
+                    <select
+                      name="schoolId"
+                      value={formData.schoolId}
+                      onChange={handleChange}
+                      className="block w-full appearance-none rounded-2xl border border-slate-200 bg-white pl-10 pr-10 py-3 text-base shadow-sm outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100"
+                      required
+                    >
+                      <option value="">Chọn trường</option>
+                      {schools.map((school) => (
+                        <option key={school.id} value={school.id}>
+                          {school.name} ({school.code})
+                        </option>
+                      ))}
+                    </select>
+                    <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-slate-400">
+                      ▾
+                    </span>
+                  </div>
+                ) : (
+                  <>
+                    <div className="relative mt-1">
+                      <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-slate-400">
+                        <School size={18} />
+                      </span>
+                      <input
+                        type="text"
+                        value={schoolName}
+                        disabled
+                        readOnly
+                        className="block w-full rounded-2xl border border-slate-200 bg-slate-50 pl-10 pr-3 py-3 text-base shadow-sm"
+                      />
+                    </div>
+                    <input type="hidden" name="schoolId" value={formData.schoolId} />
+                  </>
+                )}
               </div>
 
               <div>

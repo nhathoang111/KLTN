@@ -78,9 +78,9 @@ const SchoolCreatePage = () => {
   return (
     <div className="max-w-2xl mx-auto">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Create New School</h1>
+        <h1 className="text-2xl font-bold text-gray-900">Thêm trường học</h1>
         <p className="mt-1 text-sm text-gray-500">
-          Fill in the details below to create a new school.
+          Nhập thông tin bên dưới để tạo trường học mới.
         </p>
       </div>
 
@@ -99,7 +99,7 @@ const SchoolCreatePage = () => {
           <div className="grid grid-cols-1 gap-6">
             <div>
               <label htmlFor="name" className="block text-sm font-medium text-gray-700">
-                School Name *
+                Tên trường *
               </label>
               <input
                 type="text"
@@ -114,7 +114,7 @@ const SchoolCreatePage = () => {
 
             <div>
               <label htmlFor="code" className="block text-sm font-medium text-gray-700">
-                School Code *
+                Mã trường *
               </label>
               <input
                 type="text"
@@ -166,7 +166,7 @@ const SchoolCreatePage = () => {
 
             <div>
               <label htmlFor="managementType" className="block text-sm font-medium text-gray-700">
-                C?p qu?n l� (tr??ng c�ng / t?)
+                Loại trường
               </label>
               <select
                 name="managementType"
@@ -183,7 +183,7 @@ const SchoolCreatePage = () => {
 
             <div>
               <label htmlFor="address" className="block text-sm font-medium text-gray-700">
-                Address
+                Địa chỉ
               </label>
               <textarea
                 name="address"
@@ -198,7 +198,7 @@ const SchoolCreatePage = () => {
             <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
               <div>
                 <label htmlFor="phone" className="block text-sm font-medium text-gray-700">
-                  Phone
+                  Số điện thoại
                 </label>
                 <input
                   type="tel"
@@ -227,7 +227,7 @@ const SchoolCreatePage = () => {
 
             <div>
               <label htmlFor="status" className="block text-sm font-medium text-gray-700">
-                Status
+                Trạng thái
               </label>
               <select
                 name="status"
@@ -236,8 +236,8 @@ const SchoolCreatePage = () => {
                 onChange={handleChange}
                 className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
               >
-                <option value="ACTIVE">Active</option>
-                <option value="INACTIVE">Inactive</option>
+                <option value="ACTIVE">Hoạt động</option>
+                <option value="INACTIVE">Ngưng hoạt động</option>
               </select>
             </div>
           </div>
@@ -249,14 +249,14 @@ const SchoolCreatePage = () => {
             onClick={() => navigate('/schools')}
             className="bg-white py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
           >
-            Cancel
+            Hủy
           </button>
           <button
             type="submit"
             disabled={loading}
             className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {loading ? 'Creating...' : 'Create School'}
+            {loading ? 'Đang tạo...' : 'Tạo trường'}
           </button>
         </div>
       </form>

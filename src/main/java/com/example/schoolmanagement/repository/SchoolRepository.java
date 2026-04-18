@@ -11,6 +11,8 @@ import java.util.Optional;
 @Repository
 public interface SchoolRepository extends JpaRepository<School, Integer> {
     Optional<School> findByCode(String code);
+
+    long countByStatus(String status);
     
     // Query methods that handle non-null values only
     @Query("SELECT s FROM School s WHERE s.phone = :phone")

@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Building2, GraduationCap, Lock, Mail, Phone, Shield, User, Users, School, ToggleLeft, CalendarDays, VenusAndMars, HeartHandshake } from 'lucide-react';
+import { toast } from 'react-toastify';
 import { useAuth } from '../../auth/context/AuthContext';
 import api from '../../../shared/lib/api';
 
@@ -17,12 +18,11 @@ const UserCreateForm = ({
   title = 'Tạo người dùng mới',
   description = 'Thêm người dùng mới vào hệ thống với vai trò phù hợp.',
   showContainer = true,
-  hideHeader = false
+  hideHeader = false,
+  mode = 'default'
 }) => {
   const { user } = useAuth();
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
 
   const [formData, setFormData] = useState({
     email: '',
@@ -57,6 +57,7 @@ const UserCreateForm = ({
 
   const currentUserRole = useMemo(() => user?.role?.name?.toUpperCase(), [user]);
   const currentSchoolId = useMemo(() => user?.school?.id, [user]);
+  const isAdminCreationMode = mode === 'create-admin' && currentUserRole === 'SUPER_ADMIN';
 
   useEffect(() => {
     // Admin: auto set schoolId từ context
@@ -74,7 +75,7 @@ const UserCreateForm = ({
         } else if (currentUserRole === 'ADMIN' && currentSchoolId) {
           rolesUrl += `?userRole=ADMIN&schoolId=${currentSchoolId}`;
         } else {
-          setError('Không có quyền truy cập.');
+          toast.error('Không có quyền truy cập.');
           return;
         }
 
@@ -115,7 +116,7 @@ const UserCreateForm = ({
         const schoolsResponse = await api.get('/schools');
         setSchools(schoolsResponse.data.schools || []);
       } catch (err) {
-        setError('Không thể tải dữ liệu lựa chọn');
+        toast.error('Không thể tải dữ liệu lựa chọn.');
         console.error('Error fetching options:', err);
       } finally {
         setLoadingOptions(false);
@@ -155,7 +156,15 @@ const UserCreateForm = ({
         }
 
         setRoles(Array.isArray(allRoles) ? allRoles.filter((r) => r != null && r.id != null) : []);
-        setFormData((prev) => ({ ...prev, roleId: '' }));
+        if (isAdminCreationMode) {
+          const adminRole = allRoles.find((r) => {
+            const rn = r?.name?.toUpperCase();
+            return rn === 'ADMIN' || rn?.startsWith('ADMIN_');
+          });
+          setFormData((prev) => ({ ...prev, roleId: adminRole ? String(adminRole.id) : '' }));
+        } else {
+          setFormData((prev) => ({ ...prev, roleId: '' }));
+        }
       } catch (err) {
         console.error('Error fetching roles for school:', err);
       } finally {
@@ -200,7 +209,7 @@ const UserCreateForm = ({
     fetchClassesForSchool(schoolId);
     fetchSubjectsForSchool(schoolId);
     fetchSchoolStudents(schoolId);
-  }, [formData.schoolId, currentUserRole]);
+  }, [formData.schoolId, currentUserRole, isAdminCreationMode]);
 
   // SUPER_ADMIN: auto chọn role ADMIN nếu có
   useEffect(() => {
@@ -222,7 +231,6 @@ const UserCreateForm = ({
       }
       return next;
     });
-    if (error) setError('');
   };
 
   const toggleSubjectId = (id) => {
@@ -250,20 +258,30 @@ const UserCreateForm = ({
   const isRoleStudent = roleNameUpper.includes('STUDENT') || roleNameUpper.includes('HỌC SINH') || roleNameUpper.includes('HOC SINH');
   const isRoleTeacher = roleNameUpper.includes('TEACHER');
   const isRoleParent = roleNameUpper.includes('PARENT');
-  const isRoleAdmin = roleNameUpper === 'ADMIN' || roleNameUpper.startsWith('ADMIN');
+  const isRoleAdmin = roleNameUpper === 'ADMIN' || roleNameUpper.startsWith('ADMIN_');
+  const adminRoleOption = useMemo(
+    () => roles.find((r) => {
+      const rn = r?.name?.toUpperCase();
+      return rn === 'ADMIN' || rn?.startsWith('ADMIN_');
+    }),
+    [roles]
+  );
 
   const validateForm = () => {
     if (showRoleModal) {
-      setError('Vui lòng hoàn tất việc tạo role mới trước khi tạo người dùng');
+      toast.error('Vui lòng hoàn tất việc tạo vai trò mới trước khi tạo người dùng.');
       return false;
     }
-    if (!formData.email) return setError('Email là bắt buộc') || false;
-    if (!formData.fullName) return setError('Họ tên là bắt buộc') || false;
-    if (!formData.password) return setError('Mật khẩu là bắt buộc') || false;
-    if (formData.password !== formData.confirmPassword) return setError('Mật khẩu xác nhận không khớp') || false;
-    if (!formData.roleId) return setError('Vui lòng chọn vai trò') || false;
-    if (!formData.schoolId && currentUserRole !== 'SUPER_ADMIN') return setError('Vui lòng chọn trường') || false;
-    if (isRoleStudent && !formData.classId) return setError('Lớp là bắt buộc khi tạo học sinh') || false;
+    if (!formData.email) return toast.error('Email là bắt buộc.') || false;
+    if (!formData.fullName) return toast.error('Họ tên là bắt buộc.') || false;
+    if (!formData.password) return toast.error('Mật khẩu là bắt buộc.') || false;
+    if (formData.password !== formData.confirmPassword) return toast.error('Mật khẩu xác nhận không khớp.') || false;
+    if (!formData.roleId && !(isAdminCreationMode && adminRoleOption?.id)) {
+      return toast.error('Vui lòng chọn vai trò.') || false;
+    }
+    if (!formData.schoolId && currentUserRole !== 'SUPER_ADMIN') return toast.error('Vui lòng chọn trường.') || false;
+    if (isRoleAdmin && !formData.schoolId) return toast.error('Tài khoản Admin bắt buộc phải gán trường.') || false;
+    if (isRoleStudent && !formData.classId) return toast.error('Lớp là bắt buộc khi tạo học sinh.') || false;
     return true;
   };
 
@@ -273,9 +291,14 @@ const UserCreateForm = ({
 
     try {
       setLoading(true);
-      setError('');
 
-      const roleIdNum = parseInt(formData.roleId, 10);
+      const roleIdNum = isAdminCreationMode
+        ? parseInt(formData.roleId || String(adminRoleOption?.id || ''), 10)
+        : parseInt(formData.roleId, 10);
+      if (isAdminCreationMode && Number.isNaN(roleIdNum)) {
+        toast.error('Không tìm thấy vai trò ADMIN để tạo quản trị viên.');
+        return;
+      }
       const schoolIdNum = formData.schoolId ? parseInt(formData.schoolId, 10) : NaN;
       const effectiveSchoolId = Number.isInteger(schoolIdNum)
         ? schoolIdNum
@@ -305,26 +328,26 @@ const UserCreateForm = ({
       if (currentUserRole === 'SUPER_ADMIN') url += '?currentUserRole=SUPER_ADMIN';
       else if (currentUserRole === 'ADMIN' && currentSchoolId) url += `?currentUserRole=ADMIN&currentUserSchoolId=${currentSchoolId}`;
       else {
-        setError('Không có quyền truy cập.');
+        toast.error('Không có quyền truy cập.');
         return;
       }
 
       const response = await api.post(url, userData);
-      setSuccess('Tạo người dùng thành công!');
+      toast.success(isAdminCreationMode ? 'Tạo quản trị viên thành công!' : 'Tạo người dùng thành công!');
       if (typeof onCreated === 'function') onCreated(response.data);
     } catch (err) {
       console.error('Error creating user:', err);
       const res = err.response?.data;
       const errorMessage = res?.message || res?.error || 'Tạo người dùng thất bại';
-      setError(errorMessage);
+      toast.error(errorMessage);
     } finally {
       setLoading(false);
     }
   };
 
   const handleCreateRole = async () => {
-    if (!formData.schoolId) return alert('Vui lòng chọn trường trước');
-    if (!newRoleData.name) return alert('Vui lòng nhập tên role');
+    if (!formData.schoolId) return toast.error('Vui lòng chọn trường trước.');
+    if (!newRoleData.name) return toast.error('Vui lòng nhập tên vai trò.');
 
     try {
       setCreatingRole(true);
@@ -336,7 +359,7 @@ const UserCreateForm = ({
 
       const createdRole = response.data.role || response.data;
       if (!createdRole || !createdRole.id) {
-        alert('Tạo role thành công nhưng không thể lấy ID. Vui lòng tải lại trang.');
+        toast.error('Tạo vai trò thành công nhưng không lấy được ID. Vui lòng tải lại trang.');
         window.location.reload();
         return;
       }
@@ -345,9 +368,10 @@ const UserCreateForm = ({
       setFormData((prev) => ({ ...prev, roleId: String(createdRole.id) }));
       setShowRoleModal(false);
       setNewRoleData({ name: '', description: '' });
+      toast.success('Tạo vai trò thành công.');
     } catch (err) {
       console.error('Error creating role:', err);
-      alert(err.response?.data?.error || 'Không thể tạo role');
+      toast.error(err.response?.data?.error || 'Không thể tạo vai trò.');
     } finally {
       setCreatingRole(false);
     }
@@ -370,19 +394,7 @@ const UserCreateForm = ({
         </div>
       )}
 
-      {error && (
-        <div className="mb-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-          {error}
-        </div>
-      )}
-
-      {success && (
-        <div className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
-          {success}
-        </div>
-      )}
-
-      <form onSubmit={handleSubmit} className="space-y-5">
+      <form onSubmit={handleSubmit} noValidate className="space-y-5">
         <div className="bg-white px-4 py-5 sm:rounded-3xl sm:p-6 border border-slate-200">
           <div className="grid grid-cols-1 gap-5">
             <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
@@ -474,7 +486,7 @@ const UserCreateForm = ({
             <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
               <div>
                 <label htmlFor="schoolId" className="block text-sm font-semibold text-slate-700">
-                  Trường {currentUserRole === 'SUPER_ADMIN' ? '(tùy chọn)' : '*'}
+                  Trường {(currentUserRole === 'SUPER_ADMIN' && !isRoleAdmin) ? '(tùy chọn)' : '*'}
                 </label>
                 <div className="relative mt-1">
                   <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-slate-400">
@@ -486,7 +498,7 @@ const UserCreateForm = ({
                     value={formData.schoolId}
                     onChange={handleChange}
                     className="block w-full appearance-none rounded-2xl border border-slate-200 bg-white pl-10 pr-10 py-3 text-base shadow-sm outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 disabled:bg-slate-50"
-                    required={currentUserRole !== 'SUPER_ADMIN'}
+                    required={currentUserRole !== 'SUPER_ADMIN' || isRoleAdmin}
                     disabled={currentUserRole === 'ADMIN'}
                   >
                     <option value="">Chọn trường</option>
@@ -502,49 +514,67 @@ const UserCreateForm = ({
                 </div>
               </div>
 
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <label htmlFor="roleId" className="block text-sm font-semibold text-slate-700">
-                    Vai trò *
-                  </label>
-                  {formData.schoolId && currentUserRole === 'SUPER_ADMIN' && (
-                    <button
-                      type="button"
-                      onClick={() => setShowRoleModal(true)}
-                      className="text-xs rounded-full bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1 font-semibold shadow-sm"
-                    >
-                      + Thêm role
-                    </button>
-                  )}
-                </div>
-
-                {!showRoleModal && (
+              {isAdminCreationMode ? (
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700">Vai trò</label>
                   <div className="relative mt-1">
                     <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-slate-400">
                       <Shield size={18} />
                     </span>
-                    <select
-                      name="roleId"
-                      id="roleId"
-                      value={formData.roleId || ''}
-                      onChange={handleChange}
-                      className="block w-full appearance-none rounded-2xl border border-slate-200 bg-white pl-10 pr-10 py-3 text-base shadow-sm outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 disabled:bg-slate-50"
-                      required
-                      disabled={loadingRoles}
-                    >
-                      <option value="">{loadingRoles ? 'Đang tải...' : 'Chọn vai trò'}</option>
-                      {roles.map((role) => (
-                        <option key={role.id} value={String(role.id)}>
-                          {role.name || ''} {role.description ? `- ${role.description}` : ''}
-                        </option>
-                      ))}
-                    </select>
-                    <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-slate-400">
-                      ▾
-                    </span>
+                    <input
+                      type="text"
+                      value="Quản trị trường (ADMIN)"
+                      disabled
+                      readOnly
+                      className="block w-full rounded-2xl border border-slate-200 bg-slate-50 pl-10 pr-3 py-3 text-base shadow-sm"
+                    />
                   </div>
-                )}
-              </div>
+                </div>
+              ) : (
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <label htmlFor="roleId" className="block text-sm font-semibold text-slate-700">
+                      Vai trò *
+                    </label>
+                    {formData.schoolId && currentUserRole === 'SUPER_ADMIN' && (
+                      <button
+                        type="button"
+                        onClick={() => setShowRoleModal(true)}
+                        className="text-xs rounded-full bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1 font-semibold shadow-sm"
+                      >
+                        + Thêm role
+                      </button>
+                    )}
+                  </div>
+
+                  {!showRoleModal && (
+                    <div className="relative mt-1">
+                      <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-slate-400">
+                        <Shield size={18} />
+                      </span>
+                      <select
+                        name="roleId"
+                        id="roleId"
+                        value={formData.roleId || ''}
+                        onChange={handleChange}
+                        className="block w-full appearance-none rounded-2xl border border-slate-200 bg-white pl-10 pr-10 py-3 text-base shadow-sm outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 disabled:bg-slate-50"
+                        required
+                        disabled={loadingRoles}
+                      >
+                        <option value="">{loadingRoles ? 'Đang tải...' : 'Chọn vai trò'}</option>
+                        {roles.map((role) => (
+                          <option key={role.id} value={String(role.id)}>
+                            {role.name || ''} {role.description ? `- ${role.description}` : ''}
+                          </option>
+                        ))}
+                      </select>
+                      <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-slate-400">
+                        ▾
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
               {showRoleModal && formData.schoolId && currentUserRole === 'SUPER_ADMIN' && (

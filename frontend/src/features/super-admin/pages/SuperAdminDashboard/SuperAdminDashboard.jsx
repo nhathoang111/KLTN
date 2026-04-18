@@ -3,82 +3,72 @@ import { useAuth } from '../../../auth/context/AuthContext';
 import api from '../../../../shared/lib/api';
 import './SuperAdminDashboard.css';
 
+const formatSchoolStatusLabel = (status) => {
+  if (!status) return '-';
+  const u = String(status).toUpperCase();
+  if (u === 'ACTIVE') return 'Hoạt động';
+  if (u === 'LOCKED') return 'Tạm khóa';
+  if (u === 'INACTIVE') return 'Ngưng hoạt động';
+  return status;
+};
+
+const schoolStatusBadgeClass = (status) => {
+  const u = String(status || '').toUpperCase();
+  if (u === 'ACTIVE') return 'active';
+  if (u === 'LOCKED') return 'paused';
+  if (u === 'INACTIVE') return 'inactive';
+  return 'inactive';
+};
+
 const SuperAdminDashboard = () => {
   const { user } = useAuth();
   const [stats, setStats] = useState({
     schools: 0,
     users: 0,
-    classes: 0,
-    subjects: 0,
-    announcements: 0,
-    documents: 0,
   });
   const [loading, setLoading] = useState(true);
   const [schools, setSchools] = useState([]);
   const [schoolStatusStats, setSchoolStatusStats] = useState({
     active: 0,
     paused: 0,
-    pending: 0,
+    inactive: 0,
   });
   const [recentSchools, setRecentSchools] = useState([]);
-  const [recentActivities, setRecentActivities] = useState([]);
-  const [pendingRequests, setPendingRequests] = useState(0);
 
-  // Giữ nguyên logic fetch dữ liệu, chỉ thay đổi trình bày UI
   useEffect(() => {
     fetchStats();
   }, []);
 
   const fetchStats = async () => {
     try {
-      const [schoolsRes, usersRes, subjectsRes, announcementsRes, documentsRes] = await Promise.all([
+      const [schoolsRes, usersRes] = await Promise.all([
         api.get('/schools'),
         api.get('/users?userRole=SUPER_ADMIN'),
-        api.get('/subjects'),
-        api.get('/announcements'),
-        api.get('/documents'),
       ]);
 
       const schoolsData = schoolsRes.data.schools || [];
-      const announcementsData = announcementsRes.data.announcements || [];
 
       setSchools(schoolsData);
 
-      // Thống kê trạng thái trường học từ dữ liệu thật
       const activeSchools = schoolsData.filter((school) => school.status === 'ACTIVE').length;
       const pausedSchools = schoolsData.filter((school) => school.status === 'LOCKED').length;
-      const pendingSchools = schoolsData.filter((school) => school.status === 'INACTIVE').length;
+      const inactiveSchools = schoolsData.filter((school) => school.status === 'INACTIVE').length;
 
       setSchoolStatusStats({
         active: activeSchools,
         paused: pausedSchools,
-        pending: pendingSchools,
+        inactive: inactiveSchools,
       });
 
-      // Bảng "Trường mới tạo" lấy từ 3 trường tạo gần nhất
       const sortedSchools = [...schoolsData]
         .filter((school) => school.createdAt)
         .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
         .slice(0, 3);
       setRecentSchools(sortedSchools);
 
-      // "Hoạt động gần đây" lấy từ thông báo mới nhất
-      const sortedAnnouncements = [...announcementsData]
-        .filter((item) => item.createdAt)
-        .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
-        .slice(0, 3);
-      setRecentActivities(sortedAnnouncements);
-
-      // Yêu cầu chờ xử lý = tổng số thông báo hiện có (thông tin thật)
-      setPendingRequests(announcementsData.length || 0);
-
       setStats({
         schools: schoolsData.length || 0,
         users: usersRes.data.users?.length || 0,
-        classes: 0,
-        subjects: subjectsRes.data.subjects?.length || 0,
-        announcements: announcementsData.length || 0,
-        documents: documentsRes.data.documents?.length || 0,
       });
     } catch (error) {
       console.error('Error fetching stats:', error);
@@ -90,8 +80,7 @@ const SuperAdminDashboard = () => {
   const quickActions = [
     { title: 'Thêm trường mới', badge: null, path: '/schools/create' },
     { title: 'Quản lý người dùng', badge: stats.users || null, path: '/users?userRole=SUPER_ADMIN' },
-    { title: 'Xem báo cáo', badge: null, path: '/reports' },
-    { title: 'Cài đặt hệ thống', badge: null, path: '/settings' },
+    { title: 'Thống kê toàn hệ thống', badge: null, path: '/platform-reports' },
   ];
 
   const formatDate = (dateString) => {
@@ -99,14 +88,8 @@ const SuperAdminDashboard = () => {
     return new Date(dateString).toLocaleDateString('vi-VN');
   };
 
-  const getSchoolName = (schoolId) => {
-    if (!schoolId) return '';
-    const found = schools.find((s) => s.id === schoolId);
-    return found?.name || '';
-  };
-
   const getBarHeight = (value) => {
-    const max = Math.max(schoolStatusStats.active, schoolStatusStats.paused, schoolStatusStats.pending, 1);
+    const max = Math.max(schoolStatusStats.active, schoolStatusStats.paused, schoolStatusStats.inactive, 1);
     const maxPixel = 120;
     return `${(value / max) * maxPixel}px`;
   };
@@ -124,7 +107,6 @@ const SuperAdminDashboard = () => {
 
   return (
     <div className="super-admin-dashboard">
-      {/* Thanh header trên cùng */}
       <div className="sa-topbar">
         <div>
           <h1 className="sa-title">Super Admin</h1>
@@ -132,11 +114,11 @@ const SuperAdminDashboard = () => {
         </div>
         <div className="sa-topbar-right">
           <div className="sa-topbar-icons">
-            <button className="sa-icon-btn sa-noti">
+            <button type="button" className="sa-icon-btn sa-noti" aria-label="Thông báo">
               <span className="sa-icon-bell" />
               <span className="sa-noti-dot" />
             </button>
-            <button className="sa-icon-btn">
+            <button type="button" className="sa-icon-btn" aria-label="Tin nhắn">
               <span className="sa-icon-bell sa-icon-bell--outline" />
             </button>
           </div>
@@ -152,7 +134,6 @@ const SuperAdminDashboard = () => {
         </div>
       </div>
 
-      {/* Hàng thống kê trên cùng */}
       <div className="sa-kpi-row">
         <div className="sa-kpi-card">
           <div className="sa-kpi-icon sa-kpi-icon--home" />
@@ -176,15 +157,14 @@ const SuperAdminDashboard = () => {
           </div>
         </div>
         <div className="sa-kpi-card">
-          <div className="sa-kpi-icon sa-kpi-icon--clock" />
+          <div className="sa-kpi-icon sa-kpi-icon--home" />
           <div className="sa-kpi-content">
-            <span className="sa-kpi-label">Yêu cầu chờ xử lý</span>
-            <span className="sa-kpi-value">{pendingRequests}</span>
+            <span className="sa-kpi-label">Trường đang hoạt động</span>
+            <span className="sa-kpi-value">{schoolStatusStats.active}</span>
           </div>
         </div>
       </div>
 
-      {/* Vùng giữa: biểu đồ */}
       <div className="sa-middle-row">
         <div className="sa-card">
           <div className="sa-card-header">
@@ -235,81 +215,50 @@ const SuperAdminDashboard = () => {
                 className="sa-bar sa-bar--pause"
                 style={{ height: getBarHeight(schoolStatusStats.paused) }}
               />
-              <span>Tạm ngưng</span>
+              <span>Tạm khóa</span>
             </div>
             <div className="sa-bar-item">
               <div
-                className="sa-bar sa-bar--pending"
-                style={{ height: getBarHeight(schoolStatusStats.pending) }}
+                className="sa-bar sa-bar--inactive"
+                style={{ height: getBarHeight(schoolStatusStats.inactive) }}
               />
-              <span>Chờ duyệt</span>
+              <span>Ngưng hoạt động</span>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Hàng dưới: bảng + hoạt động + quick actions */}
       <div className="sa-bottom-row">
         <div className="sa-card">
           <div className="sa-card-header">
             <span className="sa-card-title">Trường mới tạo</span>
           </div>
           <div className="overflow-x-auto">
-          <table className="min-w-full border-collapse text-sm">
-            <thead className="bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
-              <tr>
-                <th className="px-4 py-3 text-left">Tên trường</th>
-                <th className="px-4 py-3 text-left">Mã trường</th>
-                <th className="px-4 py-3 text-left">Ngày tạo</th>
-                <th className="px-4 py-3 text-left">Trạng thái</th>
-              </tr>
-            </thead>
-            <tbody className="text-sm text-slate-700">
-              {recentSchools.map((school) => (
-                <tr key={school.id || school.code} className="border-t border-slate-100 hover:bg-slate-50/80 transition-colors">
-                  <td className="px-4 py-3">{school.name || '-'}</td>
-                  <td className="px-4 py-3">{school.code || '-'}</td>
-                  <td className="px-4 py-3">{formatDate(school.createdAt)}</td>
-                  <td className="px-4 py-3">
-                    <span
-                      className={`sa-badge sa-badge--${
-                        school.status === 'ACTIVE'
-                          ? 'active'
-                          : school.status === 'LOCKED'
-                          ? 'paused'
-                          : 'pending'
-                      }`}
-                    >
-                      {school.status || '-'}
-                    </span>
-                  </td>
+            <table className="min-w-full border-collapse text-sm">
+              <thead className="bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                <tr>
+                  <th className="px-4 py-3 text-left">Tên trường</th>
+                  <th className="px-4 py-3 text-left">Mã trường</th>
+                  <th className="px-4 py-3 text-left">Ngày tạo</th>
+                  <th className="px-4 py-3 text-left">Trạng thái</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="text-sm text-slate-700">
+                {recentSchools.map((school) => (
+                  <tr key={school.id || school.code} className="border-t border-slate-100 hover:bg-slate-50/80 transition-colors">
+                    <td className="px-4 py-3">{school.name || '-'}</td>
+                    <td className="px-4 py-3">{school.code || '-'}</td>
+                    <td className="px-4 py-3">{formatDate(school.createdAt)}</td>
+                    <td className="px-4 py-3">
+                      <span className={`sa-badge sa-badge--${schoolStatusBadgeClass(school.status)}`}>
+                        {formatSchoolStatusLabel(school.status)}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
-        </div>
-
-        <div className="sa-card">
-          <div className="sa-card-header">
-            <span className="sa-card-title">Hoạt động gần đây</span>
-          </div>
-          <ul className="sa-activity-list">
-            {recentActivities.map((activity) => (
-              <li key={activity.id} className="sa-activity-item">
-                <span className="sa-activity-dot" />
-                <span>
-                  <span className="sa-activity-title">{activity.title}</span>
-                  {activity.school && (
-                    <span className="sa-activity-meta">
-                      {' '}
-                      • {getSchoolName(activity.school.id)} • {formatDate(activity.createdAt)}
-                    </span>
-                  )}
-                </span>
-              </li>
-            ))}
-          </ul>
         </div>
 
         <div className="sa-card">

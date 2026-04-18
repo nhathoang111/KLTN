@@ -627,6 +627,10 @@ public class UserService {
         }
 
         Integer schoolId = parseIntFromMap(userData.get("schoolId"));
+        boolean isAdminRole = "ADMIN".equals(roleName) || roleName.startsWith("ADMIN_");
+        if (isAdminRole && schoolId == null) {
+            throw new BadRequestException("Tài khoản Admin bắt buộc phải gán trường.");
+        }
         if (schoolId != null) {
             School school = schoolRepository.findById(schoolId).orElseThrow(() -> new BadRequestException("Invalid school ID"));
             if ("SUPER_ADMIN".equals(currentUserRole)) {
@@ -790,6 +794,13 @@ public class UserService {
         Integer schoolId = parseIntFromMap(userData.get("schoolId"));
         if (schoolId != null) {
             existingUser.setSchool(schoolRepository.findById(schoolId).orElseThrow(() -> new BadRequestException("Invalid school ID")));
+        }
+        String targetRoleName = existingUser.getRole() != null && existingUser.getRole().getName() != null
+                ? existingUser.getRole().getName().trim().toUpperCase()
+                : "";
+        boolean targetIsAdmin = "ADMIN".equals(targetRoleName) || targetRoleName.startsWith("ADMIN_");
+        if (targetIsAdmin && existingUser.getSchool() == null) {
+            throw new BadRequestException("Tài khoản Admin bắt buộc phải gán trường.");
         }
 
         User updatedUser = saveUser(existingUser);

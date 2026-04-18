@@ -13,8 +13,8 @@ const ReportListPage = () => {
     schoolId: '',
     classId: '',
     subjectId: '',
-    startNgày: '',
-    endNgày: ''
+    startDate: '',
+    endDate: ''
   });
 
   useEffect(() => {
@@ -158,7 +158,6 @@ const ReportListPage = () => {
           >
             <option value="exam-scores">Báo cáo điểm số</option>
             <option value="attendance">Báo cáo chuyên cần</option>
-            <option value="behavior">Báo cáo hành vi</option>
           </select>
         </div>
 
@@ -214,7 +213,7 @@ const ReportListPage = () => {
           <input
             type="date"
             value={filters.startDate}
-            onChange={(e) => setFilters({ ...filters, startNgày: e.target.value })}
+            onChange={(e) => setFilters({ ...filters, startDate: e.target.value })}
           />
         </div>
 
@@ -223,7 +222,7 @@ const ReportListPage = () => {
           <input
             type="date"
             value={filters.endDate}
-            onChange={(e) => setFilters({ ...filters, endNgày: e.target.value })}
+            onChange={(e) => setFilters({ ...filters, endDate: e.target.value })}
           />
         </div>
 
@@ -286,7 +285,6 @@ const ReportListPage = () => {
                   <th className="px-4 py-3 text-left">Môn học</th>
                   {reportType === 'exam-scores' && <th className="px-4 py-3 text-left">Điểm</th>}
                   {reportType === 'attendance' && <th className="px-4 py-3 text-left">Trạng thái</th>}
-                  {reportType === 'behavior' && <th className="px-4 py-3 text-left">Hành vi</th>}
                   <th className="px-4 py-3 text-left">Ghi chú</th>
                 </tr>
               </thead>
@@ -305,13 +303,6 @@ const ReportListPage = () => {
                       </td>
                     )}
                     {reportType === 'attendance' && (
-                      <td className="px-4 py-3">
-                        <span className={`status-badge ${record.status?.toLowerCase()}`}>
-                          {record.status}
-                        </span>
-                      </td>
-                    )}
-                    {reportType === 'behavior' && (
                       <td className="px-4 py-3">
                         <span className={`status-badge ${record.status?.toLowerCase()}`}>
                           {record.status}

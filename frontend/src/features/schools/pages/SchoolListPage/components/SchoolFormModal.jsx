@@ -11,7 +11,7 @@ const labelClass = 'mb-2 block text-sm font-medium text-slate-800';
 const SchoolFormModal = ({
   show,
   editingSchool,
-  error,
+  warning,
   formData,
   setFormData,
   onClose,
@@ -66,8 +66,8 @@ const SchoolFormModal = ({
           onSubmit={onSubmit}
           className="px-8 pb-6 pt-6 overflow-y-auto"
         >
-          {error && (
-            <div className="mb-6 flex items-center gap-3 rounded-xl border-l-4 border-red-500 bg-red-50 px-4 py-3 text-sm font-medium text-red-800">
+          {warning && (
+            <div className="mb-6 flex items-center gap-3 rounded-xl border-l-4 border-amber-500 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-800">
               <svg
                 width="20"
                 height="20"
@@ -75,13 +75,9 @@ const SchoolFormModal = ({
                 fill="currentColor"
                 className="shrink-0"
               >
-                <path
-                  fillRule="evenodd"
-                  d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
-                  clipRule="evenodd"
-                />
+                <path d="M8.257 3.099c.765-1.36 2.72-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.981-1.742 2.981H4.42c-1.53 0-2.492-1.647-1.742-2.98l5.58-9.921zM11 14a1 1 0 10-2 0 1 1 0 002 0zm-1-7a1 1 0 00-1 1v3a1 1 0 102 0V8a1 1 0 00-1-1z" />
               </svg>
-              <span>{error}</span>
+              <span>{warning}</span>
             </div>
           )}
 
@@ -184,7 +180,7 @@ const SchoolFormModal = ({
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className={labelClass}>Cấp quản lý</label>
+                  <label className={labelClass}>Loại trường</label>
                   <select
                     value={formData.managementType}
                     onChange={(e) =>
@@ -211,7 +207,7 @@ const SchoolFormModal = ({
                     className={selectClass}
                   >
                     <option value="ACTIVE">Hoạt động</option>
-                    <option value="INACTIVE">Không hoạt động</option>
+                    <option value="INACTIVE">Ngưng hoạt động</option>
                   </select>
                 </div>
               </div>

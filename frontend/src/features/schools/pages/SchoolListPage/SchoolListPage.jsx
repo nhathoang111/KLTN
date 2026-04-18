@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { toast } from 'react-toastify';
 import api from '../../../../shared/lib/api';
 import './SchoolListPage.css';
 import SchoolHeaderAndKPI from './components/SchoolHeaderAndKPI';
@@ -13,7 +14,7 @@ const SchoolListPage = () => {
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editingSchool, setEditingSchool] = useState(null);
-  const [error, setError] = useState('');
+  const [warning, setWarning] = useState('');
   const [formData, setFormData] = useState({
     name: '',
     code: '',
@@ -87,7 +88,7 @@ const SchoolListPage = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setError(''); // Clear previous error
+    setWarning('');
 
     const submitData = {
       ...formData,
@@ -97,16 +98,44 @@ const SchoolListPage = () => {
       managementType: formData.managementType || null
     };
 
+    const normalize = (text) => String(text || '').trim().toLowerCase().replace(/\s+/g, ' ');
+    const inputName = normalize(submitData.name);
+    const inputAddress = normalize(
+      [submitData.address, submitData.ward, submitData.district, submitData.province]
+        .filter(Boolean)
+        .join(', ')
+    );
+    const similarSchool = schools.find((s) => {
+      if (editingSchool && s.id === editingSchool.id) return false;
+      const existingName = normalize(s.name);
+      const existingAddress = normalize(
+        [s.address, s.ward, s.district, s.province].filter(Boolean).join(', ')
+      );
+      if (!inputName || !inputAddress || !existingName || !existingAddress) return false;
+      const nameSimilar =
+        existingName.includes(inputName) || inputName.includes(existingName);
+      const addressSimilar =
+        existingAddress.includes(inputAddress) || inputAddress.includes(existingAddress);
+      return nameSimilar && addressSimilar;
+    });
+    if (similarSchool) {
+      setWarning(
+        `Cảnh báo: Có trường tương tự "${similarSchool.name}" với địa chỉ gần giống. Bạn vẫn có thể lưu nếu đây là dữ liệu hợp lệ.`
+      );
+    }
+
     try {
       if (editingSchool) {
         await api.put(`/schools/${editingSchool.id}`, submitData);
+        toast.success('Cập nhật trường học thành công!');
       } else {
         await api.post('/schools', submitData);
+        toast.success('Tạo trường học thành công!');
       }
 
       setShowModal(false);
       setEditingSchool(null);
-      setError('');
+      setWarning('');
       setFormData({
         name: '',
         code: '',
@@ -128,13 +157,13 @@ const SchoolListPage = () => {
         err.response?.data?.message ||
         err.message ||
         'Không thể lưu trường học. Vui lòng thử lại.';
-      setError(errorMessage);
+      toast.error(errorMessage);
     }
   };
 
   const handleEdit = (school) => {
     setEditingSchool(school);
-    setError(''); // Clear any previous error
+    setWarning('');
 
     // Ưu tiên sử dụng các trường riêng biệt từ database
     // Nếu không có, mới parse từ address (cho dữ liệu cũ)
@@ -233,7 +262,7 @@ const SchoolListPage = () => {
       console.error('Error fetching related data:', error);
       console.error('Error response:', error.response);
       console.error('Error response data:', error.response?.data);
-      alert('Không thể tải dữ liệu liên quan. Vui lòng thử lại.');
+      toast.error('Không thể tải dữ liệu liên quan. Vui lòng thử lại.');
       setRelatedData({
         users: [],
         roles: [],
@@ -263,14 +292,14 @@ const SchoolListPage = () => {
 
     try {
       await api.delete(`/schools/${schoolToDelete.id}`);
-      alert('Xóa trường học thành công!');
+      toast.success('Xóa trường học thành công!');
       setShowDeleteModal(false);
       setSchoolToDelete(null);
       fetchSchools();
     } catch (error) {
       console.error('Error deleting school:', error);
       const msg = error.response?.data?.message || error.response?.data?.error || error.message || 'Không thể xóa trường học. Vui lòng thử lại.';
-      alert(msg);
+      toast.error(msg);
     }
   };
 
@@ -279,7 +308,7 @@ const SchoolListPage = () => {
 
     const totalItems = relatedData.userCount + relatedData.roleCount + relatedData.classCount;
     if (totalItems === 0) {
-      alert('Không có dữ liệu liên quan để xóa.');
+      toast.info('Không có dữ liệu liên quan để xóa.');
       return;
     }
 
@@ -290,13 +319,13 @@ const SchoolListPage = () => {
     try {
       // Chỉ xóa dữ liệu liên quan, KHÔNG xóa trường học
       await api.delete(`/schools/${schoolToDelete.id}/related-data`);
-      alert('Đã xóa toàn bộ dữ liệu liên quan. Trường học vẫn giữ nguyên.');
+      toast.success('Đã xóa toàn bộ dữ liệu liên quan. Trường học vẫn giữ nguyên.');
       if (schoolToDelete?.id) await fetchRelatedData(schoolToDelete.id);
       fetchSchools();
     } catch (error) {
       console.error('Error deleting related data:', error);
       const errorMessage = error.response?.data?.message || error.response?.data?.error || error.response?.data?.msg || error.message || 'Không thể xóa toàn bộ dữ liệu. Vui lòng thử lại.';
-      alert(errorMessage);
+      toast.error(errorMessage);
     }
   };
 
@@ -321,7 +350,7 @@ const SchoolListPage = () => {
       }
     } catch (error) {
       console.error(`Error deleting ${type}:`, error);
-      alert(`Không thể xóa ${type}. Vui lòng thử lại.`);
+      toast.error(`Không thể xóa ${type}. Vui lòng thử lại.`);
     } finally {
       setDeletingItem(null);
     }
@@ -343,12 +372,12 @@ const SchoolListPage = () => {
       };
 
       await api.put(`/schools/${school.id}`, updatedSchool);
-      alert(`Đã ${action} trường học thành công!`);
+      toast.success(`Đã ${action} trường học thành công!`);
       fetchSchools();
     } catch (error) {
       console.error('Error locking/unlocking school:', error);
       const errorMessage = error.response?.data?.error || error.response?.data?.message || 'Không thể cập nhật trạng thái trường học. Vui lòng thử lại.';
-      alert(errorMessage);
+      toast.error(errorMessage);
     }
   };
 
@@ -356,7 +385,7 @@ const SchoolListPage = () => {
     if (window.confirm('Bạn có chắc chắn muốn xóa trường học này?')) {
       try {
         await api.delete(`/schools/${id}`);
-        alert('Xóa trường học thành công!');
+        toast.success('Xóa trường học thành công!');
         fetchSchools();
       } catch (error) {
         console.error('Error deleting school:', error);
@@ -430,7 +459,7 @@ const SchoolListPage = () => {
         }
 
         console.log('Final error message to display:', errorMessage);
-        alert(errorMessage);
+        toast.error(errorMessage);
       }
     }
   };
@@ -439,13 +468,12 @@ const SchoolListPage = () => {
     const file = e.target.files?.[0];
     if (!file) return;
     if (!file.type.startsWith('image/')) {
-      setError('Vui lòng chọn file ảnh (JPG, PNG, ...)');
+      toast.error('Vui lòng chọn file ảnh (JPG, PNG, ...)');
       return;
     }
     const reader = new FileReader();
     reader.onload = () => {
       setFormData(prev => ({ ...prev, logo: reader.result }));
-      setError('');
     };
     reader.readAsDataURL(file);
   };
@@ -453,7 +481,7 @@ const SchoolListPage = () => {
   const handleCloseModal = () => {
     setShowModal(false);
     setEditingSchool(null);
-    setError('');
+    setWarning('');
     setFormData({
       name: '',
       code: '',
@@ -512,7 +540,7 @@ const SchoolListPage = () => {
         lockedSchools={lockedSchools}
         inactiveSchools={inactiveSchools}
         onAddSchool={() => {
-          setError('');
+          setWarning('');
           setShowModal(true);
         }}
       />
@@ -538,7 +566,7 @@ const SchoolListPage = () => {
       <SchoolFormModal
         show={showModal}
         editingSchool={editingSchool}
-        error={error}
+        warning={warning}
         formData={formData}
         setFormData={setFormData}
         onClose={handleCloseModal}
