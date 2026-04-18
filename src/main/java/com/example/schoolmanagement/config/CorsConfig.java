@@ -1,5 +1,5 @@
 package com.example.schoolmanagement.config;
-
+//comment
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.cors.CorsConfiguration;
