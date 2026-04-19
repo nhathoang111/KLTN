@@ -4,6 +4,25 @@ import { toast } from 'react-toastify';
 import { useAuth } from '../../auth/context/AuthContext';
 import api from '../../../shared/lib/api';
 
+/** Lớp đã đủ sĩ số theo dữ liệu API (studentCount so với capacity). */
+function isClassAtMaxCapacity(cls) {
+  if (!cls) return false;
+  const cap = cls.capacity;
+  if (cap == null || Number(cap) <= 0) return false;
+  const count = cls.studentCount ?? 0;
+  return Number(count) >= Number(cap);
+}
+
+function getApiErrorMessage(err, fallback = 'Đã xảy ra lỗi') {
+  const d = err?.response?.data;
+  if (d == null) return err?.message || fallback;
+  if (typeof d === 'string') return d;
+  const msg = d.message;
+  if (msg != null) return Array.isArray(msg) ? msg.join(', ') : String(msg);
+  if (d.error != null) return typeof d.error === 'string' ? d.error : String(d.error);
+  return fallback;
+}
+
 /**
  * Form tạo user dùng chung cho:
  * - Trang `/users/create`
@@ -282,6 +301,16 @@ const UserCreateForm = ({
     if (!formData.schoolId && currentUserRole !== 'SUPER_ADMIN') return toast.error('Vui lòng chọn trường.') || false;
     if (isRoleAdmin && !formData.schoolId) return toast.error('Tài khoản Admin bắt buộc phải gán trường.') || false;
     if (isRoleStudent && !formData.classId) return toast.error('Lớp là bắt buộc khi tạo học sinh.') || false;
+    if (isRoleStudent && formData.classId) {
+      const cid = parseInt(formData.classId, 10);
+      const cls = classes.find((c) => c.id === cid || String(c.id) === String(formData.classId));
+      if (cls && isClassAtMaxCapacity(cls)) {
+        toast.error(
+          `Lớp "${cls.name}" đã đủ sĩ số (${cls.studentCount ?? 0}/${cls.capacity}). Không thể thêm học sinh — chọn lớp khác hoặc tăng sĩ số tối đa.`
+        );
+        return false;
+      }
+    }
     return true;
   };
 
@@ -337,9 +366,7 @@ const UserCreateForm = ({
       if (typeof onCreated === 'function') onCreated(response.data);
     } catch (err) {
       console.error('Error creating user:', err);
-      const res = err.response?.data;
-      const errorMessage = res?.message || res?.error || 'Tạo người dùng thất bại';
-      toast.error(errorMessage);
+      toast.error(getApiErrorMessage(err, 'Tạo người dùng thất bại'));
     } finally {
       setLoading(false);
     }
@@ -744,11 +771,16 @@ const UserCreateForm = ({
                         required
                       >
                         <option value="">Chọn lớp</option>
-                        {classes.map((cls) => (
-                          <option key={cls.id} value={cls.id}>
-                            {cls.name}
-                          </option>
-                        ))}
+                        {classes.map((cls) => {
+                          const full = isClassAtMaxCapacity(cls);
+                          const cnt = cls.studentCount ?? 0;
+                          const capLabel = cls.capacity != null && cls.capacity !== '' ? cls.capacity : '—';
+                          return (
+                            <option key={cls.id} value={cls.id} disabled={full}>
+                              {cls.name} ({cnt}/{capLabel}){full ? ' — đã đủ sĩ số' : ''}
+                            </option>
+                          );
+                        })}
                       </select>
                       <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-slate-400">
                         ▾

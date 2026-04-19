@@ -16,11 +16,14 @@ import com.example.schoolmanagement.repository.RecordRepository;
 import com.example.schoolmanagement.repository.AnnouncementRepository;
 import com.example.schoolmanagement.repository.AssignmentSubmissionRepository;
 import com.example.schoolmanagement.repository.SchoolYearRepository;
+import com.example.schoolmanagement.entity.School;
 import com.example.schoolmanagement.entity.SchoolYear;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -94,7 +97,7 @@ public class ClassService {
         }
 
         for (ClassEntity classEntity : classes) {
-            long count = enrollmentRepository.countByClassIdNative(classEntity.getId());
+            long count = enrollmentRepository.countActiveByClassEntityId(classEntity.getId());
             classEntity.setStudentCount((int) count);
         }
         
@@ -107,7 +110,7 @@ public class ClassService {
         Map<Integer, Integer> map = new HashMap<>();
         for (ClassEntity c : all) {
             if (c.getId() != null) {
-                long count = enrollmentRepository.countByClassEntityId(c.getId());
+                long count = enrollmentRepository.countActiveByClassEntityId(c.getId());
                 map.put(c.getId(), (int) count);
             }
         }
@@ -117,13 +120,20 @@ public class ClassService {
     public ClassEntity getClassById(Integer id) {
         ClassEntity entity = classRepository.findById(id)
                 .orElseThrow(() -> new com.example.schoolmanagement.exception.ResourceNotFoundException("Class not found with id: " + id));
-        long count = enrollmentRepository.countByClassEntityId(id);
+        long count = enrollmentRepository.countActiveByClassEntityId(id);
         entity.setStudentCount((int) count);
         return entity;
     }
 
     public List<ClassEntity> getClassesBySchool(Integer schoolId) {
-        return classRepository.findBySchoolId(schoolId);
+        List<ClassEntity> list = classRepository.findBySchoolId(schoolId);
+        for (ClassEntity c : list) {
+            if (c.getId() != null) {
+                long count = enrollmentRepository.countActiveByClassEntityId(c.getId());
+                c.setStudentCount((int) count);
+            }
+        }
+        return list;
     }
 
     public List<ClassEntity> getClassesByHomeroomTeacher(Integer teacherId) {
@@ -145,100 +155,383 @@ public class ClassService {
         return saved;
     }
 
+    /**
+     * API "xóa" lớp → thực tế chỉ lưu trữ (không xóa enrollments / điểm / lịch sử).
+     */
+    @Transactional
     public void deleteClass(Integer id) {
-        log.info("Starting deletion process for class ID: {}", id);
-        
-        try {
-            // Bước 0: Xóa class_sections và schedules tham chiếu tới lớp này
-            List<com.example.schoolmanagement.entity.ClassSection> classSections = classSectionRepository.findByClassRoomId(id);
-            if (!classSections.isEmpty()) {
-                log.debug("Deleting {} class section(s) for class {}", classSections.size(), id);
-                classSectionRepository.deleteAll(classSections);
+        archiveClass(id);
+    }
+
+    /**
+     * Xóa vật lý lớp và quan hệ (chỉ dùng nội bộ khi xóa trường — {@link com.example.schoolmanagement.service.SchoolService}).
+     */
+    @Transactional
+    public void forcePhysicalDeleteClass(Integer id) {
+        log.info("Physical delete class ID: {}", id);
+        List<com.example.schoolmanagement.entity.ClassSection> classSections = classSectionRepository.findByClassRoomId(id);
+        if (!classSections.isEmpty()) {
+            classSectionRepository.deleteAll(classSections);
+        }
+        List<com.example.schoolmanagement.entity.Schedule> schedules = scheduleRepository.findByClassEntityId(id);
+        if (!schedules.isEmpty()) {
+            scheduleRepository.deleteAll(schedules);
+        }
+        List<Enrollment> enrollments = enrollmentRepository.findByClassEntityId(id);
+        if (!enrollments.isEmpty()) {
+            enrollmentRepository.deleteAll(enrollments);
+        }
+        List<com.example.schoolmanagement.entity.Assignment> assignments = assignmentRepository.findByClassEntityId(id);
+        if (!assignments.isEmpty()) {
+            for (com.example.schoolmanagement.entity.Assignment assignment : assignments) {
+                try {
+                    List<com.example.schoolmanagement.entity.AssignmentSubmission> submissions =
+                            assignmentSubmissionRepository.findByAssignmentId(assignment.getId());
+                    if (!submissions.isEmpty()) {
+                        assignmentSubmissionRepository.deleteAll(submissions);
+                    }
+                } catch (Exception e) {
+                    log.error("Error deleting submissions for assignment {}: {}", assignment.getId(), e.getMessage());
+                }
             }
-            List<com.example.schoolmanagement.entity.Schedule> schedules = scheduleRepository.findByClassEntityId(id);
-            if (!schedules.isEmpty()) {
-                log.debug("Deleting {} schedule(s) for class {}", schedules.size(), id);
-                scheduleRepository.deleteAll(schedules);
+            assignmentRepository.deleteAll(assignments);
+        }
+        List<com.example.schoolmanagement.entity.Attendance> attendances = attendanceRepository.findByClassEntityId(id);
+        if (!attendances.isEmpty()) {
+            attendanceRepository.deleteAll(attendances);
+        }
+        List<com.example.schoolmanagement.entity.Document> documents = documentRepository.findByClassEntityId(id);
+        if (!documents.isEmpty()) {
+            documentRepository.deleteAll(documents);
+        }
+        List<com.example.schoolmanagement.entity.ExamScore> examScores = examScoreRepository.findByClassEntityId(id);
+        if (!examScores.isEmpty()) {
+            examScoreRepository.deleteAll(examScores);
+        }
+        List<com.example.schoolmanagement.entity.Record> records = recordRepository.findByClassEntityId(id);
+        if (!records.isEmpty()) {
+            recordRepository.deleteAll(records);
+        }
+        List<com.example.schoolmanagement.entity.Announcement> announcements = announcementRepository.findByClassEntityId(id);
+        if (!announcements.isEmpty()) {
+            announcementRepository.deleteAll(announcements);
+        }
+        ClassEntity classEntity = classRepository.findById(id)
+                .orElseThrow(() -> new com.example.schoolmanagement.exception.ResourceNotFoundException("Class not found with id: " + id));
+        if (classEntity.getHomeroomTeacher() != null) {
+            classEntity.setHomeroomTeacher(null);
+            classRepository.save(classEntity);
+        }
+        classRepository.deleteById(id);
+        log.info("Physical delete completed for class ID: {}", id);
+    }
+
+    /**
+     * Lưu trữ lớp: trạng thái ARCHIVED, gỡ GVCN, hủy enrollment ACTIVE (dữ liệu enrollment vẫn còn).
+     */
+    @Transactional
+    public void archiveClass(Integer id) {
+        ClassEntity classEntity = classRepository.findById(id)
+                .orElseThrow(() -> new com.example.schoolmanagement.exception.ResourceNotFoundException("Class not found with id: " + id));
+        String st = classEntity.getStatus();
+        if (st != null && "ARCHIVED".equalsIgnoreCase(st.trim())) {
+            throw new BadRequestException("Lớp đã được lưu trữ trước đó.");
+        }
+        List<Enrollment> enrollments = enrollmentRepository.findByClassEntityId(id);
+        for (Enrollment e : enrollments) {
+            if (e.getStatus() != null && "ACTIVE".equalsIgnoreCase(e.getStatus())) {
+                e.setStatus("INACTIVE");
+                enrollmentRepository.save(e);
+            }
+        }
+        classEntity.setHomeroomTeacher(null);
+        classEntity.setStatus("ARCHIVED");
+        classRepository.save(classEntity);
+        log.info("Archived class ID {}", id);
+    }
+
+    /** Lưu trữ hàng loạt mọi lớp thuộc một niên khóa (theo tên) của trường. */
+    @Transactional
+    public int archiveClassesForSchoolYear(Integer schoolId, String schoolYearName) {
+        if (schoolId == null) throw new BadRequestException("Thiếu schoolId.");
+        if (schoolYearName == null || schoolYearName.isBlank()) {
+            throw new BadRequestException("Thiếu tên niên khóa (schoolYear).");
+        }
+        SchoolYear sy = schoolYearRepository.findBySchoolIdAndName(schoolId, schoolYearName.trim())
+                .orElseThrow(() -> new BadRequestException("Không tìm thấy niên khóa \"" + schoolYearName.trim() + "\" của trường."));
+        List<ClassEntity> all = classRepository.findBySchoolId(schoolId);
+        int n = 0;
+        for (ClassEntity c : all) {
+            if (c.getSchoolYear() == null || !sy.getId().equals(c.getSchoolYear().getId())) {
+                continue;
+            }
+            if (c.getStatus() != null && "ARCHIVED".equalsIgnoreCase(c.getStatus().trim())) {
+                continue;
+            }
+            archiveClass(c.getId());
+            n++;
+        }
+        return n;
+    }
+
+    /**
+     * Chuyển toàn bộ lớp từ niên khóa nguồn sang niên khóa đích (lên một khối).
+     * Khối 12 ở niên khóa nguồn: chỉ lưu trữ lớp + kết thúc enrollment ACTIVE (không tạo khối 13).
+     * Khối 10–11: tìm hoặc tạo lớp tương ứng ở niên khóa đích (khối +1, cùng số lớp), chuyển học sinh, rồi lưu trữ lớp nguồn.
+     */
+    @Transactional
+    public Map<String, Object> rolloverSchoolYear(Integer schoolId, String fromYearName, String toYearName) {
+        if (schoolId == null) {
+            throw new BadRequestException("Thiếu schoolId.");
+        }
+        if (fromYearName == null || fromYearName.isBlank() || toYearName == null || toYearName.isBlank()) {
+            throw new BadRequestException("Thiếu niên khóa nguồn hoặc đích.");
+        }
+        String fromTrim = fromYearName.trim();
+        String toTrim = toYearName.trim();
+        if (fromTrim.equalsIgnoreCase(toTrim)) {
+            throw new BadRequestException("Niên khóa nguồn và đích không được trùng nhau.");
+        }
+        School school = schoolRepository.findById(schoolId)
+                .orElseThrow(() -> new BadRequestException("Không tìm thấy trường."));
+        SchoolYear fromSy = schoolYearRepository.findBySchoolIdAndName(schoolId, fromTrim)
+                .orElseThrow(() -> new BadRequestException("Không tìm thấy niên khóa nguồn \"" + fromTrim + "\" của trường."));
+        SchoolYear toSy = schoolYearRepository.findBySchoolIdAndName(schoolId, toTrim).orElseGet(() -> {
+            SchoolYear n = new SchoolYear();
+            n.setSchool(school);
+            n.setName(toTrim);
+            n.setStatus("ACTIVE");
+            return schoolYearRepository.save(n);
+        });
+
+        List<ClassEntity> pool = new ArrayList<>(classRepository.findBySchoolId(schoolId));
+        List<ClassEntity> fromClasses = pool.stream()
+                .filter(c -> c.getSchoolYear() != null && fromSy.getId().equals(c.getSchoolYear().getId()))
+                .filter(c -> c.getStatus() == null || !"ARCHIVED".equalsIgnoreCase(c.getStatus().trim()))
+                .collect(Collectors.toList());
+
+        int archivedGrade12 = 0;
+        int rolloverChains = 0;
+        int createdTargets = 0;
+        int movedStudents = 0;
+        List<String> errors = new ArrayList<>();
+
+        for (ClassEntity src : fromClasses) {
+            Integer gl = src.getGradeLevel();
+            if (gl == null) {
+                errors.add("Lớp \"" + src.getName() + "\" (id=" + src.getId() + ") thiếu khối — bỏ qua.");
+                continue;
+            }
+            if (gl >= 12) {
+                try {
+                    archiveClass(src.getId());
+                    archivedGrade12++;
+                } catch (Exception ex) {
+                    errors.add("Lưu trữ khối 12, lớp id=" + src.getId() + ": " + ex.getMessage());
+                }
+                continue;
+            }
+            int newGrade = gl + 1;
+            Integer cn = src.getClassNumber();
+            if (cn == null) {
+                errors.add("Lớp \"" + src.getName() + "\" thiếu số lớp — bỏ qua.");
+                continue;
             }
 
-            // Bước 1: Xóa enrollments
-            List<com.example.schoolmanagement.entity.Enrollment> enrollments = enrollmentRepository.findByClassEntityId(id);
-            if (!enrollments.isEmpty()) {
-                log.debug("Deleting {} enrollment(s)", enrollments.size());
-                enrollmentRepository.deleteAll(enrollments);
-            }
-            
-            // Bước 2: Xóa assignments (cần xóa assignment submissions trước)
-            List<com.example.schoolmanagement.entity.Assignment> assignments = assignmentRepository.findByClassEntityId(id);
-            if (!assignments.isEmpty()) {
-                log.debug("Deleting {} assignment(s)", assignments.size());
-                // Xóa assignment submissions trước
-                for (com.example.schoolmanagement.entity.Assignment assignment : assignments) {
-                    try {
-                        List<com.example.schoolmanagement.entity.AssignmentSubmission> submissions = 
-                            assignmentSubmissionRepository.findByAssignmentId(assignment.getId());
-                        if (!submissions.isEmpty()) {
-                            log.debug("Deleting {} submission(s) for assignment {}", submissions.size(), assignment.getId());
-                            assignmentSubmissionRepository.deleteAll(submissions);
-                        }
-                    } catch (Exception e) {
-                        log.error("Error deleting submissions for assignment {}: {}", assignment.getId(), e.getMessage());
-                    }
+            Optional<ClassEntity> existingTarget = pool.stream()
+                    .filter(c -> c.getSchoolYear() != null && toSy.getId().equals(c.getSchoolYear().getId()))
+                    .filter(c -> c.getGradeLevel() != null && c.getGradeLevel() == newGrade)
+                    .filter(c -> c.getClassNumber() != null && c.getClassNumber().equals(cn))
+                    .filter(c -> c.getStatus() == null || !"ARCHIVED".equalsIgnoreCase(c.getStatus().trim()))
+                    .findFirst();
+
+            ClassEntity target = existingTarget.orElse(null);
+            if (target == null) {
+                try {
+                    Map<String, Object> cd = new LinkedHashMap<>();
+                    cd.put("schoolId", schoolId);
+                    cd.put("gradeLevel", newGrade);
+                    cd.put("classNumber", cn);
+                    cd.put("schoolYear", toTrim);
+                    int cap = src.getCapacity() != null && src.getCapacity() > 0 ? src.getCapacity() : 45;
+                    cd.put("capacity", cap);
+                    cd.put("status", "ACTIVE");
+                    cd.put("room", null);
+                    target = createClass(cd);
+                    pool.add(target);
+                    createdTargets++;
+                } catch (BadRequestException ex) {
+                    errors.add("Không tạo được lớp đích " + newGrade + "/" + cn + " (" + toTrim + "): " + ex.getMessage());
+                    continue;
                 }
-                assignmentRepository.deleteAll(assignments);
             }
-            
-            
-            // Bước 4: Xóa attendance
-            List<com.example.schoolmanagement.entity.Attendance> attendances = attendanceRepository.findByClassEntityId(id);
-            if (!attendances.isEmpty()) {
-                log.debug("Deleting {} attendance record(s)", attendances.size());
-                attendanceRepository.deleteAll(attendances);
+
+            List<Integer> studentIds = enrollmentRepository.findByClassEntityId(src.getId()).stream()
+                    .filter(e -> e.getStatus() != null && "ACTIVE".equalsIgnoreCase(e.getStatus()))
+                    .map(e -> e.getStudent() != null ? e.getStudent().getId() : null)
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.toList());
+
+            for (Integer stId : studentIds) {
+                try {
+                    movedStudents += promoteOneStudent(stId, target.getId(), schoolId);
+                } catch (BadRequestException ex) {
+                    errors.add("HS " + stId + " → \"" + target.getName() + "\": " + ex.getMessage());
+                }
             }
-            
-            // Bước 5: Xóa documents
-            List<com.example.schoolmanagement.entity.Document> documents = documentRepository.findByClassEntityId(id);
-            if (!documents.isEmpty()) {
-                log.debug("Deleting {} document(s)", documents.size());
-                documentRepository.deleteAll(documents);
+            try {
+                archiveClass(src.getId());
+                rolloverChains++;
+            } catch (Exception ex) {
+                errors.add("Lưu trữ lớp nguồn sau chuyển, id=" + src.getId() + ": " + ex.getMessage());
             }
-            
-            // Bước 6: Xóa exam_scores
-            List<com.example.schoolmanagement.entity.ExamScore> examScores = examScoreRepository.findByClassEntityId(id);
-            if (!examScores.isEmpty()) {
-                log.debug("Deleting {} exam score(s)", examScores.size());
-                examScoreRepository.deleteAll(examScores);
-            }
-            
-            // Bước 7: Xóa records
-            List<com.example.schoolmanagement.entity.Record> records = recordRepository.findByClassEntityId(id);
-            if (!records.isEmpty()) {
-                log.debug("Deleting {} record(s)", records.size());
-                recordRepository.deleteAll(records);
-            }
-            
-            // Bước 8: Xóa announcements
-            List<com.example.schoolmanagement.entity.Announcement> announcements = announcementRepository.findByClassEntityId(id);
-            if (!announcements.isEmpty()) {
-                log.debug("Deleting {} announcement(s)", announcements.size());
-                announcementRepository.deleteAll(announcements);
-            }
-            
-            // Bước 9: Set null cho homeroom_teacher (nếu cần)
-            ClassEntity classEntity = classRepository.findById(id)
-                    .orElseThrow(() -> new com.example.schoolmanagement.exception.ResourceNotFoundException("Class not found with id: " + id));
-            if (classEntity.getHomeroomTeacher() != null) {
-                classEntity.setHomeroomTeacher(null);
-                classRepository.save(classEntity);
-            }
-            
-            // Bước 10: Cuối cùng, xóa class
-            classRepository.deleteById(id);
-            log.info("Class deletion completed for ID: {}", id);
-        } catch (Exception e) {
-            log.error("Error deleting class {}: {}", id, e.getMessage());
-            throw e;
         }
+
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("message", "Đã chuyển niên khóa: khối 12 lưu trữ; khối 10–11 lên lớp trong niên khóa mới.");
+        out.put("fromSchoolYear", fromTrim);
+        out.put("toSchoolYear", toTrim);
+        out.put("archivedGrade12Classes", archivedGrade12);
+        out.put("sourceClassesArchivedAfterRollover", rolloverChains);
+        out.put("createdTargetClasses", createdTargets);
+        out.put("movedStudentSlots", movedStudents);
+        out.put("errors", errors);
+        return out;
+    }
+
+    /**
+     * Chuyển học sinh sang lớp đích (mỗi phần tử: studentId, toClassId).
+     * graduateStudentIds: đánh dấu tốt nghiệp / không chuyển tiếp — hủy mọi enrollment ACTIVE của các học sinh này.
+     */
+    @Transactional
+    public Map<String, Object> promoteStudents(Integer schoolId, List<?> movesRaw, List<?> graduateRaw) {
+        List<String> errors = new ArrayList<>();
+        int moved = 0;
+        Set<Integer> graduated = new HashSet<>();
+        for (Integer sid : normalizeIntList(graduateRaw)) {
+            User u = userRepository.findById(sid).orElse(null);
+            if (u == null) {
+                errors.add("Tốt nghiệp: không tìm thấy học sinh id=" + sid);
+                continue;
+            }
+            for (Enrollment e : enrollmentRepository.findByStudentId(sid)) {
+                if (e.getStatus() != null && "ACTIVE".equalsIgnoreCase(e.getStatus())) {
+                    e.setStatus("INACTIVE");
+                    enrollmentRepository.save(e);
+                }
+            }
+            graduated.add(sid);
+        }
+        if (movesRaw != null) {
+            for (Object row : movesRaw) {
+                if (!(row instanceof Map)) {
+                    continue;
+                }
+                Map<?, ?> m = (Map<?, ?>) row;
+                Integer studentId = toInteger(m.get("studentId"));
+                Integer toClassId = toInteger(m.get("toClassId"));
+                if (studentId == null || toClassId == null) {
+                    errors.add("Bỏ qua dòng thiếu studentId hoặc toClassId");
+                    continue;
+                }
+                try {
+                    moved += promoteOneStudent(studentId, toClassId, schoolId);
+                } catch (BadRequestException ex) {
+                    errors.add("HS " + studentId + " → lớp " + toClassId + ": " + ex.getMessage());
+                }
+            }
+        }
+        return Map.of(
+                "movedCount", moved,
+                "graduatedStudentIds", new ArrayList<>(graduated),
+                "errors", errors
+        );
+    }
+
+    private int promoteOneStudent(Integer studentId, Integer toClassId, Integer schoolIdOptional) {
+        User student = userRepository.findById(studentId)
+                .orElseThrow(() -> new BadRequestException("Không tìm thấy học sinh " + studentId));
+        String rn = student.getRole() != null && student.getRole().getName() != null
+                ? student.getRole().getName().toUpperCase() : "";
+        if (!rn.contains("STUDENT")) {
+            throw new BadRequestException("User " + studentId + " không phải học sinh.");
+        }
+        ClassEntity target = classRepository.findById(toClassId)
+                .orElseThrow(() -> new BadRequestException("Lớp đích không tồn tại."));
+        if (target.getStatus() != null && "ARCHIVED".equalsIgnoreCase(target.getStatus().trim())) {
+            throw new BadRequestException("Không thể chuyển vào lớp đã lưu trữ.");
+        }
+        if (schoolIdOptional != null && target.getSchool() != null && !schoolIdOptional.equals(target.getSchool().getId())) {
+            throw new BadRequestException("Lớp đích không thuộc trường đã chọn.");
+        }
+        List<Enrollment> byStudent = enrollmentRepository.findByStudentId(studentId);
+        boolean alreadyInTarget = byStudent.stream().anyMatch(e ->
+                e.getClassEntity() != null && e.getClassEntity().getId().equals(toClassId)
+                        && e.getStatus() != null && "ACTIVE".equalsIgnoreCase(e.getStatus()));
+        if (alreadyInTarget) {
+            return 0;
+        }
+        for (Enrollment e : byStudent) {
+            if (e.getStatus() != null && "ACTIVE".equalsIgnoreCase(e.getStatus())) {
+                e.setStatus("INACTIVE");
+                enrollmentRepository.save(e);
+            }
+        }
+        ensureClassHasCapacityForNewEnrollment(target);
+        List<Enrollment> classEnrollments = enrollmentRepository.findByClassEntityId(toClassId);
+        int maxRoll = classEnrollments.stream()
+                .filter(e -> e.getRollno() != null)
+                .mapToInt(Enrollment::getRollno)
+                .max()
+                .orElse(0);
+        Enrollment en = new Enrollment();
+        en.setStudent(student);
+        en.setClassEntity(target);
+        en.setSchool(student.getSchool() != null ? student.getSchool() : target.getSchool());
+        en.setStatus("ACTIVE");
+        en.setRollno(maxRoll + 1);
+        enrollmentRepository.save(en);
+        enrollmentRepository.flush();
+        return 1;
+    }
+
+    private void ensureClassHasCapacityForNewEnrollment(ClassEntity classEntity) {
+        Integer cap = classEntity.getCapacity();
+        if (cap == null || cap <= 0) {
+            return;
+        }
+        long active = enrollmentRepository.countActiveByClassEntityId(classEntity.getId());
+        if (active >= cap) {
+            throw new BadRequestException("Lớp đích đã đủ sĩ số (" + cap + ").");
+        }
+    }
+
+    private static Integer toInteger(Object v) {
+        if (v == null) {
+            return null;
+        }
+        if (v instanceof Number n) {
+            return n.intValue();
+        }
+        try {
+            return Integer.parseInt(v.toString().trim());
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private static List<Integer> normalizeIntList(List<?> raw) {
+        if (raw == null) {
+            return Collections.emptyList();
+        }
+        List<Integer> out = new ArrayList<>();
+        for (Object o : raw) {
+            Integer x = toInteger(o);
+            if (x != null) {
+                out.add(x);
+            }
+        }
+        return out;
     }
 
     public Map<String, Object> checkStudentsInClass(Integer classId) {
@@ -366,7 +659,14 @@ public class ClassService {
         if (classEntity.getStatus() == null || classEntity.getStatus().trim().isEmpty()) {
             classEntity.setStatus("ACTIVE");
         }
-        ClassEntity saved = saveClass(classEntity);
+        assertClassUniquenessForSave(classEntity, null);
+        ClassEntity saved;
+        try {
+            saved = saveClass(classEntity);
+        } catch (DataIntegrityViolationException e) {
+            log.warn("createClass constraint: {}", e.getMessage());
+            throw new BadRequestException("Không thể tạo lớp: dữ liệu trùng (tên/niên khóa/trường) hoặc vi phạm ràng buộc CSDL.");
+        }
         if (saved.getRoom() == null || saved.getRoom().trim().isEmpty()) {
             String defaultRoom = "A" + String.format("%03d", saved.getId());
             saved.setRoom(defaultRoom);
@@ -377,6 +677,9 @@ public class ClassService {
 
     public ClassEntity updateClass(Integer id, Map<String, Object> classData) {
         ClassEntity existing = getClassById(id);
+        if (existing.getStatus() != null && "ARCHIVED".equalsIgnoreCase(existing.getStatus().trim())) {
+            throw new BadRequestException("Lớp đã lưu trữ, không thể chỉnh sửa.");
+        }
         String name = (String) classData.get("name");
         Integer gradeLevel = classData.get("gradeLevel") instanceof Number
                 ? ((Number) classData.get("gradeLevel")).intValue() : null;
@@ -415,7 +718,45 @@ public class ClassService {
             existing.setHomeroomTeacher(userRepository.findById(teacherId)
                     .orElseThrow(() -> new BadRequestException("Invalid teacher ID")));
         }
-        return saveClass(existing);
+        assertClassUniquenessForSave(existing, existing.getId());
+        try {
+            return saveClass(existing);
+        } catch (DataIntegrityViolationException e) {
+            log.warn("updateClass constraint: {}", e.getMessage());
+            throw new BadRequestException("Không thể cập nhật lớp: dữ liệu trùng hoặc vi phạm ràng buộc CSDL.");
+        }
+    }
+
+    /**
+     * Chặn trùng lớp (khối+số+niên khóa, kể cả lệch null FK), trùng tên cùng trường (lớp chưa ARCHIVED),
+     * và trùng phòng (lớp chưa ARCHIVED).
+     */
+    private void assertClassUniquenessForSave(ClassEntity entity, Integer excludeId) {
+        if (entity.getSchool() == null) return;
+        if (entity.getGradeLevel() != null && entity.getClassNumber() != null) {
+            Integer syId = entity.getSchoolYear() != null ? entity.getSchoolYear().getId() : null;
+            if (classRepository.countDuplicateClassStructure(
+                    entity.getSchool().getId(), syId, entity.getGradeLevel(), entity.getClassNumber(), excludeId) > 0) {
+                throw new BadRequestException("Đã tồn tại lớp cùng khối và số lớp trong trường (trùng hoặc lệch niên khóa với lớp đang hoạt động).");
+            }
+        }
+        if (entity.getName() != null && !entity.getName().trim().isEmpty()) {
+            if (classRepository.countBySchoolAndNameNormalized(
+                    entity.getSchool().getId(), entity.getName().trim(), excludeId) > 0) {
+                throw new BadRequestException("Đã tồn tại lớp cùng tên trong trường (lớp đang hoạt động).");
+            }
+        }
+        assertRoomUniqueInSchool(entity, excludeId);
+    }
+
+    private void assertRoomUniqueInSchool(ClassEntity entity, Integer excludeId) {
+        if (entity.getSchool() == null) return;
+        String r = entity.getRoom();
+        if (r == null || r.trim().isEmpty()) return;
+        String trimmed = r.trim();
+        if (classRepository.countBySchoolAndRoomNormalized(entity.getSchool().getId(), trimmed, excludeId) > 0) {
+            throw new BadRequestException("Phòng học \"" + trimmed + "\" đã được gán cho lớp khác trong cùng trường.");
+        }
     }
 
     private void resolveAndSetSchoolYear(ClassEntity classEntity, Object schoolIdObj, Object schoolYearNameObj) {

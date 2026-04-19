@@ -662,6 +662,7 @@ public class UserService {
                     boolean alreadyEnrolled = existingEnrollments.stream()
                             .anyMatch(e -> e.getStudent() != null && e.getStudent().getId().equals(savedUser.getId()));
                     if (!alreadyEnrolled) {
+                        ensureClassHasRoomForNewActiveStudent(classOpt.get());
                         Enrollment enrollment = new Enrollment();
                         enrollment.setStudent(savedUser);
                         enrollment.setClassEntity(classOpt.get());
@@ -758,6 +759,24 @@ public class UserService {
                 || rn.contains("GIÁO VIÊN") || rn.contains("GIAO VIEN") || rn.contains("GV");
     }
 
+    /**
+     * Không cho thêm enrollment ACTIVE nếu lớp đã đủ theo {@link ClassEntity#getCapacity()}.
+     * {@code capacity} null hoặc ≤ 0: không áp giới hạn qua trường này.
+     */
+    private void ensureClassHasRoomForNewActiveStudent(ClassEntity classEntity) {
+        if (classEntity == null || classEntity.getId() == null) return;
+        Integer cap = classEntity.getCapacity();
+        if (cap == null || cap <= 0) return;
+        long active = enrollmentRepository.countActiveByClassEntityId(classEntity.getId());
+        if (active >= cap) {
+            String label = classEntity.getName() != null && !classEntity.getName().isBlank()
+                    ? classEntity.getName()
+                    : ("id=" + classEntity.getId());
+            throw new BadRequestException(
+                    "Lớp \"" + label + "\" đã đạt sĩ số tối đa (" + cap + " học sinh). Không thể thêm học sinh.");
+        }
+    }
+
     /** Parse list of integers from request (e.g. studentIds). */
     private static List<Integer> parseIntegerListFromMap(Object obj) {
         if (obj == null) return Collections.emptyList();
@@ -851,6 +870,7 @@ public class UserService {
                     boolean alreadyEnrolled = classEnrollments.stream()
                             .anyMatch(e -> e.getStudent() != null && e.getStudent().getId().equals(updatedUser.getId()) && "ACTIVE".equalsIgnoreCase(e.getStatus()));
                     if (!alreadyEnrolled) {
+                        ensureClassHasRoomForNewActiveStudent(classOpt.get());
                         Enrollment newEnrollment = new Enrollment();
                         newEnrollment.setStudent(updatedUser);
                         newEnrollment.setClassEntity(classOpt.get());

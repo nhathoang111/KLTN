@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
+import { toast } from "react-toastify";
 import api from "../../../../shared/lib/api";
 import { useAuth } from "../../../auth/context/AuthContext";
 
@@ -191,6 +192,7 @@ const ClassDetailPage = () => {
       };
       await api.post("/class-sections", payload);
       await refreshSections();
+      toast.success("Đã thêm lớp học phần.");
       setCreateForm((prev) => ({
         ...prev,
         subjectId: "",
@@ -199,7 +201,9 @@ const ClassDetailPage = () => {
       }));
     } catch (err) {
       const msg = err?.response?.data?.error || err?.response?.data?.message;
-      setCreateError(msg ? String(msg) : "Tạo lớp học phần thất bại. Vui lòng thử lại.");
+      const text = msg ? String(msg) : "Tạo lớp học phần thất bại. Vui lòng thử lại.";
+      setCreateError(text);
+      toast.error(text);
       // Trong trường hợp bản ghi đã tồn tại từ trước, vẫn reload danh sách để hiển thị
       try {
         await refreshSections();
@@ -219,11 +223,12 @@ const ClassDetailPage = () => {
     try {
       setDeletingId(sectionId);
       await api.delete(`/class-sections/${sectionId}`);
+      toast.success("Đã xóa lớp học phần.");
       await refreshSections();
     } catch (err) {
       const msg =
         err?.response?.data?.error || err?.response?.data?.message || "Xóa thất bại";
-      alert(String(msg));
+      toast.error(String(msg));
     } finally {
       setDeletingId(null);
     }

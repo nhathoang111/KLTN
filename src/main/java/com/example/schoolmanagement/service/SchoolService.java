@@ -516,7 +516,7 @@ public class SchoolService {
         // 1
         List<com.example.schoolmanagement.entity.ClassEntity> classes = classRepository.findBySchoolId(id);
         for (com.example.schoolmanagement.entity.ClassEntity cls : classes) {
-            try { classService.deleteClass(cls.getId()); } catch (Exception ex) { log.error("Error deleting class " + cls.getId(), ex); }
+            try { classService.forcePhysicalDeleteClass(cls.getId()); } catch (Exception ex) { log.error("Error deleting class " + cls.getId(), ex); }
         }
         // 2
         List<User> users = userRepository.findBySchoolId(id);

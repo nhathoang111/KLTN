@@ -1,7 +1,26 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Lock, Mail, School, Shield, ToggleLeft, User } from 'lucide-react';
+import { toast } from 'react-toastify';
 import { useAuth } from '../../auth/context/AuthContext';
 import api from '../../../shared/lib/api';
+
+function isClassAtMaxCapacity(cls) {
+  if (!cls) return false;
+  const cap = cls.capacity;
+  if (cap == null || Number(cap) <= 0) return false;
+  const count = cls.studentCount ?? 0;
+  return Number(count) >= Number(cap);
+}
+
+function getApiErrorMessage(err, fallback = 'Đã xảy ra lỗi') {
+  const d = err?.response?.data;
+  if (d == null) return err?.message || fallback;
+  if (typeof d === 'string') return d;
+  const msg = d.message;
+  if (msg != null) return Array.isArray(msg) ? msg.join(', ') : String(msg);
+  if (d.error != null) return typeof d.error === 'string' ? d.error : String(d.error);
+  return fallback;
+}
 
 const UserEditForm = ({
   userId,
@@ -32,6 +51,8 @@ const UserEditForm = ({
   const [showRoleChangeConfirm, setShowRoleChangeConfirm] = useState(false);
   const [pendingRoleId, setPendingRoleId] = useState(null);
   const [loadedRoleSnapshot, setLoadedRoleSnapshot] = useState(null);
+  /** Lớp ban đầu khi tải user (học sinh) — dùng để bỏ qua kiểm tra “đủ sĩ số” khi giữ nguyên lớp. */
+  const [initialStudentClassId, setInitialStudentClassId] = useState('');
 
   const [formData, setFormData] = useState({
     email: '',
@@ -203,6 +224,7 @@ const UserEditForm = ({
         relationship: user.relationship || '',
         status: user.status || 'ACTIVE'
       });
+      setInitialStudentClassId(classId);
     } catch (err) {
       setError('Không tải được thông tin người dùng');
       console.error(err);
@@ -297,6 +319,20 @@ const UserEditForm = ({
       setError('Học sinh bắt buộc phải chọn lớp');
       return false;
     }
+    if (isRoleStudent(selectedRole?.name) && formData.classId) {
+      const sameClassAsLoaded =
+        String(formData.classId) === String(initialStudentClassId) && initialStudentClassId !== '';
+      if (!sameClassAsLoaded) {
+        const cid = parseInt(formData.classId, 10);
+        const cls = classes.find((c) => c.id === cid || String(c.id) === String(formData.classId));
+        if (cls && isClassAtMaxCapacity(cls)) {
+          setError(
+            `Lớp "${cls.name}" đã đủ sĩ số (${cls.studentCount ?? 0}/${cls.capacity}). Chọn lớp khác hoặc tăng sĩ số tối đa.`
+          );
+          return false;
+        }
+      }
+    }
     return true;
   };
 
@@ -350,7 +386,9 @@ const UserEditForm = ({
       setSuccess('Cập nhật người dùng thành công!');
       onUpdated?.();
     } catch (err) {
-      setError(err.response?.data?.error || 'Cập nhật thất bại');
+      const msg = getApiErrorMessage(err, 'Cập nhật thất bại');
+      setError(msg);
+      toast.error(msg);
       console.error(err);
     } finally {
       setLoading(false);
@@ -585,11 +623,18 @@ const UserEditForm = ({
                   required
                 >
                   <option value="">Chọn lớp</option>
-                  {classes.map((cls) => (
-                    <option key={cls.id} value={cls.id}>
-                      {cls.name}
-                    </option>
-                  ))}
+                  {classes.map((cls) => {
+                    const full = isClassAtMaxCapacity(cls);
+                    const cnt = cls.studentCount ?? 0;
+                    const capLabel = cls.capacity != null && cls.capacity !== '' ? cls.capacity : '—';
+                    const isCurrent = String(cls.id) === String(initialStudentClassId);
+                    const disableOption = full && !isCurrent;
+                    return (
+                      <option key={cls.id} value={cls.id} disabled={disableOption}>
+                        {cls.name} ({cnt}/{capLabel}){full ? (isCurrent ? ' — lớp hiện tại' : ' — đã đủ sĩ số') : ''}
+                      </option>
+                    );
+                  })}
                 </select>
               </div>
             )}

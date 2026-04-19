@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { toast } from 'react-toastify';
 import api from '../../../../shared/lib/api';
 import { useAuth } from '../../../auth/context/AuthContext';
 
@@ -110,9 +111,17 @@ const ClassCreatePage = () => {
       };
 
       await api.post('/classes', submitData);
+      toast.success('Tạo lớp học thành công.');
       navigate('/classes');
     } catch (err) {
-      setError(err.response?.data?.error || 'Failed to create class');
+      const d = err.response?.data;
+      const msg =
+        (d && typeof d === 'object' && (d.message || d.error)) ||
+        (typeof d === 'string' ? d : null) ||
+        'Không tạo được lớp.';
+      const text = typeof msg === 'string' ? msg : String(msg);
+      setError(text);
+      toast.error(text);
     } finally {
       setLoading(false);
     }
