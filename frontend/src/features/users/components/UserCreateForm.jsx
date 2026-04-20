@@ -73,10 +73,26 @@ const UserCreateForm = ({
   const [showRoleModal, setShowRoleModal] = useState(false);
   const [newRoleData, setNewRoleData] = useState({ name: '', description: '' });
   const [creatingRole, setCreatingRole] = useState(false);
+  /**
+   * Role ADMIN dùng khi tạo quản trị trường: lấy từ GET /roles?userRole=SUPER_ADMIN (toàn hệ thống).
+   * Khi chọn trường, GET /roles/school/{id} có thể không chứa bản ADMIN — khi đó vẫn cần roleId hợp lệ.
+   */
+  const [platformAdminRole, setPlatformAdminRole] = useState(null);
 
   const currentUserRole = useMemo(() => user?.role?.name?.toUpperCase(), [user]);
   const currentSchoolId = useMemo(() => user?.school?.id, [user]);
   const isAdminCreationMode = mode === 'create-admin' && currentUserRole === 'SUPER_ADMIN';
+
+  const pickPlatformAdminRole = (arr) => {
+    const candidates = (arr || []).filter((r) => {
+      const rn = r?.name?.toUpperCase();
+      return rn === 'ADMIN' || rn?.startsWith('ADMIN_');
+    });
+    const globalExact = candidates.find(
+      (r) => r?.name?.toUpperCase() === 'ADMIN' && (r.school == null || r.school?.id == null)
+    );
+    return globalExact || candidates[0] || null;
+  };
 
   useEffect(() => {
     // Admin: auto set schoolId từ context
@@ -122,7 +138,12 @@ const UserCreateForm = ({
           });
         }
 
-        setRoles(Array.isArray(allRoles) ? allRoles.filter((r) => r != null && r.id != null) : []);
+        const cleaned = Array.isArray(allRoles) ? allRoles.filter((r) => r != null && r.id != null) : [];
+        setRoles(cleaned);
+        if (mode === 'create-admin' && currentUserRole === 'SUPER_ADMIN') {
+          const pa = pickPlatformAdminRole(cleaned);
+          if (pa) setPlatformAdminRole(pa);
+        }
       } catch (err) {
         console.error('Error fetching initial roles:', err);
       }
@@ -143,7 +164,7 @@ const UserCreateForm = ({
     };
 
     fetchOptions();
-  }, [currentUserRole, currentSchoolId]);
+  }, [currentUserRole, currentSchoolId, mode]);
 
   useEffect(() => {
     const schoolId = formData.schoolId;
@@ -174,12 +195,20 @@ const UserCreateForm = ({
           });
         }
 
-        setRoles(Array.isArray(allRoles) ? allRoles.filter((r) => r != null && r.id != null) : []);
+        let list = Array.isArray(allRoles) ? allRoles.filter((r) => r != null && r.id != null) : [];
+        if (isAdminCreationMode && platformAdminRole && !list.some((r) => r.id === platformAdminRole.id)) {
+          list = [platformAdminRole, ...list];
+        }
+        setRoles(list);
+
         if (isAdminCreationMode) {
-          const adminRole = allRoles.find((r) => {
+          let adminRole = list.find((r) => {
             const rn = r?.name?.toUpperCase();
             return rn === 'ADMIN' || rn?.startsWith('ADMIN_');
           });
+          if (!adminRole && platformAdminRole) {
+            adminRole = platformAdminRole;
+          }
           setFormData((prev) => ({ ...prev, roleId: adminRole ? String(adminRole.id) : '' }));
         } else {
           setFormData((prev) => ({ ...prev, roleId: '' }));
@@ -228,12 +257,12 @@ const UserCreateForm = ({
     fetchClassesForSchool(schoolId);
     fetchSubjectsForSchool(schoolId);
     fetchSchoolStudents(schoolId);
-  }, [formData.schoolId, currentUserRole, isAdminCreationMode]);
+  }, [formData.schoolId, currentUserRole, isAdminCreationMode, platformAdminRole]);
 
-  // SUPER_ADMIN: auto chọn role ADMIN nếu có
+  // SUPER_ADMIN: auto chọn role ADMIN nếu có (kể cả ADMIN_* hoặc role lấy từ platform fallback)
   useEffect(() => {
     if (currentUserRole === 'SUPER_ADMIN' && formData.schoolId && roles.length > 0 && !formData.roleId) {
-      const adminRole = roles.find((r) => r.name?.toUpperCase() === 'ADMIN');
+      const adminRole = pickPlatformAdminRole(roles);
       if (adminRole) setFormData((prev) => ({ ...prev, roleId: String(adminRole.id) }));
     }
   }, [roles, formData.schoolId, formData.roleId, currentUserRole]);
@@ -278,13 +307,13 @@ const UserCreateForm = ({
   const isRoleTeacher = roleNameUpper.includes('TEACHER');
   const isRoleParent = roleNameUpper.includes('PARENT');
   const isRoleAdmin = roleNameUpper === 'ADMIN' || roleNameUpper.startsWith('ADMIN_');
-  const adminRoleOption = useMemo(
-    () => roles.find((r) => {
+  const adminRoleOption = useMemo(() => {
+    const fromList = roles.find((r) => {
       const rn = r?.name?.toUpperCase();
       return rn === 'ADMIN' || rn?.startsWith('ADMIN_');
-    }),
-    [roles]
-  );
+    });
+    return fromList || (isAdminCreationMode ? platformAdminRole : null);
+  }, [roles, isAdminCreationMode, platformAdminRole]);
 
   const validateForm = () => {
     if (showRoleModal) {
@@ -299,6 +328,9 @@ const UserCreateForm = ({
       return toast.error('Vui lòng chọn vai trò.') || false;
     }
     if (!formData.schoolId && currentUserRole !== 'SUPER_ADMIN') return toast.error('Vui lòng chọn trường.') || false;
+    if (isAdminCreationMode && !formData.schoolId) {
+      return toast.error('Tài khoản quản trị trường bắt buộc phải chọn trường.') || false;
+    }
     if (isRoleAdmin && !formData.schoolId) return toast.error('Tài khoản Admin bắt buộc phải gán trường.') || false;
     if (isRoleStudent && !formData.classId) return toast.error('Lớp là bắt buộc khi tạo học sinh.') || false;
     if (isRoleStudent && formData.classId) {
@@ -513,7 +545,8 @@ const UserCreateForm = ({
             <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
               <div>
                 <label htmlFor="schoolId" className="block text-sm font-semibold text-slate-700">
-                  Trường {(currentUserRole === 'SUPER_ADMIN' && !isRoleAdmin) ? '(tùy chọn)' : '*'}
+                  Trường{' '}
+                  {isAdminCreationMode || isRoleAdmin || currentUserRole !== 'SUPER_ADMIN' ? '*' : '(tùy chọn)'}
                 </label>
                 <div className="relative mt-1">
                   <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-slate-400">
@@ -525,7 +558,7 @@ const UserCreateForm = ({
                     value={formData.schoolId}
                     onChange={handleChange}
                     className="block w-full appearance-none rounded-2xl border border-slate-200 bg-white pl-10 pr-10 py-3 text-base shadow-sm outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 disabled:bg-slate-50"
-                    required={currentUserRole !== 'SUPER_ADMIN' || isRoleAdmin}
+                    required={currentUserRole !== 'SUPER_ADMIN' || isRoleAdmin || isAdminCreationMode}
                     disabled={currentUserRole === 'ADMIN'}
                   >
                     <option value="">Chọn trường</option>
