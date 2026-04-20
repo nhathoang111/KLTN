@@ -148,22 +148,9 @@ const TeacherDashboard = () => {
     return ids;
   }, [allSchedules, teacherClasses]);
 
-  // "Danh sách lớp phụ trách" nên hiển thị cả:
-  // - lớp GVCN (teacherClasses)
-  // - và các lớp giáo viên đang dạy theo TKB (allSchedules)
-  // Nếu chỉ dựa vào GVCN mà giáo viên không làm GVCN thì sẽ hiện "Chưa có lớp phụ trách".
-  const classesForResponsibilityList = React.useMemo(() => {
+  // "Danh sách lớp phụ trách" chỉ hiển thị lớp mà giáo viên có lớp học phần.
+  const classesFromClassSections = React.useMemo(() => {
     const map = new Map();
-    (teacherClasses || []).forEach((c) => {
-      const id = c?.id;
-      if (id != null && !map.has(id)) map.set(id, c);
-    });
-
-    (allSchedules || []).forEach((s) => {
-      const c = s?.classEntity;
-      const id = c?.id;
-      if (id != null && !map.has(id)) map.set(id, c);
-    });
 
     (classSections || []).forEach((cs) => {
       const c = cs?.classRoom || cs?.class_room;
@@ -176,7 +163,7 @@ const TeacherDashboard = () => {
       const nb = b?.name ?? '';
       return na.localeCompare(nb, 'vi');
     });
-  }, [teacherClasses, allSchedules, classSections]);
+  }, [classSections]);
 
   const homeroomClassesList = React.useMemo(() => {
     return (teacherClasses || []).slice();
@@ -184,8 +171,8 @@ const TeacherDashboard = () => {
 
   const otherResponsibilityClassesList = React.useMemo(() => {
     const homeroomIds = new Set((teacherClasses || []).map((c) => c?.id).filter(Boolean));
-    return (classesForResponsibilityList || []).filter((c) => !homeroomIds.has(c?.id));
-  }, [teacherClasses, classesForResponsibilityList]);
+    return (classesFromClassSections || []).filter((c) => !homeroomIds.has(c?.id));
+  }, [teacherClasses, classesFromClassSections]);
   const classesTeachingCount = classIdsTeaching.size;
   const totalStudents = Array.from(classIdsTeaching).reduce(
     (sum, id) => sum + (studentCountByClassId[id] ?? 0),

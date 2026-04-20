@@ -51,6 +51,18 @@ const ClassDetailPage = () => {
 
   const userRole = user?.role?.name?.toUpperCase();
   const canManageSections = userRole === "ADMIN" || userRole === "SUPER_ADMIN";
+  const canEditClass = !isTeacherRole(user?.role?.name);
+  const canViewSectionsTab = !isTeacherRole(user?.role?.name);
+  const visibleTabs = useMemo(
+    () => tabs.filter((t) => (t.id === "sections" ? canViewSectionsTab : true)),
+    [canViewSectionsTab]
+  );
+
+  useEffect(() => {
+    if (activeTab === "sections" && !canViewSectionsTab) {
+      setActiveTab("overview");
+    }
+  }, [activeTab, canViewSectionsTab]);
 
   useEffect(() => {
     let cancelled = false;
@@ -273,14 +285,16 @@ const ClassDetailPage = () => {
           <Link className="btn btn-secondary" to="/classes">
             Quay lại
           </Link>
-          <Link className="btn btn-primary" to={`/classes/${classId}/edit`}>
-            Sửa lớp
-          </Link>
+          {canEditClass && (
+            <Link className="btn btn-primary" to={`/classes/${classId}/edit`}>
+              Sửa lớp
+            </Link>
+          )}
         </div>
       </div>
 
       <div style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
-        {tabs.map((t) => (
+        {visibleTabs.map((t) => (
           <button
             key={t.id}
             type="button"
@@ -362,7 +376,7 @@ const ClassDetailPage = () => {
         </div>
       )}
 
-      {activeTab === "sections" && (
+      {activeTab === "sections" && canViewSectionsTab && (
         <div className="common-table-container" style={{ marginTop: 0 }}>
           <div style={{ padding: "12px 16px", fontWeight: 700 }}>Lớp học phần ({classSections.length})</div>
 

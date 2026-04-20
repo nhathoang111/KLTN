@@ -36,4 +36,8 @@ public interface ClassSectionRepository extends JpaRepository<ClassSection, Inte
     /** Số lớp (distinct class_room_id) đang học từng môn. */
     @Query("SELECT cs.subject.id, COUNT(DISTINCT cs.classRoom.id) FROM ClassSection cs GROUP BY cs.subject.id")
     List<Object[]> countDistinctClassesBySubjectId();
+
+    /** Danh sách lớp (distinct) đang học môn theo lớp học phần: [classId, className]. */
+    @Query("SELECT DISTINCT cs.classRoom.id, cs.classRoom.name FROM ClassSection cs WHERE cs.subject.id = :subjectId AND cs.classRoom.id IS NOT NULL")
+    List<Object[]> findDistinctClassIdAndNameBySubjectId(@Param("subjectId") Integer subjectId);
 }

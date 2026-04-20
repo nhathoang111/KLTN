@@ -9,8 +9,8 @@ import com.example.schoolmanagement.entity.Subject;
 import com.example.schoolmanagement.exception.BadRequestException;
 import com.example.schoolmanagement.exception.ResourceNotFoundException;
 import com.example.schoolmanagement.entity.User;
+import com.example.schoolmanagement.repository.ClassSectionRepository;
 import com.example.schoolmanagement.repository.SchoolRepository;
-import com.example.schoolmanagement.repository.ScheduleRepository;
 import com.example.schoolmanagement.repository.TeacherSubjectRepository;
 import com.example.schoolmanagement.repository.SubjectRepository;
 import com.example.schoolmanagement.repository.UserRepository;
@@ -31,7 +31,7 @@ public class SubjectService {
     private SchoolRepository schoolRepository;
 
     @Autowired
-    private ScheduleRepository scheduleRepository;
+    private ClassSectionRepository classSectionRepository;
 
     @Autowired
     private TeacherSubjectRepository teacherSubjectRepository;
@@ -39,9 +39,9 @@ public class SubjectService {
     @Autowired
     private UserRepository userRepository;
 
-    /** Số lớp đang học từng môn (subjectId -> count). Đếm theo thời khóa biểu (Schedule). */
+    /** Số lớp đang học từng môn (subjectId -> count). Đếm theo lớp học phần (ClassSection). */
     public Map<Integer, Long> getSubjectClassCounts() {
-        List<Object[]> rows = scheduleRepository.countDistinctClassesBySubjectIdFromSchedules();
+        List<Object[]> rows = classSectionRepository.countDistinctClassesBySubjectId();
         Map<Integer, Long> map = new HashMap<>();
         for (Object[] row : rows) {
             map.put((Integer) row[0], ((Number) row[1]).longValue());
@@ -49,10 +49,10 @@ public class SubjectService {
         return map;
     }
 
-    /** Danh sách lớp đang học môn (id, name) – dùng projection để tránh lazy load khi serialize. */
+    /** Danh sách lớp đang học môn (id, name) theo lớp học phần (ClassSection). */
     public List<Map<String, Object>> getClassesBySubjectId(Integer subjectId) {
         getSubjectById(subjectId);
-        List<Object[]> rows = scheduleRepository.findDistinctClassIdAndNameBySubjectId(subjectId);
+        List<Object[]> rows = classSectionRepository.findDistinctClassIdAndNameBySubjectId(subjectId);
         List<Map<String, Object>> list = new ArrayList<>();
         for (Object[] row : rows) {
             Map<String, Object> map = new HashMap<>();
