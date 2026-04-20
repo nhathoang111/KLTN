@@ -402,6 +402,7 @@ const ExamScoreManagement = () => {
   const [filteredSubjectsForClass, setFilteredSubjectsForClass] = useState([]); // Môn theo TKB + học kỳ (GV)
   const [displayFilterClassId, setDisplayFilterClassId] = useState(''); // Lớp đã chọn để filter hiển thị (cho Teacher)
   const [displayFilterSubjectId, setDisplayFilterSubjectId] = useState(''); // Môn đã chọn để filter hiển thị (cho Teacher)
+  const [displayClassStudents, setDisplayClassStudents] = useState([]); // Danh sách học sinh của lớp đang được filter hiển thị
   const [isEditMode, setIsEditMode] = useState(false); // Phân biệt giữa nhập điểm mới và sửa điểm
   /** Học kỳ trong modal nhập điểm (lọc môn theo TKB, khớp admin) */
   const [teacherModalSemester, setTeacherModalSemester] = useState('1');
@@ -428,6 +429,23 @@ const ExamScoreManagement = () => {
     fetchClasses();
     fetchScoreLockStatus();
   }, [user]);
+
+  useEffect(() => {
+    if (!displayFilterClassId) {
+      setDisplayClassStudents([]);
+      return;
+    }
+    const fetchDisplayStudents = async () => {
+      try {
+        const res = await api.get(`/classes/${displayFilterClassId}/students`);
+        setDisplayClassStudents(res.data.students || []);
+      } catch (err) {
+        console.error('Error fetching students for display:', err);
+        setDisplayClassStudents([]);
+      }
+    };
+    fetchDisplayStudents();
+  }, [displayFilterClassId]);
 
   const runAiStudentInsight = async (student) => {
     const sid = student?.id ?? student?.studentId;
@@ -482,6 +500,11 @@ const ExamScoreManagement = () => {
     }
   };
   const handleTeacherImport = async () => {
+    if (isScoreLocked) {
+      alert('Điểm số đã bị khóa. Không thể import điểm.');
+      return;
+    }
+
     if (!teacherImportFile) {
       alert('Chọn file trước');
       return;
@@ -1217,7 +1240,7 @@ const ExamScoreManagement = () => {
         });
 
         // Điểm miệng (MIENG)
-        const scoreMiengInput = studentData.scoreMieng ? studentData.scoreMieng.trim() : '';
+        const scoreMiengInput = studentData.scoreMieng ? String(studentData.scoreMieng).trim() : '';
         if (scoreMiengInput !== '') {
           const scoreMiengValue = parseFloat(scoreMiengInput);
           if (!isNaN(scoreMiengValue) && scoreMiengValue >= 0 && scoreMiengValue <= 10) {
@@ -1247,10 +1270,15 @@ const ExamScoreManagement = () => {
               }));
             }
           }
+        } else if (existingMieng && isEditMode) {
+          // Xóa điểm nếu input rỗng ở chế độ sửa
+          promises.push(api.delete(`/exam-scores/${existingMieng.id}`, {
+            headers: { 'X-User-Id': user?.id, 'X-User-Role': user?.role?.name }
+          }));
         }
 
         // Xử lý điểm 15p
-        const score15PInput = studentData.score15P ? studentData.score15P.trim() : '';
+        const score15PInput = studentData.score15P ? String(studentData.score15P).trim() : '';
         if (score15PInput !== '') {
           const score15PValue = parseFloat(score15PInput);
           if (!isNaN(score15PValue) && score15PValue >= 0 && score15PValue <= 10) {
@@ -1264,32 +1292,25 @@ const ExamScoreManagement = () => {
             };
 
             if (existing15P) {
-              // Ở chế độ sửa, luôn update nếu có giá trị trong form
               console.log(`Student ${studentId} - 15P: updating existing score ${existing15P.id} to ${score15PValue}`);
               promises.push(api.put(`/exam-scores/${existing15P.id}`, scoreData, {
-                headers: {
-                  'X-User-Id': user?.id,
-                  'X-User-Role': user?.role?.name
-                }
+                headers: { 'X-User-Id': user?.id, 'X-User-Role': user?.role?.name }
               }));
             } else {
-              // Tạo mới nếu chưa có
               promises.push(api.post('/exam-scores', scoreData, {
-                headers: {
-                  'X-User-Id': user?.id,
-                  'X-User-Role': user?.role?.name
-                }
+                headers: { 'X-User-Id': user?.id, 'X-User-Role': user?.role?.name }
               }));
             }
           }
         } else if (existing15P && isEditMode) {
-          // Nếu ở chế độ sửa và input rỗng nhưng đã có điểm, có thể xóa điểm (tùy chọn)
-          // Hoặc giữ nguyên điểm cũ (không làm gì)
-          // Ở đây tôi sẽ giữ nguyên điểm cũ (không xóa)
+          // Xóa điểm nếu input rỗng ở chế độ sửa
+          promises.push(api.delete(`/exam-scores/${existing15P.id}`, {
+            headers: { 'X-User-Id': user?.id, 'X-User-Role': user?.role?.name }
+          }));
         }
 
         // Xử lý điểm 1 tiết
-        const score1TietInput = studentData.score1Tiet ? studentData.score1Tiet.trim() : '';
+        const score1TietInput = studentData.score1Tiet ? String(studentData.score1Tiet).trim() : '';
         if (score1TietInput !== '') {
           const score1TietValue = parseFloat(score1TietInput);
           if (!isNaN(score1TietValue) && score1TietValue >= 0 && score1TietValue <= 10) {
@@ -1303,30 +1324,25 @@ const ExamScoreManagement = () => {
             };
 
             if (existing1Tiet) {
-              // Ở chế độ sửa, luôn update nếu có giá trị trong form
               console.log(`Student ${studentId} - 1Tiet: updating existing score ${existing1Tiet.id} to ${score1TietValue}`);
               promises.push(api.put(`/exam-scores/${existing1Tiet.id}`, scoreData, {
-                headers: {
-                  'X-User-Id': user?.id,
-                  'X-User-Role': user?.role?.name
-                }
+                headers: { 'X-User-Id': user?.id, 'X-User-Role': user?.role?.name }
               }));
             } else {
-              // Tạo mới nếu chưa có
               promises.push(api.post('/exam-scores', scoreData, {
-                headers: {
-                  'X-User-Id': user?.id,
-                  'X-User-Role': user?.role?.name
-                }
+                headers: { 'X-User-Id': user?.id, 'X-User-Role': user?.role?.name }
               }));
             }
           }
         } else if (existing1Tiet && isEditMode) {
-          // Nếu ở chế độ sửa và input rỗng nhưng đã có điểm, giữ nguyên điểm cũ
+          // Xóa điểm nếu input rỗng ở chế độ sửa
+          promises.push(api.delete(`/exam-scores/${existing1Tiet.id}`, {
+            headers: { 'X-User-Id': user?.id, 'X-User-Role': user?.role?.name }
+          }));
         }
 
         // Xử lý điểm cuối kỳ
-        const scoreCuoiKiInput = studentData.scoreCuoiKi ? studentData.scoreCuoiKi.trim() : '';
+        const scoreCuoiKiInput = studentData.scoreCuoiKi ? String(studentData.scoreCuoiKi).trim() : '';
         if (scoreCuoiKiInput !== '') {
           const scoreCuoiKiValue = parseFloat(scoreCuoiKiInput);
           if (!isNaN(scoreCuoiKiValue) && scoreCuoiKiValue >= 0 && scoreCuoiKiValue <= 10) {
@@ -1340,26 +1356,21 @@ const ExamScoreManagement = () => {
             };
 
             if (existingCuoiKi) {
-              // Ở chế độ sửa, luôn update nếu có giá trị trong form
               console.log(`Student ${studentId} - CuoiKi: updating existing score ${existingCuoiKi.id} to ${scoreCuoiKiValue}`);
               promises.push(api.put(`/exam-scores/${existingCuoiKi.id}`, scoreData, {
-                headers: {
-                  'X-User-Id': user?.id,
-                  'X-User-Role': user?.role?.name
-                }
+                headers: { 'X-User-Id': user?.id, 'X-User-Role': user?.role?.name }
               }));
             } else {
-              // Tạo mới nếu chưa có
               promises.push(api.post('/exam-scores', scoreData, {
-                headers: {
-                  'X-User-Id': user?.id,
-                  'X-User-Role': user?.role?.name
-                }
+                headers: { 'X-User-Id': user?.id, 'X-User-Role': user?.role?.name }
               }));
             }
           }
         } else if (existingCuoiKi && isEditMode) {
-          // Nếu ở chế độ sửa và input rỗng nhưng đã có điểm, giữ nguyên điểm cũ
+          // Xóa điểm nếu input rỗng ở chế độ sửa
+          promises.push(api.delete(`/exam-scores/${existingCuoiKi.id}`, {
+            headers: { 'X-User-Id': user?.id, 'X-User-Role': user?.role?.name }
+          }));
         }
       });
 
@@ -1546,10 +1557,32 @@ const ExamScoreManagement = () => {
       }
     });
 
+      // Thêm học sinh chưa có điểm vào bảng điểm (để không bị mất khỏi danh sách khi bị xóa hết điểm)
+      if (userRole === 'TEACHER' && displayFilterClassId && displayFilterSubjectId) {
+        const selectedSubject = subjects.find(s => String(s.id) === String(displayFilterSubjectId)) || { id: displayFilterSubjectId, name: 'Môn đã chọn' };
+        const selectedClass = classes.find(c => String(c.id) === String(displayFilterClassId)) || { id: displayFilterClassId, name: 'Lớp đã chọn' };
+
+        displayClassStudents.forEach(student => {
+          const key = `${student.id}-${displayFilterSubjectId}-${displayFilterClassId}`;
+          if (!grouped[key]) {
+            grouped[key] = {
+              student: student,
+              subject: selectedSubject,
+              classEntity: selectedClass,
+              scoreMieng: null,
+              score15P: null,
+              score1Tiet: null,
+              scoreCuoiKi: null,
+              allScores: []
+            };
+          }
+        });
+      }
+
     return Object.values(grouped);
   };
 
-  const scoreGroups = useMemo(() => groupScoresByStudentAndSubject(), [examScores, displayFilterClassId, displayFilterSubjectId, user]);
+    const scoreGroups = useMemo(() => groupScoresByStudentAndSubject(), [examScores, displayFilterClassId, displayFilterSubjectId, user, displayClassStudents, subjects, classes]);
 
   useEffect(() => {
     const role = user?.role?.name?.toUpperCase();
@@ -1815,7 +1848,7 @@ const ExamScoreManagement = () => {
                   accept=".xlsx,.xls"
                   onChange={(e) => setTeacherImportFile(e.target.files?.[0] || null)}
                   className="exam-import-upload__input"
-                  disabled={teacherImporting}
+                  disabled={teacherImporting || isScoreLocked}
                 />
                 <span className="exam-import-upload__button">Chọn file</span>
                 <span className="exam-import-upload__name">
@@ -1828,7 +1861,7 @@ const ExamScoreManagement = () => {
                   type="button"
                   className="exam-import-clear-btn"
                   onClick={() => setTeacherImportFile(null)}
-                  disabled={teacherImporting}
+                  disabled={teacherImporting || isScoreLocked}
                 >
                   Bỏ chọn
                 </button>
@@ -1838,7 +1871,7 @@ const ExamScoreManagement = () => {
                 type="button"
                 className="exam-import-submit-btn"
                 onClick={handleTeacherImport}
-                disabled={!teacherImportFile || teacherImporting}
+                disabled={!teacherImportFile || teacherImporting || isScoreLocked}
               >
                 {teacherImporting ? 'Đang import...' : 'Import'}
               </button>
