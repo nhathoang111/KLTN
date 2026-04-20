@@ -1446,6 +1446,30 @@ const ExamScoreManagement = () => {
   const outerSubjectsForFilter = useMemo(() => {
     if (user?.role?.name?.toUpperCase() !== 'TEACHER') return [];
 
+    // Ưu tiên lấy từ danh sách subjects đã fetch (đã lọc theo teacher)
+    // Nếu đang filter theo lớp thì chỉ giữ môn có trong examScores của lớp đó
+    if (subjects && subjects.length > 0) {
+      if (displayFilterClassId) {
+        // Lấy subjectId có trong scores của lớp đang filter
+        const classScores = examScores.filter((score) => {
+          const scoreClassId = score.classEntity?.id || score.class_id;
+          return scoreClassId && String(scoreClassId) === String(displayFilterClassId);
+        });
+        const subjectIdsInClass = new Set(
+          classScores.map((s) => s.subject?.id).filter(Boolean)
+        );
+        // Nếu không có score nào cho lớp này, vẫn trả về subjects đã được phân môn
+        // để giáo viên có thể lọc trước khi nhập điểm
+        if (subjectIdsInClass.size > 0) {
+          return subjects
+            .filter((s) => subjectIdsInClass.has(s.id))
+            .sort((a, b) => (a.name || '').localeCompare(b.name || '', 'vi'));
+        }
+      }
+      return [...subjects].sort((a, b) => (a.name || '').localeCompare(b.name || '', 'vi'));
+    }
+
+    // Fallback: build từ examScores nếu subjects chưa load
     const sourceScores = displayFilterClassId
       ? examScores.filter((score) => {
           const scoreClassId = score.classEntity?.id || score.class_id;
@@ -1462,9 +1486,9 @@ const ExamScoreManagement = () => {
     });
 
     return Array.from(map.values()).sort((a, b) => (a.name || '').localeCompare(b.name || '', 'vi'));
-  }, [examScores, displayFilterClassId, user]);
+  }, [examScores, displayFilterClassId, subjects, user]);
 
-  // Nhóm điểm theo học sinh và môn học
+  // Nhóm điểm theo học sinh, môn học và lớp
   const groupScoresByStudentAndSubject = () => {
     const grouped = {};
     const userRole = user?.role?.name?.toUpperCase();
@@ -1486,7 +1510,9 @@ const ExamScoreManagement = () => {
     filteredScores.forEach(score => {
       const studentId = score.student?.id;
       const subjectId = score.subject?.id;
-      const key = `${studentId}-${subjectId}`;
+      // Bao gồm classId vào key để tránh merge nhầm bảng điểm khác lớp
+      const classId = score.classEntity?.id || score.class_id || 'noclass';
+      const key = `${studentId}-${subjectId}-${classId}`;
 
       if (!grouped[key]) {
         grouped[key] = {
@@ -1743,7 +1769,6 @@ const ExamScoreManagement = () => {
                   fontSize: '14px',
                   minWidth: '200px'
                 }}
-                disabled={!outerSubjectsForFilter || outerSubjectsForFilter.length === 0}
               >
                 <option value="">-- Tất cả các môn --</option>
                 {(outerSubjectsForFilter || []).map(s => (

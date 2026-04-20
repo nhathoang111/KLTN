@@ -1,9 +1,11 @@
 package com.example.schoolmanagement.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
 
 import java.time.LocalDateTime;
 
+@JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
 @Entity
 @Table(name = "exam_scores", uniqueConstraints = {
     @UniqueConstraint(columnNames = { "student_id", "subject_id", "class_id", "score_type", "attempt" })

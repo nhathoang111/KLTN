@@ -1,7 +1,9 @@
 package com.example.schoolmanagement.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
 
+@JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
 @Entity
 @Table(name = "class_sections", uniqueConstraints = {
     @UniqueConstraint(columnNames = { "class_room_id", "subject_id", "semester", "school_year" })
