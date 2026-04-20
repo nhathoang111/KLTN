@@ -30,6 +30,7 @@ const AssignmentListPage = () => {
     description: '',
     instructions: '',
     maxScore: '',
+    dueDate: '',
     status: 'ACTIVE',
     schoolId: '',
     classId: '',
@@ -314,6 +315,16 @@ const AssignmentListPage = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
+      const parsedMaxScore = parseFloat(formData.maxScore);
+      if (Number.isNaN(parsedMaxScore) || parsedMaxScore < 0 || parsedMaxScore > 10) {
+        alert('Điểm tối đa phải nằm trong khoảng từ 0 đến 10');
+        return;
+      }
+      if (formData.dueDate && new Date(formData.dueDate) < new Date()) {
+        alert('Thời gian nộp bài không được ở quá khứ');
+        return;
+      }
+
       // If file is selected and creating new assignment, use upload endpoint
       if (selectedFile && !editingAssignment) {
         const formDataToSend = new FormData();
@@ -321,7 +332,8 @@ const AssignmentListPage = () => {
         formDataToSend.append('title', formData.title);
         formDataToSend.append('description', formData.description || '');
         formDataToSend.append('instructions', formData.instructions || '');
-        formDataToSend.append('maxScore', formData.maxScore);
+        formDataToSend.append('maxScore', parsedMaxScore.toString());
+        formDataToSend.append('dueDate', formData.dueDate || '');
         formDataToSend.append('status', formData.status);
         if (formData.schoolId) {
           formDataToSend.append('schoolId', formData.schoolId);
@@ -340,7 +352,7 @@ const AssignmentListPage = () => {
         // Regular submission without file or editing
         const submitData = {
           ...formData,
-          maxScore: parseFloat(formData.maxScore),
+          maxScore: parsedMaxScore,
           schoolId: parseInt(formData.schoolId),
           classId: parseInt(formData.classId),
           subjectId: parseInt(formData.subjectId),
@@ -366,6 +378,7 @@ const AssignmentListPage = () => {
         description: '',
         instructions: '',
         maxScore: '',
+        dueDate: '',
         status: 'ACTIVE',
         schoolId: defaultSchoolId,
         classId: '',
@@ -387,6 +400,7 @@ const AssignmentListPage = () => {
       description: assignment.description || '',
       instructions: assignment.instructions || '',
       maxScore: assignment.maxScore?.toString() || '',
+      dueDate: assignment.dueDate ? assignment.dueDate.slice(0, 16) : '',
       status: assignment.status || 'ACTIVE',
       schoolId: assignment.school?.id?.toString() || '',
       classId: assignment.classEntity?.id?.toString() || '',
@@ -638,6 +652,13 @@ const AssignmentListPage = () => {
     return new Date(dateString).toLocaleDateString('vi-VN');
   };
 
+  const getCurrentDateTimeLocal = () => {
+    const now = new Date();
+    now.setSeconds(0, 0);
+    const timezoneOffsetMs = now.getTimezoneOffset() * 60 * 1000;
+    return new Date(now.getTime() - timezoneOffsetMs).toISOString().slice(0, 16);
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-slate-100 px-4 py-6">
@@ -692,7 +713,7 @@ const AssignmentListPage = () => {
               <th className="px-4 py-3 text-left">Tiêu đề</th>
               <th className="px-4 py-3 text-left">Lớp</th>
               <th className="px-4 py-3 text-left">Môn học</th>
-              <th className="px-4 py-3 text-left">Giáo viên</th>
+              <th className="px-4 py-3 text-left">Thời gian nộp bài</th>
               <th className="px-4 py-3 text-left">Điểm tối đa</th>
               <th className="px-4 py-3 text-left">Trạng thái</th>
               <th className="px-4 py-3 text-center">Thao tác</th>
@@ -704,7 +725,7 @@ const AssignmentListPage = () => {
                 <td className="px-4 py-3">{assignment.title}</td>
                 <td className="px-4 py-3">{getClassName(assignment.classEntity?.id)}</td>
                 <td className="px-4 py-3">{getSubjectName(assignment.subject?.id)}</td>
-                <td className="px-4 py-3">{getTeacherName(assignment.createdBy?.id, assignment)}</td>
+                <td className="px-4 py-3">{assignment.dueDate ? new Date(assignment.dueDate).toLocaleString('vi-VN') : 'N/A'}</td>
                 <td className="px-4 py-3">{assignment.maxScore}</td>
                 <td className="px-4 py-3">
                   <span className={`inline-flex min-w-[84px] justify-center rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wide ${
@@ -1042,8 +1063,18 @@ const AssignmentListPage = () => {
                   value={formData.maxScore}
                   onChange={(e) => setFormData({ ...formData, maxScore: e.target.value })}
                   min="0"
+                  max="10"
                   step="0.1"
                   required
+                />
+              </div>
+              <div className="common-form-group form-group">
+                <label>Thời gian nộp bài</label>
+                <input
+                  type="datetime-local"
+                  value={formData.dueDate || ''}
+                  onChange={(e) => setFormData({ ...formData, dueDate: e.target.value })}
+                  min={getCurrentDateTimeLocal()}
                 />
               </div>
               <div className="common-form-group form-group">
