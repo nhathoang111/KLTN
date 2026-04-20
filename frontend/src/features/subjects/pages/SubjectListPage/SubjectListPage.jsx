@@ -1,8 +1,19 @@
 import React, { useState, useEffect } from 'react';
+import { toast } from 'react-toastify';
 import api from '../../../../shared/lib/api';
 import './SubjectListPage.css';
 import { useAuth } from '../../../auth/context/AuthContext';
 import { Pencil, Trash2 } from 'lucide-react';
+
+/** Cùng pattern ClassCreatePage / ClassListPage: BE trả ErrorResponse { message } */
+function getApiErrorMessage(err, fallback) {
+  const d = err?.response?.data;
+  const msg =
+    (d && typeof d === 'object' && (d.message || d.error)) ||
+    (typeof d === 'string' ? d : null) ||
+    fallback;
+  return typeof msg === 'string' ? msg : String(msg);
+}
 
 const SubjectListPage = () => {
   const { user } = useAuth();
@@ -18,6 +29,7 @@ const SubjectListPage = () => {
     code: '',
     schoolId: ''
   });
+  const [formError, setFormError] = useState('');
 
   useEffect(() => {
     fetchData();
@@ -56,6 +68,7 @@ const SubjectListPage = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setFormError('');
     try {
       const submitData = {
         ...formData,
@@ -79,12 +92,17 @@ const SubjectListPage = () => {
         schoolId: defaultSchoolId
       });
       fetchData();
+      toast.success(editingSubject ? 'Cập nhật môn học thành công.' : 'Tạo môn học thành công.');
     } catch (error) {
       console.error('Error saving subject:', error);
+      const text = getApiErrorMessage(error, 'Không lưu được môn học.');
+      setFormError(text);
+      toast.error(text);
     }
   };
 
   const handleEdit = (subject) => {
+    setFormError('');
     setEditingSubject(subject);
     setFormData({
       name: subject.name || '',
@@ -106,6 +124,7 @@ const SubjectListPage = () => {
   };
 
   const handleCloseModal = () => {
+    setFormError('');
     setShowModal(false);
     setEditingSubject(null);
     const defaultSchoolId = user?.role?.name?.toUpperCase() === 'ADMIN' && user?.school?.id
@@ -153,6 +172,7 @@ const SubjectListPage = () => {
         <button
           className="btn btn-primary"
           onClick={() => {
+            setFormError('');
             const defaultSchoolId = user?.role?.name?.toUpperCase() === 'ADMIN' && user?.school?.id
               ? user.school.id.toString()
               : '';
@@ -263,6 +283,14 @@ const SubjectListPage = () => {
               <button className="common-close-btn" onClick={handleCloseModal}>×</button>
             </div>
             <form onSubmit={handleSubmit} className="common-modal-form">
+              {formError && (
+                <div
+                  className="rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+                  role="alert"
+                >
+                  {formError}
+                </div>
+              )}
               <div className="common-form-group">
                 <label>Tên môn học *</label>
                 <input

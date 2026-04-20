@@ -18,6 +18,24 @@ public interface SubjectRepository extends JpaRepository<Subject, Integer> {
 
     Optional<Subject> findBySchoolIdAndCode(Integer schoolId, String code);
 
+    @Query("SELECT CASE WHEN COUNT(s) > 0 THEN true ELSE false END FROM Subject s WHERE s.school.id = :schoolId AND s.code = :code AND s.id <> :excludeId")
+    boolean existsOtherByCodeInSchool(@Param("schoolId") Integer schoolId, @Param("code") String code, @Param("excludeId") Integer excludeId);
+
+    @Query("SELECT CASE WHEN COUNT(s) > 0 THEN true ELSE false END FROM Subject s WHERE s.school.id = :schoolId AND s.name = :name AND s.id <> :excludeId")
+    boolean existsOtherByNameInSchool(@Param("schoolId") Integer schoolId, @Param("name") String name, @Param("excludeId") Integer excludeId);
+
+    @Query("SELECT CASE WHEN COUNT(s) > 0 THEN true ELSE false END FROM Subject s WHERE s.school IS NULL AND s.code = :code AND s.id <> :excludeId")
+    boolean existsOtherByCodeWithSchoolNull(@Param("code") String code, @Param("excludeId") Integer excludeId);
+
+    @Query("SELECT CASE WHEN COUNT(s) > 0 THEN true ELSE false END FROM Subject s WHERE s.school IS NULL AND s.name = :name AND s.id <> :excludeId")
+    boolean existsOtherByNameWithSchoolNull(@Param("name") String name, @Param("excludeId") Integer excludeId);
+
+    @Query("SELECT CASE WHEN COUNT(s) > 0 THEN true ELSE false END FROM Subject s WHERE s.school IS NULL AND s.code = :code")
+    boolean existsByCodeWithSchoolNull(@Param("code") String code);
+
+    @Query("SELECT CASE WHEN COUNT(s) > 0 THEN true ELSE false END FROM Subject s WHERE s.school IS NULL AND s.name = :name")
+    boolean existsByNameWithSchoolNull(@Param("name") String name);
+
     @Query("SELECT s FROM Subject s WHERE s.school.id = :schoolId ORDER BY COALESCE(s.sortIndex, 9999) ASC, s.id ASC")
     List<Subject> findBySchoolIdOrderBySortIndex(@Param("schoolId") Integer schoolId);
     @Query("SELECT s FROM Subject s WHERE s.name = :name AND s.school.id = :schoolId")

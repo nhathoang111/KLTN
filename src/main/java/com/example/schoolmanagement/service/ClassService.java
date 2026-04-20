@@ -16,6 +16,7 @@ import com.example.schoolmanagement.repository.RecordRepository;
 import com.example.schoolmanagement.repository.AnnouncementRepository;
 import com.example.schoolmanagement.repository.AssignmentSubmissionRepository;
 import com.example.schoolmanagement.repository.SchoolYearRepository;
+import com.example.schoolmanagement.entity.Schedule;
 import com.example.schoolmanagement.entity.School;
 import com.example.schoolmanagement.entity.SchoolYear;
 import org.slf4j.Logger;
@@ -675,11 +676,13 @@ public class ClassService {
         return saved;
     }
 
+    @Transactional
     public ClassEntity updateClass(Integer id, Map<String, Object> classData) {
         ClassEntity existing = getClassById(id);
         if (existing.getStatus() != null && "ARCHIVED".equalsIgnoreCase(existing.getStatus().trim())) {
             throw new BadRequestException("Lớp đã lưu trữ, không thể chỉnh sửa.");
         }
+        final String classroomBeforeUpdate = existing.getRoom() == null ? "" : existing.getRoom().trim();
         String name = (String) classData.get("name");
         Integer gradeLevel = classData.get("gradeLevel") instanceof Number
                 ? ((Number) classData.get("gradeLevel")).intValue() : null;
@@ -720,11 +723,35 @@ public class ClassService {
         }
         assertClassUniquenessForSave(existing, existing.getId());
         try {
-            return saveClass(existing);
+            ClassEntity saved = saveClass(existing);
+            String classroomAfterUpdate = saved.getRoom() == null ? "" : saved.getRoom().trim();
+            if (!classroomBeforeUpdate.equals(classroomAfterUpdate)) {
+                syncScheduleRoomsForClass(saved.getId(), saved.getRoom());
+            }
+            return saved;
         } catch (DataIntegrityViolationException e) {
             log.warn("updateClass constraint: {}", e.getMessage());
             throw new BadRequestException("Không thể cập nhật lớp: dữ liệu trùng hoặc vi phạm ràng buộc CSDL.");
         }
+    }
+
+    /**
+     * Khi phòng lớp thay đổi: cập nhật {@link Schedule#getRoom()} trên mọi tiết TKB của lớp
+     * (không xóa/tạo lại tiết — chỉ để hiển thị khớp phòng hiện tại của lớp).
+     */
+    private void syncScheduleRoomsForClass(Integer classId, String newRoomValue) {
+        if (classId == null) {
+            return;
+        }
+        List<Schedule> schedules = scheduleRepository.findByClassEntityId(classId);
+        if (schedules.isEmpty()) {
+            return;
+        }
+        for (Schedule s : schedules) {
+            s.setRoom(newRoomValue);
+        }
+        scheduleRepository.saveAll(schedules);
+        log.debug("Synced class room to {} schedule row(s) for class id={}", schedules.size(), classId);
     }
 
     /**

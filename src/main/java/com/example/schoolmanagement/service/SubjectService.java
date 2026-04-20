@@ -82,8 +82,10 @@ public class SubjectService {
 
     public Subject createSubject(Map<String, Object> subjectData) {
         Subject subject = new Subject();
-        subject.setName((String) subjectData.get("name"));
-        subject.setCode((String) subjectData.get("code"));
+        String rawName = subjectData.get("name") instanceof String ? (String) subjectData.get("name") : null;
+        String rawCode = subjectData.get("code") instanceof String ? (String) subjectData.get("code") : null;
+        subject.setName(rawName != null ? rawName.trim() : null);
+        subject.setCode(rawCode != null ? rawCode.trim() : null);
         Object schoolIdObj = subjectData.get("schoolId");
         Integer schoolId = null;
         if (schoolIdObj instanceof Integer) {
@@ -95,26 +97,91 @@ public class SubjectService {
             subject.setSchool(schoolRepository.findById(schoolId)
                     .orElseThrow(() -> new BadRequestException("Invalid school ID")));
         }
-        if (subject.getName() == null || subject.getName().trim().isEmpty()) {
+        if (subject.getName() == null || subject.getName().isEmpty()) {
             throw new BadRequestException("Subject name is required");
         }
-        if (subject.getCode() == null || subject.getCode().trim().isEmpty()) {
+        if (subject.getCode() == null || subject.getCode().isEmpty()) {
             throw new BadRequestException("Subject code is required");
         }
         if (subject.getStatus() == null || subject.getStatus().trim().isEmpty()) {
             subject.setStatus("ACTIVE");
         }
+        assertUniqueSubjectForCreate(schoolId, subject.getName(), subject.getCode());
         return saveSubject(subject);
     }
 
     public Subject updateSubject(Integer id, Subject subject) {
         Subject existing = getSubjectById(id);
-        if (subject.getName() != null) existing.setName(subject.getName());
-        if (subject.getCode() != null) existing.setCode(subject.getCode());
-        if (subject.getSchool() != null) existing.setSchool(subject.getSchool());
+
+        String effectiveName = existing.getName();
+        String effectiveCode = existing.getCode();
+        if (subject.getName() != null) {
+            String t = subject.getName().trim();
+            if (t.isEmpty()) {
+                throw new BadRequestException("Subject name is required");
+            }
+            effectiveName = t;
+            existing.setName(t);
+        }
+        if (subject.getCode() != null) {
+            String t = subject.getCode().trim();
+            if (t.isEmpty()) {
+                throw new BadRequestException("Subject code is required");
+            }
+            effectiveCode = t;
+            existing.setCode(t);
+        }
+        if (subject.getSchool() != null) {
+            existing.setSchool(subject.getSchool());
+        }
         if (subject.getStatus() != null) existing.setStatus(subject.getStatus());
         if (subject.getDeletedAt() != null) existing.setDeletedAt(subject.getDeletedAt());
+
+        Integer effectiveSchoolId = null;
+        if (existing.getSchool() != null && existing.getSchool().getId() != null) {
+            effectiveSchoolId = existing.getSchool().getId();
+        }
+        assertUniqueSubjectForUpdate(effectiveSchoolId, effectiveName, effectiveCode, id);
         return saveSubject(existing);
+    }
+
+    /**
+     * Trùng theo cùng phạm vi với DB: (code, school_id) và (name, school_id).
+     */
+    private void assertUniqueSubjectForCreate(Integer schoolId, String name, String code) {
+        if (schoolId != null) {
+            if (subjectRepository.findBySchoolIdAndCode(schoolId, code).isPresent()) {
+                throw new BadRequestException("Mã môn đã tồn tại trong trường này");
+            }
+            if (subjectRepository.findByNameAndSchoolId(name, schoolId).isPresent()) {
+                throw new BadRequestException("Tên môn đã tồn tại trong trường này");
+            }
+        } else {
+            if (subjectRepository.existsByCodeWithSchoolNull(code)) {
+                throw new BadRequestException("Mã môn đã tồn tại (chưa gán trường)");
+            }
+            if (subjectRepository.existsByNameWithSchoolNull(name)) {
+                throw new BadRequestException("Tên môn đã tồn tại (chưa gán trường)");
+            }
+        }
+    }
+
+    private void assertUniqueSubjectForUpdate(Integer schoolId, String name, String code, Integer excludeId) {
+        if (schoolId != null) {
+            if (subjectRepository.existsOtherByCodeInSchool(schoolId, code, excludeId)) {
+                throw new BadRequestException("Mã môn đã tồn tại trong trường này");
+            }
+            if (subjectRepository.existsOtherByNameInSchool(schoolId, name, excludeId)) {
+                throw new BadRequestException("Tên môn đã tồn tại trong trường này");
+            }
+        } else {
+            if (subjectRepository.existsOtherByCodeWithSchoolNull(code, excludeId)) {
+                throw new BadRequestException("Mã môn đã tồn tại (chưa gán trường)");
+            }
+            if (subjectRepository.existsOtherByNameWithSchoolNull(name, excludeId)) {
+                throw new BadRequestException("Tên môn đã tồn tại (chưa gán trường)");
+            }
+        }
     }
 
     /**
