@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../../auth/context/AuthContext';
-import { Pencil, Trash2 } from 'lucide-react';
+import { Pencil, Plus, Trash2 } from 'lucide-react';
 import api from '../../../../shared/lib/api';
 import './AnnouncementListPage.css';
+import AnnouncementFormModal from '../../components/AnnouncementFormModal';
 
 const AnnouncementListPage = () => {
   const { user } = useAuth();
@@ -340,6 +341,34 @@ const AnnouncementListPage = () => {
     });
   };
 
+  const handleSchoolChangeInModal = async (selectedSchoolId) => {
+    setFormData({
+      ...formData,
+      schoolId: selectedSchoolId,
+      classId: '',
+      createdById: user?.id?.toString() || ''
+    });
+
+    if (selectedSchoolId) {
+      try {
+        const roleName = user?.role?.name?.toUpperCase();
+        let usersUrl = '/users';
+        if (roleName === 'SUPER_ADMIN') {
+          usersUrl += '?userRole=SUPER_ADMIN';
+        } else if (roleName === 'ADMIN') {
+          usersUrl += `?userRole=ADMIN&schoolId=${selectedSchoolId}`;
+        }
+        const usersRes = await api.get(usersUrl).catch((err) => {
+          console.warn('Failed to fetch users for school:', err);
+          return { data: { users: [] } };
+        });
+        setUsers(usersRes.data.users || []);
+      } catch (error) {
+        console.error('Error fetching users for school:', error);
+      }
+    }
+  };
+
   const getSchoolName = (schoolId) => {
     const school = schools.find(s => s.id === schoolId);
     return school ? school.name : 'N/A';
@@ -480,7 +509,7 @@ const AnnouncementListPage = () => {
           {/* Show "Thêm thông báo" button for ADMIN, SUPER_ADMIN, and TEACHER */}
           {(userRole === 'ADMIN' || userRole === 'SUPER_ADMIN' || userRole === 'TEACHER') && (
             <button
-              className="btn btn-primary"
+              className="inline-flex items-center gap-2 rounded-full bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-md shadow-indigo-500/30 hover:bg-indigo-500"
               onClick={() => {
                 // Auto-set school and creator when opening modal
                 if ((userRole === 'ADMIN' || userRole === 'TEACHER') && userSchoolId) {
@@ -516,6 +545,7 @@ const AnnouncementListPage = () => {
                 setShowModal(true);
               }}
             >
+              <Plus size={16} />
               Thêm thông báo
             </button>
           )}
@@ -638,184 +668,21 @@ const AnnouncementListPage = () => {
       </div>
       </div>
 
-      {showModal && (
-        <div className="common-modal-overlay">
-          <div className="common-modal">
-            <div className="common-modal-header">
-              <h2>{editingAnnouncement ? 'Sửa thông báo' : 'Thêm thông báo'}</h2>
-              <button className="common-close-btn" onClick={handleCloseModal}>×</button>
-            </div>
-            <form onSubmit={handleSubmit} className="common-modal-form">
-              <div className="common-form-group">
-                <label>Tiêu đề *</label>
-                <input
-                  type="text"
-                  value={formData.title}
-                  onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                  required
-                />
-              </div>
-              <div className="common-form-group">
-                <label>Nội dung *</label>
-                <textarea
-                  value={formData.content}
-                  onChange={(e) => setFormData({ ...formData, content: e.target.value })}
-                  rows="6"
-                  required
-                />
-              </div>
-              <div className="common-form-group">
-                <label>Trường *</label>
-                {(userRole === 'ADMIN' || userRole === 'TEACHER') && userSchoolId ? (
-                  // ADMIN and TEACHER: Hiển thị trường cố định (không cho chọn)
-                  <div style={{
-                    padding: '10px',
-                    backgroundColor: '#f5f5f5',
-                    borderRadius: '4px',
-                    border: '1px solid #ddd',
-                    fontSize: '14px'
-                  }}>
-                    <strong>{schools.find(s => s.id === userSchoolId)?.name || 'N/A'}</strong>
-                  </div>
-                ) : (
-                  // SUPER_ADMIN: Có thể chọn trường
-                  <select
-                    value={formData.schoolId}
-                    onChange={async (e) => {
-                      const selectedSchoolId = e.target.value;
-                      setFormData({
-                        ...formData,
-                        schoolId: selectedSchoolId,
-                        classId: '', // Reset class when school changes
-                        createdById: user?.id?.toString() || '' // Keep current user as creator
-                      });
-
-                      // Fetch users for selected school
-                      if (selectedSchoolId) {
-                        try {
-                          const userRole = user?.role?.name?.toUpperCase();
-                          let usersUrl = '/users';
-                          if (userRole === 'SUPER_ADMIN') {
-                            usersUrl += '?userRole=SUPER_ADMIN';
-                          } else if (userRole === 'ADMIN') {
-                            usersUrl += `?userRole=ADMIN&schoolId=${selectedSchoolId}`;
-                          }
-                          const usersRes = await api.get(usersUrl).catch(err => {
-                            console.warn('Failed to fetch users for school:', err);
-                            return { data: { users: [] } };
-                          });
-                          setUsers(usersRes.data.users || []);
-                        } catch (error) {
-                          console.error('Error fetching users for school:', error);
-                        }
-                      }
-                    }}
-                    required
-                  >
-                    <option value="">Chọn trường</option>
-                    {schools.map(school => (
-                      <option key={school.id} value={school.id}>
-                        {school.name}
-                      </option>
-                    ))}
-                  </select>
-                )}
-                {/* Hidden input để đảm bảo schoolId được gửi đi */}
-                {(userRole === 'ADMIN' || userRole === 'TEACHER') && userSchoolId && (
-                  <input
-                    type="hidden"
-                    value={userSchoolId.toString()}
-                  />
-                )}
-              </div>
-              <div className="common-form-group">
-                <label>Lớp</label>
-                <select
-                  value={formData.classId}
-                  onChange={(e) => setFormData({ ...formData, classId: e.target.value })}
-                  disabled={!formData.schoolId}
-                >
-                  <option value="">Chọn lớp (tùy chọn)</option>
-                  {classes
-                    .filter(classItem => {
-                      // Chỉ hiển thị lớp của trường đã chọn
-                      if (!formData.schoolId) return false;
-                      return classItem.school?.id === parseInt(formData.schoolId);
-                    })
-                    .map(classItem => (
-                      <option key={classItem.id} value={classItem.id}>
-                        {classItem.name}
-                      </option>
-                    ))}
-                </select>
-                {formData.schoolId && classes.filter(c => c.school?.id === parseInt(formData.schoolId)).length === 0 && (
-                  <small style={{ color: '#666', display: 'block', marginTop: '4px' }}>
-                    Trường này chưa có lớp học
-                  </small>
-                )}
-              </div>
-              <div className="common-form-group">
-                <label>Người tạo *</label>
-                {editingAnnouncement ? (
-                  // When editing, show original creator
-                  editingAnnouncement.createdBy ? (
-                    <div style={{
-                      padding: '10px',
-                      backgroundColor: '#f5f5f5',
-                      borderRadius: '4px',
-                      border: '1px solid #ddd',
-                      fontSize: '14px'
-                    }}>
-                      <strong>{editingAnnouncement.createdBy.fullName || getUserName(editingAnnouncement.createdBy?.id)}</strong>
-                      <span style={{ color: '#666' }}> ({editingAnnouncement.createdBy.role?.name || 'N/A'})</span>
-                    </div>
-                  ) : (
-                    user && (
-                      <div style={{
-                        padding: '10px',
-                        backgroundColor: '#f5f5f5',
-                        borderRadius: '4px',
-                        border: '1px solid #ddd',
-                        fontSize: '14px'
-                      }}>
-                        <strong>{user.fullName}</strong> <span style={{ color: '#666' }}>({user.role?.name || 'N/A'})</span>
-                      </div>
-                    )
-                  )
-                ) : (
-                  // When creating, show current user
-                  user && (
-                    <div style={{
-                      padding: '10px',
-                      backgroundColor: '#f5f5f5',
-                      borderRadius: '4px',
-                      border: '1px solid #ddd',
-                      fontSize: '14px'
-                    }}>
-                      <strong>{user.fullName}</strong> <span style={{ color: '#666' }}>({user.role?.name || 'N/A'})</span>
-                    </div>
-                  )
-                )}
-                <input
-                  type="hidden"
-                  value={editingAnnouncement
-                    ? (editingAnnouncement.createdBy?.id?.toString() || user?.id?.toString() || '')
-                    : (user?.id?.toString() || '')
-                  }
-                />
-              </div>
-              <div className="common-modal-actions">
-                <button type="button" className="btn btn-secondary" onClick={handleCloseModal}>
-                  Hủy
-                </button>
-                <button type="submit" className="btn btn-primary">
-                  {editingAnnouncement ? 'Cập nhật' : 'Tạo mới'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      <AnnouncementFormModal
+        showModal={showModal}
+        editingAnnouncement={editingAnnouncement}
+        handleCloseModal={handleCloseModal}
+        handleSubmit={handleSubmit}
+        formData={formData}
+        setFormData={setFormData}
+        userRole={userRole}
+        userSchoolId={userSchoolId}
+        schools={schools}
+        classes={classes}
+        user={user}
+        getUserName={getUserName}
+        onSchoolChange={handleSchoolChangeInModal}
+      />
     </div>
   );
 };

@@ -4,7 +4,10 @@ import { toast } from 'react-toastify';
 import api from '../../../../shared/lib/api';
 import './ClassListPage.css';
 import { useAuth } from '../../../auth/context/AuthContext';
-import { Pencil, Trash2 } from 'lucide-react';
+import { Archive, ArrowRightLeft, Eye, Pencil, Plus, Trash2 } from 'lucide-react';
+import ClassFormModal from '../../components/ClassFormModal';
+import ClassYearArchiveModal from '../../components/ClassYearArchiveModal';
+import ClassRolloverModal from '../../components/ClassRolloverModal';
 
 /** Tên niên khóa từ object lớp (API có thể trả schoolYear là object hoặc chuỗi). */
 function schoolYearLabel(c) {
@@ -477,7 +480,7 @@ const ClassListPage = () => {
 
   const getTeacherName = (teacherId) => {
     const teacher = teachers.find(t => t.id === teacherId);
-    return teacher ? teacher.fullName : 'N/A';
+    return teacher ? teacher.fullName : 'Chưa có';
   };
 
   const availableHomeroomTeachers = React.useMemo(() => {
@@ -547,17 +550,27 @@ const ClassListPage = () => {
                   />
                   Hiện lớp đã lưu trữ
                 </label>
-                <button type="button" className="btn btn-secondary" onClick={openYearArchiveModal}>
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-2 rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                  onClick={openYearArchiveModal}
+                >
+                  <Archive size={16} />
                   Kết thúc niên khóa
                 </button>
-                <button type="button" className="btn btn-secondary" onClick={openRolloverModal}>
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-2 rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                  onClick={openRolloverModal}
+                >
+                  <ArrowRightLeft size={16} />
                   Chuyển niên khóa
                 </button>
               </>
             )}
             {canManageClasses && (
               <button
-                className="btn btn-primary"
+                className="inline-flex items-center gap-2 rounded-full bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-md shadow-indigo-500/30 hover:bg-indigo-500"
                 onClick={() => {
                   const defaultSchoolId = (isAdmin || isTeacher) && user?.school?.id
                     ? user.school.id.toString()
@@ -575,6 +588,7 @@ const ClassListPage = () => {
                   setShowModal(true);
                 }}
               >
+                <Plus size={16} />
                 Thêm lớp học
               </button>
             )}
@@ -617,7 +631,7 @@ const ClassListPage = () => {
                   <th className="px-4 py-3 text-left">Trường</th>
                   <th className="px-4 py-3 text-left">GVCN</th>
                   <th className="px-4 py-3 text-left">Trạng thái</th>
-                  {canManageClasses && <th className="px-4 py-3 text-center">Thao tác</th>}
+                  <th className="px-4 py-3 text-center">Thao tác</th>
                 </tr>
               </thead>
               <tbody className="text-sm text-slate-700">
@@ -626,16 +640,7 @@ const ClassListPage = () => {
 
                   return (
                     <tr key={classItem.id} className="border-t border-slate-100 hover:bg-slate-50/80 transition-colors">
-                      <td className="px-4 py-3">
-                        <Link
-                          to={`/classes/${classItem.id}`}
-                          className="text-indigo-700 font-semibold hover:text-indigo-900 hover:underline"
-                          aria-label={`Xem chi tiết lớp ${classItem.name}`}
-                          title="Click để xem thông tin lớp học"
-                        >
-                          {classItem.name}
-                        </Link>
-                      </td>
+                      <td className="px-4 py-3 font-semibold text-slate-800">{classItem.name}</td>
                       <td className="px-4 py-3 text-slate-600">{schoolYearLabel(classItem) || '—'}</td>
                       <td className="px-4 py-3">{(classItem.studentCount ?? 0)}/{(classItem.capacity ?? 0)}</td>
                       <td className="px-4 py-3">
@@ -662,35 +667,45 @@ const ClassListPage = () => {
                                 : 'bg-slate-300 text-slate-700'
                           }`}
                         >
-                          {classItem.status}
+                          {classItem.status?.toUpperCase() === 'ACTIVE' ? 'Đang học' : classItem.status}
                         </span>
                       </td>
-                      {canManageClasses && (
-                        <td className="px-4 py-3">
-                          <div className="flex items-center justify-center gap-2">
-                            <button
-                              type="button"
-                              className="rounded-full bg-sky-100 px-3 py-1.5 text-xs font-semibold text-sky-700 hover:bg-sky-200 disabled:cursor-not-allowed disabled:opacity-40"
-                              onClick={() => (isArchived ? toast.error('Lớp đã lưu trữ, không thể sửa.') : handleEdit(classItem))}
-                              aria-label="Sửa lớp học"
-                              title={isArchived ? 'Đã lưu trữ' : 'Sửa'}
-                              disabled={isArchived}
-                            >
-                              <Pencil size={14} />
-                            </button>
-                            <button
-                              type="button"
-                              className="rounded-full bg-rose-100 px-3 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-200 disabled:cursor-not-allowed disabled:opacity-40"
-                              onClick={() => (isArchived ? toast.error('Lớp đã được lưu trữ.') : handleDelete(classItem.id))}
-                              aria-label="Lưu trữ lớp học"
-                              title={isArchived ? 'Đã lưu trữ' : 'Lưu trữ'}
-                              disabled={isArchived}
-                            >
-                              <Trash2 size={14} />
-                            </button>
-                          </div>
-                        </td>
-                      )}
+                      <td className="px-4 py-3">
+                        <div className="flex items-center justify-center gap-2">
+                          <Link
+                            to={`/classes/${classItem.id}`}
+                            className="rounded-full bg-indigo-100 px-3 py-1.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-200"
+                            aria-label={`Xem chi tiết lớp ${classItem.name}`}
+                            title="Xem chi tiết"
+                          >
+                            <Eye size={14} />
+                          </Link>
+                          {canManageClasses && (
+                            <>
+                              <button
+                                type="button"
+                                className="rounded-full bg-sky-100 px-3 py-1.5 text-xs font-semibold text-sky-700 hover:bg-sky-200 disabled:cursor-not-allowed disabled:opacity-40"
+                                onClick={() => (isArchived ? toast.error('Lớp đã lưu trữ, không thể sửa.') : handleEdit(classItem))}
+                                aria-label="Sửa lớp học"
+                                title={isArchived ? 'Đã lưu trữ' : 'Sửa'}
+                                disabled={isArchived}
+                              >
+                                <Pencil size={14} />
+                              </button>
+                              <button
+                                type="button"
+                                className="rounded-full bg-rose-100 px-3 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-200 disabled:cursor-not-allowed disabled:opacity-40"
+                                onClick={() => (isArchived ? toast.error('Lớp đã được lưu trữ.') : handleDelete(classItem.id))}
+                                aria-label="Lưu trữ lớp học"
+                                title={isArchived ? 'Đã lưu trữ' : 'Lưu trữ'}
+                                disabled={isArchived}
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </td>
                     </tr>
                   );
                 })}
@@ -700,267 +715,46 @@ const ClassListPage = () => {
         </div>
       </div>
 
-      {showModal && (
-        <div className="common-modal-overlay">
-          <div className="common-modal">
-            <div className="common-modal-header">
-              <h2>{editingClass ? 'Sửa lớp học' : 'Thêm lớp học'}</h2>
-              <button className="common-close-btn" onClick={handleCloseModal}>×</button>
-            </div>
-            <form onSubmit={handleSubmit} className="common-modal-form">
-              <div className="common-form-group">
-                <label>Khối *</label>
-                <select
-                  value={formData.gradeLevel}
-                  onChange={(e) => setFormData({ ...formData, gradeLevel: e.target.value })}
-                  required
-                >
-                  <option value="">Chọn khối</option>
-                  <option value="10">10</option>
-                  <option value="11">11</option>
-                  <option value="12">12</option>
-                </select>
-              </div>
-              <div className="common-form-group">
-                <label>Số lớp *</label>
-                <input
-                  type="number"
-                  min="1"
-                  value={formData.classNumber}
-                  onChange={(e) => setFormData({ ...formData, classNumber: e.target.value })}
-                  placeholder="VD: 1, 2, 3"
-                  required
-                />
-              </div>
-              <div className="common-form-group">
-                <label>Năm học *</label>
-                <input
-                  type="text"
-                  value={typeof formData.schoolYear === 'string' ? formData.schoolYear : (formData.schoolYear?.name ?? '')}
-                  onChange={(e) => setFormData({ ...formData, schoolYear: e.target.value })}
-                  placeholder="VD: 2024-2025"
-                  required
-                />
-              </div>
-              {formData.gradeLevel && formData.classNumber && (
-                <div className="common-form-group" style={{ padding: '8px 0', color: '#666', fontSize: '13px' }}>
-                  Tên lớp sẽ là: <strong>{formData.gradeLevel}/{formData.classNumber}{formData.schoolYear ? ` (${(typeof formData.schoolYear === 'string' ? formData.schoolYear : formData.schoolYear?.name || '').trim()})` : ''}</strong>
-                </div>
-              )}
-              <div className="common-form-group">
-                <label>Sĩ số tối đa *</label>
-                <input
-                  type="number"
-                  value={formData.capacity}
-                  onChange={(e) => setFormData({ ...formData, capacity: e.target.value })}
-                  min="1"
-                  required
-                />
-              </div>
-              <div className="common-form-group">
-                <label>Phòng học</label>
-                <input
-                  type="text"
-                  value={formData.room}
-                  onChange={(e) => setFormData({ ...formData, room: e.target.value })}
-                  placeholder="VD: A101, B205"
-                  style={{ padding: '8px 12px', borderRadius: '4px', border: '1px solid #ddd' }}
-                />
-                <small style={{ color: '#666', fontSize: '12px', marginTop: '4px', display: 'block' }}>
-                  Phòng học cố định của lớp (tất cả các tiết học sẽ diễn ra tại phòng này)
-                </small>
-              </div>
-              <div className="common-form-group">
-                <label>Trường *</label>
-                <select
-                  value={formData.schoolId}
-                  onChange={(e) => setFormData({ ...formData, schoolId: e.target.value, homeroomTeacherId: '' })}
-                  disabled={(user?.role?.name?.toUpperCase() === 'ADMIN' || user?.role?.name?.toUpperCase() === 'TEACHER') && user?.school?.id}
-                  required
-                  style={(user?.role?.name?.toUpperCase() === 'ADMIN' || user?.role?.name?.toUpperCase() === 'TEACHER') && user?.school?.id ? { backgroundColor: '#f3f4f6', cursor: 'not-allowed' } : {}}
-                >
-                  <option value="">Chọn trường</option>
-                  {schools.map(school => (
-                    <option key={school.id} value={school.id}>
-                      {school.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="common-form-group">
-                <label>Giáo viên chủ nhiệm</label>
-                <select
-                  value={formData.homeroomTeacherId}
-                  onChange={(e) => setFormData({ ...formData, homeroomTeacherId: e.target.value })}
-                  disabled={!formData.schoolId}
-                >
-                  <option value="">{formData.schoolId ? "Chọn giáo viên" : "Chọn trường trước"}</option>
-                  {availableHomeroomTeachers.map((teacher) => (
-                    <option key={teacher.id} value={teacher.id}>
-                      {teacher.fullName}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="common-form-group">
-                <label>Trạng thái</label>
-                <select
-                  value={formData.status}
-                  onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-                >
-                  <option value="ACTIVE">Hoạt động</option>
-                  <option value="INACTIVE">Không hoạt động</option>
-                </select>
-              </div>
-              <div className="common-modal-actions">
-                <button type="button" className="btn btn-secondary" onClick={handleCloseModal}>
-                  Hủy
-                </button>
-                <button type="submit" className="btn btn-primary">
-                  {editingClass ? 'Cập nhật' : 'Tạo mới'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      <ClassFormModal
+        open={showModal}
+        editingClass={editingClass}
+        formData={formData}
+        setFormData={setFormData}
+        handleSubmit={handleSubmit}
+        handleCloseModal={handleCloseModal}
+        user={user}
+        schools={schools}
+        availableHomeroomTeachers={availableHomeroomTeachers}
+      />
 
-      {showYearArchiveModal && (
-        <div
-          className="common-modal-overlay"
-          onClick={() => {
-            if (!yearArchiveLoading) setShowYearArchiveModal(false);
-          }}
-        >
-          <div className="common-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="common-modal-header">
-              <h2>Lưu trữ toàn bộ lớp theo niên khóa</h2>
-              <button type="button" className="common-close-btn" onClick={() => !yearArchiveLoading && setShowYearArchiveModal(false)}>
-                ×
-              </button>
-            </div>
-            <form onSubmit={handleYearArchiveSubmit} className="common-modal-form">
-              <p className="text-sm text-slate-600" style={{ marginBottom: 12 }}>
-                Mọi lớp đang hoạt động thuộc niên khóa này sẽ chuyển sang <strong>ARCHIVED</strong>; enrollment ACTIVE của học sinh trên các lớp đó sẽ chuyển <strong>INACTIVE</strong>.
-              </p>
-              {user?.role?.name?.toUpperCase() === 'SUPER_ADMIN' && (
-                <div className="common-form-group">
-                  <label>Trường *</label>
-                  <select
-                    value={archiveYearSchoolId}
-                    onChange={(e) => setArchiveYearSchoolId(e.target.value)}
-                    required
-                  >
-                    <option value="">Chọn trường</option>
-                    {schools.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-              <div className="common-form-group">
-                <label>Tên niên khóa *</label>
-                <input
-                  type="text"
-                  value={yearArchiveSchoolYear}
-                  onChange={(e) => setYearArchiveSchoolYear(e.target.value)}
-                  placeholder="VD: 2024-2025"
-                  required
-                />
-              </div>
-              <div className="common-modal-actions">
-                <button type="button" className="btn btn-secondary" disabled={yearArchiveLoading} onClick={() => setShowYearArchiveModal(false)}>
-                  Hủy
-                </button>
-                <button type="submit" className="btn btn-primary" disabled={yearArchiveLoading}>
-                  {yearArchiveLoading ? 'Đang xử lý…' : 'Lưu trữ'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      <ClassYearArchiveModal
+        open={showYearArchiveModal}
+        yearArchiveLoading={yearArchiveLoading}
+        setShowYearArchiveModal={setShowYearArchiveModal}
+        handleYearArchiveSubmit={handleYearArchiveSubmit}
+        user={user}
+        archiveYearSchoolId={archiveYearSchoolId}
+        setArchiveYearSchoolId={setArchiveYearSchoolId}
+        schools={schools}
+        yearArchiveSchoolYear={yearArchiveSchoolYear}
+        setYearArchiveSchoolYear={setYearArchiveSchoolYear}
+      />
 
-      {showRolloverModal && (
-        <div
-          className="common-modal-overlay"
-          onClick={() => !rolloverLoading && setShowRolloverModal(false)}
-        >
-          <div className="common-modal" style={{ maxWidth: 520 }} onClick={(e) => e.stopPropagation()}>
-            <div className="common-modal-header">
-              <h2>Chuyển toàn bộ niên khóa</h2>
-              <button type="button" className="common-close-btn" onClick={() => !rolloverLoading && setShowRolloverModal(false)}>
-                ×
-              </button>
-            </div>
-            <form onSubmit={handleRolloverSubmit} className="common-modal-form">
-              <p className="text-sm text-slate-600" style={{ marginBottom: 12 }}>
-                Chuyển mọi lớp đang hoạt động từ niên khóa <strong>nguồn</strong> sang niên khóa <strong>đích</strong>: học sinh khối 10→11, 11→12
-                (tự tạo lớp đích nếu chưa có). Các lớp <strong>khối 12</strong> ở niên khóa nguồn được <strong>lưu trữ</strong> (kết thúc cấp — enrollment ACTIVE
-                chuyển INACTIVE), không tạo khối 13. Niên khóa đích nếu chưa có trong hệ thống sẽ được tạo mới.
-              </p>
-              {user?.role?.name?.toUpperCase() === 'SUPER_ADMIN' && (
-                <div className="common-form-group">
-                  <label>Trường *</label>
-                  <select
-                    value={rolloverSchoolId}
-                    onChange={(e) => setRolloverSchoolId(e.target.value)}
-                    required
-                  >
-                    <option value="">Chọn trường</option>
-                    {schools.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-              <div className="common-form-group">
-                <label htmlFor="rollover-from-year-input">Niên khóa nguồn *</label>
-                <input
-                  id="rollover-from-year-input"
-                  type="text"
-                  list="rollover-from-year-options"
-                  value={rolloverFromYear}
-                  onChange={(e) => setRolloverFromYear(e.target.value)}
-                  placeholder="VD: 2024-2025"
-                  required
-                  style={{ width: '100%', padding: '8px 12px', borderRadius: 4, border: '1px solid #ddd' }}
-                />
-                <datalist id="rollover-from-year-options">
-                  {yearOptions.map((y) => (
-                    <option key={y} value={y} />
-                  ))}
-                </datalist>
-                <small style={{ color: '#666', fontSize: 12, display: 'block', marginTop: 4 }}>
-                  Gõ hoặc chọn gợi ý từ danh sách niên khóa đang có trong hệ thống.
-                </small>
-              </div>
-              <div className="common-form-group">
-                <label>Niên khóa đích *</label>
-                <input
-                  type="text"
-                  value={rolloverToYear}
-                  onChange={(e) => setRolloverToYear(e.target.value)}
-                  placeholder="VD: 2025-2026"
-                  required
-                />
-              </div>
-              <div className="common-modal-actions">
-                <button type="button" className="btn btn-secondary" disabled={rolloverLoading} onClick={() => setShowRolloverModal(false)}>
-                  Hủy
-                </button>
-                <button type="submit" className="btn btn-primary" disabled={rolloverLoading}>
-                  {rolloverLoading ? 'Đang xử lý…' : 'Thực hiện chuyển'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      <ClassRolloverModal
+        open={showRolloverModal}
+        rolloverLoading={rolloverLoading}
+        setShowRolloverModal={setShowRolloverModal}
+        handleRolloverSubmit={handleRolloverSubmit}
+        user={user}
+        rolloverSchoolId={rolloverSchoolId}
+        setRolloverSchoolId={setRolloverSchoolId}
+        schools={schools}
+        rolloverFromYear={rolloverFromYear}
+        setRolloverFromYear={setRolloverFromYear}
+        yearOptions={yearOptions}
+        rolloverToYear={rolloverToYear}
+        setRolloverToYear={setRolloverToYear}
+      />
     </div>
   );
 };

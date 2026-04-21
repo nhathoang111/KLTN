@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { toast } from "react-toastify";
 import { useAuth } from "../../context/AuthContext";
 import loginIllus from "../../../../assets/login.webp";
 import {
@@ -8,13 +9,11 @@ import {
   Lock,
   Eye,
   EyeOff,
-  AlertCircle,
   LogIn,
 } from "lucide-react";
 
 const LoginPage = () => {
   const [formData, setFormData] = useState({ email: "", password: "" });
-  const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [showPwd, setShowPwd] = useState(false);
 
@@ -23,12 +22,10 @@ const LoginPage = () => {
 
   const handleChange = (e) => {
     setFormData((p) => ({ ...p, [e.target.name]: e.target.value }));
-    if (error) setError("");
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setError("");
     setLoading(true);
 
     try {
@@ -37,12 +34,13 @@ const LoginPage = () => {
       if (result.success) {
         localStorage.setItem("loginEmail", formData.email);
         if (result.user) localStorage.setItem("currentUser", JSON.stringify(result.user));
+        toast.success("Đăng nhập thành công");
         navigate("/dashboard");
       } else {
-        setError(result.error || "Email hoặc mật khẩu không đúng");
+        toast.error(result.error || "Đăng nhập thất bại. Vui lòng thử lại.");
       }
     } catch {
-      setError("An unexpected error occurred");
+      toast.error("Có lỗi xảy ra. Vui lòng thử lại sau.");
     } finally {
       setLoading(false);
     }
@@ -129,14 +127,6 @@ const LoginPage = () => {
                       {showPwd ? <EyeOff size={16} /> : <Eye size={16} />}
                     </button>
                   </div>
-                  {/* Error */}
-                  {error && (
-                    <div className="flex items-start !gap-2 rounded-xl border border-red-200 bg-red-50 !px-4 !py-3 text-sm text-red-700">
-                      <AlertCircle size={16} className="mt-[2px]" />
-                      <div>{error}</div>
-                    </div>
-                  )}
-
                   {/* Submit */}
                   <button
                     type="submit"

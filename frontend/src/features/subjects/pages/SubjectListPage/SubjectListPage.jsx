@@ -3,7 +3,9 @@ import { toast } from 'react-toastify';
 import api from '../../../../shared/lib/api';
 import './SubjectListPage.css';
 import { useAuth } from '../../../auth/context/AuthContext';
-import { Pencil, Trash2 } from 'lucide-react';
+import { Pencil, Plus, Trash2 } from 'lucide-react';
+import SubjectClassLinksModal from '../../components/SubjectClassLinksModal';
+import SubjectFormModal from '../../components/SubjectFormModal';
 
 /** Cùng pattern ClassCreatePage / ClassListPage: BE trả ErrorResponse { message } */
 function getApiErrorMessage(err, fallback) {
@@ -170,7 +172,7 @@ const SubjectListPage = () => {
       <div className="rounded-2xl bg-white/95 px-4 py-3 shadow-lg shadow-slate-900/5 flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-bold text-slate-800">Quản lý môn học</h1>
         <button
-          className="btn btn-primary"
+          className="inline-flex items-center gap-2 rounded-full bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-md shadow-indigo-500/30 hover:bg-indigo-500"
           onClick={() => {
             setFormError('');
             const defaultSchoolId = user?.role?.name?.toUpperCase() === 'ADMIN' && user?.school?.id
@@ -184,6 +186,7 @@ const SubjectListPage = () => {
             setShowModal(true);
           }}
         >
+          <Plus size={16} />
           Thêm môn học
         </button>
       </div>
@@ -251,93 +254,19 @@ const SubjectListPage = () => {
       </div>
       </div>
 
-      {linkModal && (
-        <div className="common-modal-overlay" onClick={() => setLinkModal(null)}>
-          <div className="common-modal" onClick={e => e.stopPropagation()}>
-            <div className="common-modal-header">
-              <h2>Lớp đang học môn: {linkModal.subject?.name}</h2>
-              <button className="common-close-btn" onClick={() => setLinkModal(null)} type="button">×</button>
-            </div>
-            <div className="common-modal-body" style={{ padding: '1rem 1.5rem' }}>
-              {linkModal.classes === null ? (
-                <p className="text-muted">Đang tải...</p>
-              ) : linkModal.classes.length === 0 ? (
-                <p className="text-muted">Chưa có lớp nào.</p>
-              ) : (
-                <ul className="subject-class-links-list">
-                  {linkModal.classes.map(cls => (
-                    <li key={cls.id}>{cls.name || `Lớp #${cls.id}`}</li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+      <SubjectClassLinksModal linkModal={linkModal} setLinkModal={setLinkModal} />
 
-      {showModal && (
-        <div className="common-modal-overlay">
-          <div className="common-modal">
-            <div className="common-modal-header">
-              <h2>{editingSubject ? 'Sửa môn học' : 'Thêm môn học'}</h2>
-              <button className="common-close-btn" onClick={handleCloseModal}>×</button>
-            </div>
-            <form onSubmit={handleSubmit} className="common-modal-form">
-              {formError && (
-                <div
-                  className="rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
-                  role="alert"
-                >
-                  {formError}
-                </div>
-              )}
-              <div className="common-form-group">
-                <label>Tên môn học *</label>
-                <input
-                  type="text"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  required
-                />
-              </div>
-              <div className="common-form-group">
-                <label>Mã môn học *</label>
-                <input
-                  type="text"
-                  value={formData.code}
-                  onChange={(e) => setFormData({ ...formData, code: e.target.value })}
-                  required
-                />
-              </div>
-              <div className="common-form-group">
-                <label>Trường *</label>
-                <select
-                  value={formData.schoolId}
-                  onChange={(e) => setFormData({ ...formData, schoolId: e.target.value })}
-                  disabled={user?.role?.name?.toUpperCase() === 'ADMIN' && user?.school?.id}
-                  required
-                  style={user?.role?.name?.toUpperCase() === 'ADMIN' && user?.school?.id ? { backgroundColor: '#f3f4f6', cursor: 'not-allowed' } : {}}
-                >
-                  <option value="">Chọn trường</option>
-                  {schools.map(school => (
-                    <option key={school.id} value={school.id}>
-                      {school.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="common-modal-actions">
-                <button type="button" className="btn btn-secondary" onClick={handleCloseModal}>
-                  Hủy
-                </button>
-                <button type="submit" className="btn btn-primary">
-                  {editingSubject ? 'Cập nhật' : 'Tạo mới'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      <SubjectFormModal
+        showModal={showModal}
+        handleCloseModal={handleCloseModal}
+        editingSubject={editingSubject}
+        handleSubmit={handleSubmit}
+        formError={formError}
+        formData={formData}
+        setFormData={setFormData}
+        user={user}
+        schools={schools}
+      />
     </div>
   );
 };

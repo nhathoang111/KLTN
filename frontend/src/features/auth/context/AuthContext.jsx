@@ -42,9 +42,14 @@ export const AuthProvider = ({ children }) => {
       
       return { success: true, user: user };
     } catch (error) {
+      const backendMessage =
+        error.response?.data?.message ||
+        error.response?.data?.error ||
+        'Đăng nhập thất bại. Vui lòng thử lại.';
+
       return { 
         success: false, 
-        error: error.response?.data?.error || 'Login failed' 
+        error: backendMessage
       };
     }
   };

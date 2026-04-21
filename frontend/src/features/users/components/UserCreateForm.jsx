@@ -25,7 +25,6 @@ function getApiErrorMessage(err, fallback = 'Đã xảy ra lỗi') {
 
 /**
  * Form tạo user dùng chung cho:
- * - Trang `/users/create`
  * - Modal tạo user trong `UserListPage`
  *
  * Lưu ý: component này tự fetch roles/schools/classes/subjects/students theo schoolId.

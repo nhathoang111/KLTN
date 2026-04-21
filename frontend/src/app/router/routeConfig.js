@@ -3,14 +3,12 @@ import SchoolListPage from "../../features/schools/pages/SchoolListPage/SchoolLi
 import SchoolCreatePage from "../../features/schools/pages/SchoolCreatePage/SchoolCreatePage";
 import SchoolEditPage from "../../features/schools/pages/SchoolEditPage/SchoolEditPage";
 import ClassListPage from "../../features/classes/pages/ClassListPage/ClassListPage";
-import ClassCreatePage from "../../features/classes/pages/ClassCreatePage/ClassCreatePage";
 import ClassEditPage from "../../features/classes/pages/ClassEditPage/ClassEditPage";
 import ClassDetailPage from "../../features/classes/pages/ClassDetailPage/ClassDetailPage";
 import SubjectListPage from "../../features/subjects/pages/SubjectListPage/SubjectListPage";
 import SubjectCreatePage from "../../features/subjects/pages/SubjectCreatePage/SubjectCreatePage";
 import SubjectEditPage from "../../features/subjects/pages/SubjectEditPage/SubjectEditPage";
 import UserListPage from "../../features/users/pages/UserListPage/UserListPage";
-import UserCreatePage from "../../features/users/pages/UserCreatePage/UserCreatePage";
 import UserEditPage from "../../features/users/pages/UserEditPage/UserEditPage";
 import AssignmentListPage from "../../features/assignments/pages/AssignmentListPage/AssignmentListPage";
 import ReportListPage from "../../features/reports/pages/ReportListPage/ReportListPage";
@@ -30,14 +28,12 @@ export const protectedRoutes = [
   { path: "schools/create", Component: SchoolCreatePage, roles: ["SUPER_ADMIN"] },
   { path: "schools/:id/edit", Component: SchoolEditPage, roles: ["SUPER_ADMIN"] },
   { path: "classes", Component: ClassListPage, roles: ["SUPER_ADMIN", "ADMIN", "TEACHER"] },
-  { path: "classes/create", Component: ClassCreatePage, roles: ["SUPER_ADMIN", "ADMIN"] },
   { path: "classes/:id/edit", Component: ClassEditPage, roles: ["SUPER_ADMIN", "ADMIN"] },
   { path: "classes/:id", Component: ClassDetailPage, roles: ["SUPER_ADMIN", "ADMIN", "TEACHER"] },
   { path: "subjects", Component: SubjectListPage, roles: ["SUPER_ADMIN", "ADMIN"] },
   { path: "subjects/create", Component: SubjectCreatePage, roles: ["SUPER_ADMIN", "ADMIN"] },
   { path: "subjects/:id/edit", Component: SubjectEditPage, roles: ["SUPER_ADMIN", "ADMIN"] },
   { path: "users", Component: UserListPage, roles: ["SUPER_ADMIN", "ADMIN"] },
-  { path: "users/create", Component: UserCreatePage, roles: ["SUPER_ADMIN", "ADMIN"] },
   { path: "users/:id/edit", Component: UserEditPage, roles: ["SUPER_ADMIN", "ADMIN"] },
   { path: "roles", Component: RoleManagement, roles: ["SUPER_ADMIN", "ADMIN"] },
   { path: "assignments", Component: AssignmentListPage, roles: ["SUPER_ADMIN", "ADMIN", "TEACHER", "STUDENT"] },

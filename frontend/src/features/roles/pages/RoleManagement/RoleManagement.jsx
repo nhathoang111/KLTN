@@ -179,7 +179,7 @@ const RoleManagement = () => {
       <div className="rounded-2xl bg-white/95 px-4 py-3 shadow-lg shadow-slate-900/5 flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-bold text-slate-800">Quản lý phân quyền</h1>
         <button
-          className="btn btn-primary"
+          className="rounded-full bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-md shadow-indigo-500/30 hover:bg-indigo-500"
           onClick={() => setShowModal(true)}
         >
           + Thêm phân quyền
@@ -248,22 +248,28 @@ const RoleManagement = () => {
       </div>
 
       {showModal && (
-        <div className="common-modal-overlay" onClick={resetForm}>
-          <div className="common-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="common-modal-header">
-              <h2>{editingRole ? 'Sửa phân quyền' : 'Thêm phân quyền mới'}</h2>
-              <button className="common-close-btn" onClick={resetForm}>×</button>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4" onClick={resetForm}>
+          <div className="w-full max-w-2xl overflow-hidden rounded-3xl bg-white shadow-2xl shadow-slate-900/20" onClick={(e) => e.stopPropagation()}>
+            <div className="relative border-b border-slate-200 bg-white px-6 py-4">
+              <h2 className="text-center text-2xl font-bold leading-tight text-slate-900">{editingRole ? 'Sửa phân quyền' : 'Thêm phân quyền mới'}</h2>
+              <button
+                type="button"
+                className="absolute right-4 top-4 inline-flex h-9 w-9 items-center justify-center rounded-full text-slate-600 hover:bg-slate-100"
+                onClick={resetForm}
+              >
+                ×
+              </button>
             </div>
-            <form onSubmit={handleSubmit} className="common-modal-form">
-              <div className="common-form-group">
-                <label>Tên phân quyền *</label>
+            <form onSubmit={handleSubmit} className="max-h-[75vh] space-y-4 overflow-auto px-6 py-5">
+              <div>
+                <label className="mb-1 block text-sm font-semibold text-slate-700">Tên phân quyền *</label>
                 {isSchoolAdmin ? (
                   <select
                     value={(formData.name || '').toUpperCase()}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                     required
                     disabled={!!editingRole}
-                    style={editingRole ? { backgroundColor: '#f3f4f6', cursor: 'not-allowed' } : {}}
+                    className="block h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 disabled:cursor-not-allowed disabled:bg-slate-100"
                   >
                     <option value="">Chọn phân quyền</option>
                     <option value="PARENT">PHỤ HUYNH (PARENT)</option>
@@ -277,25 +283,27 @@ const RoleManagement = () => {
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                     required
                     placeholder="Nhập tên phân quyền"
+                    className="block h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100"
                   />
                 )}
               </div>
-              <div className="common-form-group">
-                <label>Mô tả</label>
+              <div>
+                <label className="mb-1 block text-sm font-semibold text-slate-700">Mô tả</label>
                 <textarea
                   value={formData.description}
                   onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                   placeholder="Nhập mô tả phân quyền"
                   rows="3"
+                  className="block w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100"
                 />
               </div>
-              <div className="common-form-group">
-                <label>Trường</label>
+              <div>
+                <label className="mb-1 block text-sm font-semibold text-slate-700">Trường</label>
                 <select
                   value={formData.schoolId}
                   onChange={(e) => setFormData({ ...formData, schoolId: e.target.value })}
                   disabled={user?.role?.name?.toUpperCase() === 'ADMIN'}
-                  style={user?.role?.name?.toUpperCase() === 'ADMIN' ? { backgroundColor: '#f3f4f6', cursor: 'not-allowed' } : {}}
+                  className="block h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 disabled:cursor-not-allowed disabled:bg-slate-100"
                 >
                   <option value="">Toàn hệ thống</option>
                   {schools.map((school) => (
@@ -305,11 +313,11 @@ const RoleManagement = () => {
                   ))}
                 </select>
               </div>
-              <div className="common-modal-actions">
-                <button type="button" className="btn btn-secondary" onClick={resetForm}>
+              <div className="flex justify-end gap-2 pt-2">
+                <button type="button" className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50" onClick={resetForm}>
                   Hủy
                 </button>
-                <button type="submit" className="btn btn-primary">
+                <button type="submit" className="rounded-full bg-indigo-600 px-5 py-2 text-sm font-semibold text-white shadow-md shadow-indigo-500/30 hover:bg-indigo-500">
                   {editingRole ? 'Cập nhật' : 'Thêm mới'}
                 </button>
               </div>

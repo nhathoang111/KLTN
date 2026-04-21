@@ -594,13 +594,14 @@ const UserListPage = () => {
                     : 'Bắt đầu bằng cách tạo người dùng mới.'
                   : 'Hãy thử thay đổi điều kiện lọc hoặc từ khóa tìm kiếm.'}
               </p>
-              <Link
-                to="/users/create"
+              <button
+                type="button"
+                onClick={() => setShowCreateModal(true)}
                 className="inline-flex items-center gap-2 rounded-full bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-md shadow-indigo-500/30 hover:bg-indigo-500"
               >
                 <span className="text-lg leading-none">＋</span>
                 <span>{isSuperAdmin ? 'Thêm quản trị mới' : 'Thêm người dùng mới'}</span>
-              </Link>
+              </button>
             </div>
           ) : (
             <>
@@ -653,7 +654,7 @@ const UserListPage = () => {
 
                           <td className="px-4 py-3">
                             <div className="flex items-center gap-3">
-                              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-indigo-500 to-purple-500 text-sm font-semibold text-white">
+                              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-linear-to-br from-indigo-500 to-purple-500 text-sm font-semibold text-white">
                                 {userItem.fullName?.charAt(0)?.toUpperCase() ||
                                   userItem.email?.charAt(0)?.toUpperCase() ||
                                   'A'}
