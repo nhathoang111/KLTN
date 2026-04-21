@@ -1,8 +1,11 @@
 package com.example.schoolmanagement.service;
 
+import com.example.schoolmanagement.dto.examscore.ExamScoreListItemDto;
 import com.example.schoolmanagement.entity.Enrollment;
 import com.example.schoolmanagement.entity.ExamScore;
+import com.example.schoolmanagement.entity.ClassEntity;
 import com.example.schoolmanagement.entity.School;
+import com.example.schoolmanagement.entity.Subject;
 import com.example.schoolmanagement.entity.User;
 import com.example.schoolmanagement.exception.BadRequestException;
 import com.example.schoolmanagement.exception.ForbiddenException;
@@ -75,7 +78,7 @@ public class ExamScoreService {
         }
     }
 
-    public List<ExamScore> getExamScores(Integer studentId, Integer subjectId, Integer classId, Integer schoolId) {
+    public List<ExamScoreListItemDto> getExamScores(Integer studentId, Integer subjectId, Integer classId, Integer schoolId) {
         List<ExamScore> scores;
         if (schoolId != null) {
             scores = examScoreRepository.findBySchoolId(schoolId);
@@ -91,7 +94,57 @@ public class ExamScoreService {
         if (studentId != null && scores != null) {
             scores = scores.stream().filter(score -> score.getStudent().getId().equals(studentId)).toList();
         }
-        return scores;
+        return scores.stream().map(this::toListItemDto).toList();
+    }
+
+    private ExamScoreListItemDto toListItemDto(ExamScore e) {
+        ExamScoreListItemDto dto = new ExamScoreListItemDto();
+        dto.setId(e.getId());
+        dto.setScore(e.getScore());
+        dto.setScoreType(e.getScoreType());
+        dto.setAttempt(e.getAttempt());
+        dto.setNote(e.getNote());
+        dto.setStatus(e.getStatus());
+
+        User st = e.getStudent();
+        if (st != null) {
+            dto.setStudentId(st.getId());
+            ExamScoreListItemDto.StudentRef s = new ExamScoreListItemDto.StudentRef();
+            s.setId(st.getId());
+            s.setFullName(st.getFullName());
+            s.setEmail(st.getEmail());
+            s.setSchool(toSchoolRef(st.getSchool()));
+            dto.setStudent(s);
+        }
+
+        Subject sub = e.getSubject();
+        if (sub != null) {
+            dto.setSubjectId(sub.getId());
+            ExamScoreListItemDto.SubjectRef sr = new ExamScoreListItemDto.SubjectRef();
+            sr.setId(sub.getId());
+            sr.setName(sub.getName());
+            dto.setSubject(sr);
+        }
+
+        ClassEntity ce = e.getClassEntity();
+        if (ce != null) {
+            dto.setClassId(ce.getId());
+            ExamScoreListItemDto.ClassRef cr = new ExamScoreListItemDto.ClassRef();
+            cr.setId(ce.getId());
+            cr.setName(ce.getName());
+            dto.setClassEntity(cr);
+        }
+
+        dto.setSchool(toSchoolRef(e.getSchool()));
+        return dto;
+    }
+
+    private static ExamScoreListItemDto.SchoolRef toSchoolRef(School school) {
+        if (school == null) return null;
+        ExamScoreListItemDto.SchoolRef s = new ExamScoreListItemDto.SchoolRef();
+        s.setId(school.getId());
+        s.setName(school.getName());
+        return s;
     }
 
     public ExamScore getExamScore(Integer id) {

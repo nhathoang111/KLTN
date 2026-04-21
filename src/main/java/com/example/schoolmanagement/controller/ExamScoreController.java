@@ -1,5 +1,6 @@
 package com.example.schoolmanagement.controller;
 
+import com.example.schoolmanagement.dto.examscore.ExamScoreListItemDto;
 import com.example.schoolmanagement.entity.ExamScore;
 import com.example.schoolmanagement.service.ExamScoreImportService;
 import com.example.schoolmanagement.service.ExamScoreService;
@@ -28,7 +29,7 @@ public class ExamScoreController {
             @RequestParam(required = false) Integer subjectId,
             @RequestParam(required = false) Integer classId,
             @RequestParam(required = false) Integer schoolId) {
-        List<ExamScore> scores = examScoreService.getExamScores(studentId, subjectId, classId, schoolId);
+        List<ExamScoreListItemDto> scores = examScoreService.getExamScores(studentId, subjectId, classId, schoolId);
         return ResponseEntity.ok(Map.of("examScores", scores));
     }
 

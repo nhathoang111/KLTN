@@ -580,21 +580,47 @@ const ExamScoreManagement = () => {
           const schedulesResponse = await api.get(`/schedules/teacher/${user.id}`);
           const teacherSchedules = schedulesResponse.data.schedules || [];
 
-          // Get unique subject IDs from schedules
+          // Get unique subject IDs and taught class IDs from schedules
           const assignedSubjectIds = new Set();
+          const taughtClassIds = new Set();
           teacherSchedules.forEach(schedule => {
             const subjectId = schedule.subject?.id || schedule.subject_id;
+            const classId = schedule.classEntity?.id || schedule.class_id;
             if (subjectId) {
-              assignedSubjectIds.add(subjectId);
+              assignedSubjectIds.add(String(subjectId));
             }
+            if (classId) taughtClassIds.add(String(classId));
           });
 
-          console.log('Teacher assigned subject IDs:', Array.from(assignedSubjectIds));
+          // Also allow homeroom classes for this teacher
+          const homeroomClassIds = new Set();
+          try {
+            const classesRes = await api.get('/classes');
+            const allClasses = classesRes.data.classes || [];
+            allClasses.forEach((cls) => {
+              const homeroomTeacherId = cls.homeroomTeacher?.id || cls.homeroomTeacherId;
+              if (String(homeroomTeacherId) === String(user.id)) {
+                homeroomClassIds.add(String(cls.id));
+              }
+            });
+          } catch (classError) {
+            console.warn('Could not fetch classes for homeroom filter:', classError);
+          }
 
-          // Filter scores to only show those for assigned subjects
+          const allowedClassIds = new Set([...taughtClassIds, ...homeroomClassIds]);
+
+          console.log('Teacher assigned subject IDs:', Array.from(assignedSubjectIds));
+          console.log('Teacher taught class IDs:', Array.from(taughtClassIds));
+          console.log('Teacher homeroom class IDs:', Array.from(homeroomClassIds));
+          console.log('Teacher allowed class IDs:', Array.from(allowedClassIds));
+
+          // Filter scores by subject AND allowed classes (taught or homeroom)
           allScores = allScores.filter(score => {
             const scoreSubjectId = score.subject?.id || score.subject_id;
-            return assignedSubjectIds.has(scoreSubjectId);
+            const scoreClassId = score.classEntity?.id || score.class_id;
+            const subjectAllowed = scoreSubjectId != null && assignedSubjectIds.has(String(scoreSubjectId));
+            const classAllowed = scoreClassId != null && allowedClassIds.has(String(scoreClassId));
+            return subjectAllowed && classAllowed;
           });
 
           console.log('Filtered exam scores for teacher:', allScores.length);
