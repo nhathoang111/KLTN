@@ -1,0 +1,105 @@
+.schedule-fullcalendar-page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.schedule-fullcalendar-filters {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.schedule-fullcalendar-filters select {
+  min-width: 220px;
+  padding: 6px 10px;
+  border: 1px solid #d3dbe6;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.schedule-fullcalendar-card {
+  background: #fff;
+  border: 1px solid #e8edf5;
+  border-radius: 12px;
+  padding: 12px;
+}
+
+.schedule-fullcalendar-empty {
+  margin-top: 12px;
+  padding: 12px;
+  border-radius: 8px;
+  background: #f8fafc;
+  color: #5f6c7b;
+}
+
+.fc .fc-toolbar-title {
+  font-size: 1.1rem;
+}
+
+.fc .fc-button {
+  border-radius: 8px;
+}
+
+.fc-school-event {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  overflow: hidden;
+  width: 100%;
+}
+
+.fc-school-event__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 6px;
+}
+
+.fc-school-event__left,
+.fc-school-event__right {
+  min-width: 0;
+}
+
+.fc-school-event__title {
+  font-weight: 700;
+  font-size: 0.76rem;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.fc-school-event__meta {
+  font-size: 0.69rem;
+  line-height: 1.2;
+  opacity: 0.9;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.fc-school-event--compact .fc-school-event__title {
+  font-size: 0.72rem;
+}
+
+.fc .fc-daygrid-event {
+  margin-top: 2px;
+}
+
+.fc .fc-timegrid-event-harness {
+  margin-right: 2px;
+}
+
+.fc .fc-timegrid-event .fc-event-main {
+  padding: 2px 4px;
+}
+
+.fc .fc-timegrid-event {
+  min-height: 34px;
+}
+
+.fc .fc-timegrid-slot-label-cushion {
+  font-weight: 600;
+  font-size: 0.72rem;
+}
