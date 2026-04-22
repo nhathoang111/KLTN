@@ -16,6 +16,8 @@ public interface UserRepository extends JpaRepository<User, Integer> {
 
     @Query("SELECT DISTINCT u FROM User u LEFT JOIN FETCH u.school LEFT JOIN FETCH u.role WHERE u.email = :email")
     Optional<User> findByEmail(@Param("email") String email);
+    @Query("SELECT DISTINCT u FROM User u LEFT JOIN FETCH u.school LEFT JOIN FETCH u.role WHERE u.email = :email")
+    List<User> findAllByEmail(@Param("email") String email);
     @Query("SELECT DISTINCT u FROM User u LEFT JOIN FETCH u.school LEFT JOIN FETCH u.role WHERE u.school.id = :schoolId")
     List<User> findBySchoolId(@Param("schoolId") Integer schoolId);
     List<User> findByRoleId(Integer roleId);
@@ -28,6 +30,19 @@ public interface UserRepository extends JpaRepository<User, Integer> {
     
     @Query("SELECT u FROM User u WHERE u.email = :email AND u.school.id = :schoolId")
     Optional<User> findByEmailAndSchoolId(@Param("email") String email, @Param("schoolId") Integer schoolId);
+    @Query("SELECT CASE WHEN COUNT(u) > 0 THEN true ELSE false END FROM User u WHERE u.email = :email AND u.school.id = :schoolId")
+    boolean existsByEmailAndSchoolId(@Param("email") String email, @Param("schoolId") Integer schoolId);
+
+    @Query("SELECT CASE WHEN COUNT(u) > 0 THEN true ELSE false END FROM User u WHERE u.email = :email AND u.school.id = :schoolId AND u.id <> :excludeId")
+    boolean existsByEmailAndSchoolIdAndIdNot(@Param("email") String email,
+                                             @Param("schoolId") Integer schoolId,
+                                             @Param("excludeId") Integer excludeId);
+
+    @Query("SELECT CASE WHEN COUNT(u) > 0 THEN true ELSE false END FROM User u WHERE u.email = :email AND u.school IS NULL")
+    boolean existsByEmailWithSchoolNull(@Param("email") String email);
+
+    @Query("SELECT CASE WHEN COUNT(u) > 0 THEN true ELSE false END FROM User u WHERE u.email = :email AND u.school IS NULL AND u.id <> :excludeId")
+    boolean existsByEmailWithSchoolNullAndIdNot(@Param("email") String email, @Param("excludeId") Integer excludeId);
 
     /** Admin trường (không tính Super Admin). */
     @Query("SELECT COUNT(u) FROM User u JOIN u.role r WHERE UPPER(r.name) LIKE 'ADMIN%' AND UPPER(r.name) NOT LIKE '%SUPER%'")

@@ -350,7 +350,7 @@ public class UserImportService {
         for (String email : emailsCell.split("[,;]")) {
             String e = email.trim();
             if (e.isEmpty()) continue;
-            var opt = userRepository.findByEmail(e);
+            var opt = userRepository.findByEmailAndSchoolId(e, schoolId);
             if (opt.isEmpty()) continue;
             var u = opt.get();
             if (u.getSchool() != null && u.getSchool().getId().equals(schoolId)

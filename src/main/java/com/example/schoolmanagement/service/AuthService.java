@@ -23,14 +23,18 @@ public class AuthService {
      * Validates credentials, checks school lock, returns response payload for login.
      * @throws BadRequestException if credentials invalid or school locked
      */
-    public Map<String, Object> login(String email, String password) {
+    public Map<String, Object> login(String email, String password, Integer schoolId) {
         if (email == null || password == null) {
             throw new BadRequestException("Vui lòng nhập đầy đủ email và mật khẩu.");
         }
 
         User user;
         try {
-            user = userService.findByEmail(email);
+            if (schoolId != null) {
+                user = userService.findByEmailAndSchoolId(email, schoolId);
+            } else {
+                user = userService.findByEmail(email);
+            }
         } catch (ResourceNotFoundException ex) {
             throw new BadRequestException("Email hoặc mật khẩu không chính xác.");
         }

@@ -19,7 +19,16 @@ public class AuthController {
     public ResponseEntity<?> login(@RequestBody Map<String, String> loginRequest) {
         String email = loginRequest.get("email");
         String password = loginRequest.get("password");
-        Map<String, Object> response = authService.login(email, password);
+        Integer schoolId = null;
+        String schoolIdRaw = loginRequest.get("schoolId");
+        if (schoolIdRaw != null && !schoolIdRaw.isBlank()) {
+            try {
+                schoolId = Integer.parseInt(schoolIdRaw.trim());
+            } catch (NumberFormatException ignored) {
+                schoolId = null;
+            }
+        }
+        Map<String, Object> response = authService.login(email, password, schoolId);
         return ResponseEntity.ok(response);
     }
 

@@ -16,7 +16,7 @@ public class User {
     @JoinColumn(name = "school_id", nullable = true)
     private School school;
 
-    @Column(name = "email", nullable = false, unique = true)
+    @Column(name = "email", nullable = false)
     private String email;
 
     @Column(name = "password_hash", nullable = false)

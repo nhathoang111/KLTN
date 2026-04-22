@@ -186,8 +186,22 @@ public class UserService {
     }
 
     public User findByEmail(String email) {
-        return userRepository.findByEmail(email)
-                .orElseThrow(() -> new ResourceNotFoundException("User not found with email: " + email));
+        List<User> users = userRepository.findAllByEmail(email);
+        if (users.isEmpty()) {
+            throw new ResourceNotFoundException("User not found with email: " + email);
+        }
+        if (users.size() > 1) {
+            throw new BadRequestException("Email thuộc nhiều tài khoản ở các trường khác nhau. Vui lòng đăng nhập kèm thông tin trường.");
+        }
+        return users.get(0);
+    }
+
+    public User findByEmailAndSchoolId(String email, Integer schoolId) {
+        if (email == null || schoolId == null) {
+            throw new ResourceNotFoundException("User not found with email and school.");
+        }
+        return userRepository.findByEmailAndSchoolId(email, schoolId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found with email in school: " + email));
     }
 
     public User saveUser(User user) {
@@ -432,15 +446,20 @@ public class UserService {
             .collect(Collectors.toList());
     }
 
-    public boolean existsByEmail(String email) {
-        return email != null && userRepository.findByEmail(email).isPresent();
+    public boolean existsByEmail(String email, Integer schoolId) {
+        if (email == null) return false;
+        if (schoolId == null) {
+            return userRepository.existsByEmailWithSchoolNull(email);
+        }
+        return userRepository.existsByEmailAndSchoolId(email, schoolId);
     }
 
-    public boolean isEmailTakenByOtherUser(String email, Integer excludeUserId) {
+    public boolean isEmailTakenByOtherUser(String email, Integer schoolId, Integer excludeUserId) {
         if (email == null) return false;
-        return userRepository.findByEmail(email)
-                .filter(u -> !u.getId().equals(excludeUserId))
-                .isPresent();
+        if (schoolId == null) {
+            return userRepository.existsByEmailWithSchoolNullAndIdNot(email, excludeUserId);
+        }
+        return userRepository.existsByEmailAndSchoolIdAndIdNot(email, schoolId, excludeUserId);
     }
 
     @Transactional(readOnly = true)
@@ -646,7 +665,8 @@ public class UserService {
 
         setUserProfileFieldsFromMap(user, userData);
 
-        if (user.getEmail() != null && existsByEmail(user.getEmail())) {
+        Integer targetSchoolId = user.getSchool() != null ? user.getSchool().getId() : null;
+        if (user.getEmail() != null && existsByEmail(user.getEmail(), targetSchoolId)) {
             throw new BadRequestException("Email already exists");
         }
 
@@ -798,7 +818,6 @@ public class UserService {
 
         if (userData.get("email") != null) {
             String newEmail = (String) userData.get("email");
-            if (isEmailTakenByOtherUser(newEmail, id)) throw new BadRequestException("Email already exists");
             existingUser.setEmail(newEmail);
         }
         if (userData.get("fullName") != null) existingUser.setFullName((String) userData.get("fullName"));
@@ -813,6 +832,11 @@ public class UserService {
         Integer schoolId = parseIntFromMap(userData.get("schoolId"));
         if (schoolId != null) {
             existingUser.setSchool(schoolRepository.findById(schoolId).orElseThrow(() -> new BadRequestException("Invalid school ID")));
+        }
+        Integer targetSchoolIdForUpdate = existingUser.getSchool() != null ? existingUser.getSchool().getId() : null;
+        if (existingUser.getEmail() != null
+                && isEmailTakenByOtherUser(existingUser.getEmail(), targetSchoolIdForUpdate, id)) {
+            throw new BadRequestException("Email already exists");
         }
         String targetRoleName = existingUser.getRole() != null && existingUser.getRole().getName() != null
                 ? existingUser.getRole().getName().trim().toUpperCase()
