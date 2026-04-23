@@ -8,6 +8,7 @@ import com.example.schoolmanagement.entity.Subject;
 import com.example.schoolmanagement.entity.User;
 import com.example.schoolmanagement.exception.BadRequestException;
 import com.example.schoolmanagement.exception.ResourceNotFoundException;
+import com.example.schoolmanagement.util.ClassStatusPolicy;
 import com.example.schoolmanagement.repository.AssignmentRepository;
 import com.example.schoolmanagement.repository.AssignmentSubmissionRepository;
 import com.example.schoolmanagement.repository.ClassRepository;
@@ -173,6 +174,7 @@ public class AssignmentService {
                 Integer parsedClassId = Integer.parseInt(classId);
                 ClassEntity classEntity = classRepository.findById(parsedClassId)
                         .orElseThrow(() -> new BadRequestException("Invalid class ID"));
+                ClassStatusPolicy.assertTeachActionAllowed(classEntity, "tạo bài tập");
                 assignment.setClassEntity(classEntity);
             }
 
@@ -222,6 +224,7 @@ public class AssignmentService {
         if (classId != null) {
             ClassEntity classEntity = classRepository.findById(classId)
                     .orElseThrow(() -> new BadRequestException("Invalid class ID"));
+            ClassStatusPolicy.assertTeachActionAllowed(classEntity, "tạo bài tập");
             assignment.setClassEntity(classEntity);
         }
 
@@ -356,6 +359,9 @@ public class AssignmentService {
 
     public Assignment updateAssignment(Integer id, Map<String, Object> assignmentData) {
         Assignment existingAssignment = getAssignmentById(id);
+        if (existingAssignment.getClassEntity() != null) {
+            ClassStatusPolicy.assertTeachActionAllowed(existingAssignment.getClassEntity(), "cập nhật bài tập");
+        }
 
         if (assignmentData.get("title") != null) {
             existingAssignment.setTitle((String) assignmentData.get("title"));
@@ -395,6 +401,7 @@ public class AssignmentService {
             Integer classId = (Integer) assignmentData.get("classId");
             ClassEntity classEntity = classRepository.findById(classId)
                     .orElseThrow(() -> new BadRequestException("Invalid class ID"));
+            ClassStatusPolicy.assertTeachActionAllowed(classEntity, "cập nhật bài tập");
             existingAssignment.setClassEntity(classEntity);
         }
 

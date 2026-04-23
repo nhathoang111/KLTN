@@ -212,6 +212,11 @@ const ClassEditPage = () => {
     try {
       const gradeLevel = parseInt(formData.gradeLevel, 10);
       const classNumber = parseInt(formData.classNumber, 10);
+      const capacity = parseInt(formData.capacity, 10);
+      if (Number.isNaN(capacity) || capacity < 1 || capacity > 50) {
+        setError('Sĩ số tối đa chỉ được nhập từ 1 đến 50.');
+        return;
+      }
       const schoolYearStr = (formData.schoolYear || '').trim();
       const name = schoolYearStr
         ? `${gradeLevel}/${classNumber} (${schoolYearStr})`
@@ -221,7 +226,7 @@ const ClassEditPage = () => {
         gradeLevel,
         classNumber,
         schoolYear: schoolYearStr,
-        capacity: parseInt(formData.capacity, 10),
+        capacity,
         schoolId: parseInt(formData.schoolId, 10),
         homeroomTeacherId: formData.homeroomTeacherId ? parseInt(formData.homeroomTeacherId, 10) : null,
         room: formData.room?.trim() || null,
@@ -366,6 +371,7 @@ const ClassEditPage = () => {
                 id="capacity"
                 required
                 min={1}
+                max={50}
                 value={formData.capacity}
                 onChange={handleChange}
                 className="mt-1 block w-full rounded-md border border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"

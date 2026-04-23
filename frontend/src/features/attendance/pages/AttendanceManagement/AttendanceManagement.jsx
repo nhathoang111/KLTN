@@ -3,6 +3,7 @@ import api from '../../../../shared/lib/api';
 import './AttendanceManagement.css';
 import { useAuth } from '../../../auth/context/AuthContext';
 import { scheduleSubjectDisplayName } from '../../../../shared/lib/scheduleLabels';
+import { isTeachingActiveClass } from '../../../../shared/lib/classStatus';
 
 const PERIOD_TIMES = [
   { start: '07:00', end: '07:45' }, { start: '07:50', end: '08:35' },
@@ -289,6 +290,10 @@ function AttendanceDefaultLegacy() {
   const [items, setItems] = useState([]); 
   const [selectionByStudentId, setSelectionByStudentId] = useState({});
   const classIdNum = useMemo(() => (selectedClassId ? Number(selectedClassId) : null), [selectedClassId]);
+  const editableClasses = useMemo(
+    () => (canEdit ? (classes || []).filter(isTeachingActiveClass) : (classes || [])),
+    [canEdit, classes]
+  );
 
   const getRowStudentId = useCallback((row) => {
     const v = row?.studentId ?? row?.student_id ?? row?.userId ?? row?.user_id ?? row?.id;
@@ -556,7 +561,7 @@ function AttendanceDefaultLegacy() {
               onChange={(e) => setSelectedClassId(e.target.value)}
             >
               <option value="">-- Chọn lớp --</option>
-              {classes.map((c) => (
+              {editableClasses.map((c) => (
                 <option key={c.id} value={String(c.id)}>
                   {c.name}
                 </option>

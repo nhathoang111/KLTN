@@ -4,6 +4,7 @@ import com.example.schoolmanagement.entity.ClassEntity;
 import com.example.schoolmanagement.entity.Enrollment;
 import com.example.schoolmanagement.entity.User;
 import com.example.schoolmanagement.exception.BadRequestException;
+import com.example.schoolmanagement.util.ClassStatusPolicy;
 import com.example.schoolmanagement.repository.ClassRepository;
 import com.example.schoolmanagement.repository.EnrollmentRepository;
 import com.example.schoolmanagement.repository.SchoolRepository;
@@ -31,6 +32,8 @@ import java.util.stream.Collectors;
 
 @Service
 public class ClassService {
+    private static final int MIN_CLASS_CAPACITY = 1;
+    private static final int MAX_CLASS_CAPACITY = 50;
 
     private static final Logger log = LoggerFactory.getLogger(ClassService.class);
 
@@ -138,7 +141,20 @@ public class ClassService {
     }
 
     public List<ClassEntity> getClassesByHomeroomTeacher(Integer teacherId) {
-        return classRepository.findByHomeroomTeacherId(teacherId);
+        List<ClassEntity> homeroom = classRepository.findByHomeroomTeacherId(teacherId);
+        List<com.example.schoolmanagement.entity.ClassSection> sections =
+                classSectionRepository.findByTeacherIdFetchAll(teacherId);
+        java.util.LinkedHashMap<Integer, ClassEntity> merged = new java.util.LinkedHashMap<>();
+        for (ClassEntity c : homeroom) {
+            if (c != null && c.getId() != null) merged.put(c.getId(), c);
+        }
+        for (com.example.schoolmanagement.entity.ClassSection cs : sections) {
+            if (cs == null || cs.getClassRoom() == null || cs.getClassRoom().getId() == null) continue;
+            String st = cs.getStatus() == null ? "ACTIVE" : cs.getStatus().trim().toUpperCase();
+            if (!"ACTIVE".equals(st)) continue;
+            merged.putIfAbsent(cs.getClassRoom().getId(), cs.getClassRoom());
+        }
+        return new java.util.ArrayList<>(merged.values());
     }
 
     public ClassEntity saveClass(ClassEntity classEntity) {
@@ -459,9 +475,7 @@ public class ClassService {
         }
         ClassEntity target = classRepository.findById(toClassId)
                 .orElseThrow(() -> new BadRequestException("Lớp đích không tồn tại."));
-        if (target.getStatus() != null && "ARCHIVED".equalsIgnoreCase(target.getStatus().trim())) {
-            throw new BadRequestException("Không thể chuyển vào lớp đã lưu trữ.");
-        }
+        ClassStatusPolicy.assertTeachActionAllowed(target, "gán học sinh vào lớp");
         if (schoolIdOptional != null && target.getSchool() != null && !schoolIdOptional.equals(target.getSchool().getId())) {
             throw new BadRequestException("Lớp đích không thuộc trường đã chọn.");
         }
@@ -498,12 +512,22 @@ public class ClassService {
 
     private void ensureClassHasCapacityForNewEnrollment(ClassEntity classEntity) {
         Integer cap = classEntity.getCapacity();
-        if (cap == null || cap <= 0) {
+        if (cap == null || cap < MIN_CLASS_CAPACITY) {
             return;
         }
         long active = enrollmentRepository.countActiveByClassEntityId(classEntity.getId());
         if (active >= cap) {
             throw new BadRequestException("Lớp đích đã đủ sĩ số (" + cap + ").");
+        }
+    }
+
+    private void validateClassCapacity(Integer capacity) {
+        if (capacity == null) {
+            throw new BadRequestException("Capacity is required");
+        }
+        if (capacity < MIN_CLASS_CAPACITY || capacity > MAX_CLASS_CAPACITY) {
+            throw new BadRequestException(
+                    "Sĩ số tối đa phải nằm trong khoảng từ " + MIN_CLASS_CAPACITY + " đến " + MAX_CLASS_CAPACITY + ".");
         }
     }
 
@@ -654,9 +678,7 @@ public class ClassService {
             classEntity.setHomeroomTeacher(userRepository.findById(teacherId)
                     .orElseThrow(() -> new BadRequestException("Invalid teacher ID")));
         }
-        if (classEntity.getCapacity() != null && classEntity.getCapacity() <= 0) {
-            throw new BadRequestException("Capacity must be greater than 0");
-        }
+        validateClassCapacity(classEntity.getCapacity());
         if (classEntity.getStatus() == null || classEntity.getStatus().trim().isEmpty()) {
             classEntity.setStatus("ACTIVE");
         }
@@ -706,7 +728,7 @@ public class ClassService {
         }
         if (classData.get("capacity") != null) {
             Integer capacity = (Integer) classData.get("capacity");
-            if (capacity <= 0) throw new BadRequestException("Capacity must be greater than 0");
+            validateClassCapacity(capacity);
             existing.setCapacity(capacity);
         }
         if (classData.get("status") != null) existing.setStatus((String) classData.get("status"));

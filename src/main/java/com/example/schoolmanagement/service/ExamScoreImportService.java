@@ -8,6 +8,7 @@ import com.example.schoolmanagement.repository.ClassRepository;
 import com.example.schoolmanagement.repository.ExamScoreRepository;
 import com.example.schoolmanagement.repository.SubjectRepository;
 import com.example.schoolmanagement.repository.UserRepository;
+import com.example.schoolmanagement.util.ClassStatusPolicy;
 import org.apache.poi.ss.usermodel.DataFormatter;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
@@ -18,8 +19,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import com.example.schoolmanagement.entity.ClassSection;
-import com.example.schoolmanagement.entity.Schedule;
-import com.example.schoolmanagement.repository.ScheduleRepository;
+import com.example.schoolmanagement.repository.ClassSectionRepository;
 
 import java.text.Normalizer;
 import java.util.*;
@@ -39,7 +39,7 @@ public class ExamScoreImportService {
     @Autowired
     private ExamScoreRepository examRepo;
     @Autowired
-    private ScheduleRepository scheduleRepo;
+    private ClassSectionRepository classSectionRepo;
 
     private static final DataFormatter F = new DataFormatter();
 
@@ -60,39 +60,18 @@ public class ExamScoreImportService {
         Set<String> allowedPairs = new HashSet<>();
 
         if (isTeacher) {
-            List<Schedule> teacherSchedules = scheduleRepo.findByTeacherId(currentUserId);
-
-            for (Schedule schedule : teacherSchedules) {
-                if (schedule == null) continue;
-
-                Integer classId = schedule.getClassEntity() != null ? schedule.getClassEntity().getId() : null;
-
-                Integer subjectId = null;
-                if (schedule.getSubject() != null) {
-                    subjectId = schedule.getSubject().getId();
-                } else if (schedule.getClassSection() != null && schedule.getClassSection().getSubject() != null) {
-                    subjectId = schedule.getClassSection().getSubject().getId();
-                }
-
-                if (classId == null || subjectId == null) continue;
-
-                Integer scheduleSchoolId = null;
-                if (schedule.getSchool() != null) {
-                    scheduleSchoolId = schedule.getSchool().getId();
-                } else if (schedule.getClassEntity() != null && schedule.getClassEntity().getSchool() != null) {
-                    scheduleSchoolId = schedule.getClassEntity().getSchool().getId();
-                }
-
-                if (scheduleSchoolId != null && !Objects.equals(scheduleSchoolId, schoolId)) {
-                    continue;
-                }
-
+            List<ClassSection> teacherSections = classSectionRepo.findByTeacherIdFetchAll(currentUserId);
+            for (ClassSection cs : teacherSections) {
+                if (cs == null || cs.getClassRoom() == null || cs.getSubject() == null) continue;
+                String status = cs.getStatus() == null ? "ACTIVE" : cs.getStatus().trim().toUpperCase();
+                if (!"ACTIVE".equals(status)) continue;
+                Integer classId = cs.getClassRoom().getId();
+                Integer subjectId = cs.getSubject().getId();
+                Integer sectionSchoolId = cs.getClassRoom().getSchool() != null ? cs.getClassRoom().getSchool().getId() : null;
+                if (sectionSchoolId != null && !Objects.equals(sectionSchoolId, schoolId)) continue;
                 String pairKey = buildPairKey(classId, subjectId);
                 allowedPairs.add(pairKey);
-
-                if (!allowedClassSectionByPair.containsKey(pairKey) && schedule.getClassSection() != null) {
-                    allowedClassSectionByPair.put(pairKey, schedule.getClassSection());
-                }
+                allowedClassSectionByPair.putIfAbsent(pairKey, cs);
             }
 
             if (allowedPairs.isEmpty()) {
@@ -157,6 +136,7 @@ public class ExamScoreImportService {
 
                     ClassEntity clazz = findClassByName(classes, className)
                             .orElseThrow(() -> new RuntimeException("Class not found: " + rawClassName));
+                    ClassStatusPolicy.assertTeachActionAllowed(clazz, "import điểm");
 
                     Subject subject = findSubjectByName(subjects, subjectName)
                             .orElseThrow(() -> new RuntimeException("Subject not found: " + rawSubjectName));

@@ -105,30 +105,53 @@ const TeacherDashboard = () => {
       setStudentCountByClassId(counts);
       try {
         const classSectionsRes = await api.get(`/class-sections/teacher/${teacherId}`);
-        setClassSections(classSectionsRes.data?.classSections || []);
+        const sectionList = classSectionsRes.data?.classSections || [];
+        setClassSections(sectionList);
+        const classIdsFromSections = new Set(
+          sectionList
+            .map((cs) => cs.classRoom?.id ?? cs.class_room?.id)
+            .filter(Boolean)
+        );
+        // Thống kê điểm: ưu tiên phân công lớp học phần, cộng thêm lớp chủ nhiệm/lớp có TKB để không thiếu dữ liệu cũ.
+        const classIdsFromSchedules = new Set(
+          schedules.map((s) => s.classEntity?.id ?? s.class_id).filter(Boolean)
+        );
+        const classIds = new Set([...classes.map((c) => c.id), ...classIdsFromSchedules, ...classIdsFromSections]);
+        if (classIds.size > 0 && user?.school?.id) {
+          const scoresRes = await api.get(`/exam-scores?schoolId=${user.school.id}`);
+          const allScores = scoresRes.data?.examScores || [];
+          const teacherClassScores = allScores.filter((s) => s.classEntity?.id && classIds.has(s.classEntity.id));
+          let gioi = 0, kha = 0, trungBinh = 0, yeu = 0;
+          teacherClassScores.forEach((s) => {
+            const sc = Number(s.score);
+            if (sc >= 8) gioi++;
+            else if (sc >= 6.5) kha++;
+            else if (sc >= 5) trungBinh++;
+            else yeu++;
+          });
+          setScoreStats({ gioi, kha, trungBinh, yeu });
+        }
       } catch (e) {
         setClassSections([]);
-      }
-
-      // Lớp đang dạy = các lớp xuất hiện trong TKB của GV (distinct từ schedules)
-      const classIdsFromSchedules = new Set(
-        schedules.map((s) => s.classEntity?.id ?? s.class_id).filter(Boolean)
-      );
-      // Thống kê điểm: dùng cả lớp chủ nhiệm và lớp dạy
-      const classIds = new Set([...classes.map((c) => c.id), ...classIdsFromSchedules]);
-      if (classIds.size > 0 && user?.school?.id) {
-        const scoresRes = await api.get(`/exam-scores?schoolId=${user.school.id}`);
-        const allScores = scoresRes.data?.examScores || [];
-        const teacherClassScores = allScores.filter((s) => s.classEntity?.id && classIds.has(s.classEntity.id));
-        let gioi = 0, kha = 0, trungBinh = 0, yeu = 0;
-        teacherClassScores.forEach((s) => {
-          const sc = Number(s.score);
-          if (sc >= 8) gioi++;
-          else if (sc >= 6.5) kha++;
-          else if (sc >= 5) trungBinh++;
-          else yeu++;
-        });
-        setScoreStats({ gioi, kha, trungBinh, yeu });
+        // fallback khi chưa có class-sections endpoint/data
+        const classIdsFromSchedules = new Set(
+          schedules.map((s) => s.classEntity?.id ?? s.class_id).filter(Boolean)
+        );
+        const classIds = new Set([...classes.map((c) => c.id), ...classIdsFromSchedules]);
+        if (classIds.size > 0 && user?.school?.id) {
+          const scoresRes = await api.get(`/exam-scores?schoolId=${user.school.id}`);
+          const allScores = scoresRes.data?.examScores || [];
+          const teacherClassScores = allScores.filter((s) => s.classEntity?.id && classIds.has(s.classEntity.id));
+          let gioi = 0, kha = 0, trungBinh = 0, yeu = 0;
+          teacherClassScores.forEach((s) => {
+            const sc = Number(s.score);
+            if (sc >= 8) gioi++;
+            else if (sc >= 6.5) kha++;
+            else if (sc >= 5) trungBinh++;
+            else yeu++;
+          });
+          setScoreStats({ gioi, kha, trungBinh, yeu });
+        }
       }
     } catch (e) {
       console.error('Error fetching teacher dashboard:', e);
@@ -137,9 +160,13 @@ const TeacherDashboard = () => {
     }
   };
 
-  // Lớp đang dạy: số lớp distinct từ toàn bộ TKB của GV; nếu không có TKB thì dùng lớp chủ nhiệm
+  // Lớp đang dạy: ưu tiên lớp có class_section; fallback TKB; cuối cùng lớp chủ nhiệm.
   const classIdsTeaching = React.useMemo(() => {
     const ids = new Set();
+    classSections.forEach((cs) => {
+      const id = cs.classRoom?.id ?? cs.class_room?.id;
+      if (id) ids.add(id);
+    });
     allSchedules.forEach((s) => {
       const id = s.classEntity?.id ?? s.class_id;
       if (id) ids.add(id);

@@ -3,6 +3,9 @@ import { Building2, GraduationCap, Lock, Mail, Phone, Shield, User, Users, Schoo
 import { toast } from 'react-toastify';
 import { useAuth } from '../../auth/context/AuthContext';
 import api from '../../../shared/lib/api';
+import { isValidEmail } from '../../../shared/lib/emailFormat';
+import { isValidOptionalVietnamMobile } from '../../../shared/lib/phoneFormat';
+import { isTeachingActiveClass } from '../../../shared/lib/classStatus';
 
 /** Lớp đã đủ sĩ số theo dữ liệu API (studentCount so với capacity). */
 function isClassAtMaxCapacity(cls) {
@@ -222,7 +225,7 @@ const UserCreateForm = ({
     const fetchClassesForSchool = async (schoolIdArg) => {
       try {
         const response = await api.get(`/classes/school/${schoolIdArg}`);
-        setClasses(response.data.classes || []);
+        setClasses((response.data.classes || []).filter(isTeachingActiveClass));
       } catch (err) {
         console.error('Error fetching classes:', err);
         setClasses([]);
@@ -319,19 +322,50 @@ const UserCreateForm = ({
       toast.error('Vui lòng hoàn tất việc tạo vai trò mới trước khi tạo người dùng.');
       return false;
     }
-    if (!formData.email) return toast.error('Email là bắt buộc.') || false;
-    if (!formData.fullName) return toast.error('Họ tên là bắt buộc.') || false;
-    if (!formData.password) return toast.error('Mật khẩu là bắt buộc.') || false;
-    if (formData.password !== formData.confirmPassword) return toast.error('Mật khẩu xác nhận không khớp.') || false;
+    if (!formData.email?.trim()) {
+      toast.error('Email là bắt buộc.');
+      return false;
+    }
+    if (!isValidEmail(formData.email)) {
+      toast.error('Email không hợp lệ');
+      return false;
+    }
+    if (!isValidOptionalVietnamMobile(formData.phone ?? '')) {
+      toast.error('Số điện thoại không hợp lệ');
+      return false;
+    }
+    if (!formData.fullName?.trim()) {
+      toast.error('Họ tên là bắt buộc.');
+      return false;
+    }
+    if (!formData.password) {
+      toast.error('Mật khẩu là bắt buộc.');
+      return false;
+    }
+    if (formData.password !== formData.confirmPassword) {
+      toast.error('Mật khẩu xác nhận không khớp.');
+      return false;
+    }
     if (!formData.roleId && !(isAdminCreationMode && adminRoleOption?.id)) {
-      return toast.error('Vui lòng chọn vai trò.') || false;
+      toast.error('Vui lòng chọn vai trò.');
+      return false;
     }
-    if (!formData.schoolId && currentUserRole !== 'SUPER_ADMIN') return toast.error('Vui lòng chọn trường.') || false;
+    if (!formData.schoolId && currentUserRole !== 'SUPER_ADMIN') {
+      toast.error('Vui lòng chọn trường.');
+      return false;
+    }
     if (isAdminCreationMode && !formData.schoolId) {
-      return toast.error('Tài khoản quản trị trường bắt buộc phải chọn trường.') || false;
+      toast.error('Tài khoản quản trị trường bắt buộc phải chọn trường.');
+      return false;
     }
-    if (isRoleAdmin && !formData.schoolId) return toast.error('Tài khoản Admin bắt buộc phải gán trường.') || false;
-    if (isRoleStudent && !formData.classId) return toast.error('Lớp là bắt buộc khi tạo học sinh.') || false;
+    if (isRoleAdmin && !formData.schoolId) {
+      toast.error('Tài khoản Admin bắt buộc phải gán trường.');
+      return false;
+    }
+    if (isRoleStudent && !formData.classId) {
+      toast.error('Lớp là bắt buộc khi tạo học sinh.');
+      return false;
+    }
     if (isRoleStudent && formData.classId) {
       const cid = parseInt(formData.classId, 10);
       const cls = classes.find((c) => c.id === cid || String(c.id) === String(formData.classId));

@@ -3,7 +3,6 @@ package com.example.schoolmanagement.service.aiquery;
 import com.example.schoolmanagement.entity.ClassEntity;
 import com.example.schoolmanagement.entity.ClassSection;
 import com.example.schoolmanagement.entity.Enrollment;
-import com.example.schoolmanagement.entity.Schedule;
 import com.example.schoolmanagement.entity.User;
 import com.example.schoolmanagement.exception.BadRequestException;
 import com.example.schoolmanagement.exception.ForbiddenException;
@@ -11,7 +10,6 @@ import com.example.schoolmanagement.repository.ClassRepository;
 import com.example.schoolmanagement.repository.ClassSectionRepository;
 import com.example.schoolmanagement.repository.EnrollmentRepository;
 import com.example.schoolmanagement.repository.ParentStudentRepository;
-import com.example.schoolmanagement.repository.ScheduleRepository;
 import com.example.schoolmanagement.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -28,7 +26,6 @@ public class AuthorizationService {
     @Autowired private UserRepository userRepository;
     @Autowired private ClassRepository classRepository;
     @Autowired private ClassSectionRepository classSectionRepository;
-    @Autowired private ScheduleRepository scheduleRepository;
     @Autowired private EnrollmentRepository enrollmentRepository;
     @Autowired private ParentStudentRepository parentStudentRepository;
 
@@ -57,33 +54,18 @@ public class AuthorizationService {
     public boolean teachesClass(AuthContext ctx, Integer classId) {
         if (ctx == null || classId == null) return false;
         if (!"TEACHER".equals(ctx.role)) return false;
-        // via class_sections
         List<ClassSection> sections = classSectionRepository.findByTeacherIdFetchAll(ctx.userId);
-        boolean viaSections = sections.stream().anyMatch(cs -> cs != null && cs.getClassRoom() != null
+        return sections.stream().anyMatch(cs -> cs != null && cs.getClassRoom() != null
                 && Objects.equals(cs.getClassRoom().getId(), classId));
-        if (viaSections) return true;
-        // via schedule
-        List<Schedule> schedules = scheduleRepository.findByTeacherId(ctx.userId);
-        return schedules.stream().anyMatch(s -> s != null && s.getClassEntity() != null
-                && Objects.equals(s.getClassEntity().getId(), classId));
     }
 
     public boolean teachesClassSubject(AuthContext ctx, Integer classId, Integer subjectId) {
         if (ctx == null || classId == null || subjectId == null) return false;
         if (!"TEACHER".equals(ctx.role)) return false;
-        // class_sections
         List<ClassSection> sections = classSectionRepository.findByTeacherIdFetchAll(ctx.userId);
-        boolean viaSections = sections.stream().anyMatch(cs -> cs != null
+        return sections.stream().anyMatch(cs -> cs != null
                 && cs.getClassRoom() != null && Objects.equals(cs.getClassRoom().getId(), classId)
                 && cs.getSubject() != null && Objects.equals(cs.getSubject().getId(), subjectId));
-        if (viaSections) return true;
-        // schedule (fallback)
-        List<Schedule> schedules = scheduleRepository.findByTeacherId(ctx.userId);
-        return schedules.stream().anyMatch(s -> s != null
-                && s.getClassEntity() != null && Objects.equals(s.getClassEntity().getId(), classId)
-                && ((s.getSubject() != null && Objects.equals(s.getSubject().getId(), subjectId))
-                || (s.getClassSection() != null && s.getClassSection().getSubject() != null
-                && Objects.equals(s.getClassSection().getSubject().getId(), subjectId))));
     }
 
     public Set<String> taughtPairs(AuthContext ctx) {
@@ -94,15 +76,6 @@ public class AuthorizationService {
             Integer cid = cs.getClassRoom().getId();
             Integer sid = cs.getSubject().getId();
             if (cid != null && sid != null) out.add(cid + "-" + sid);
-        }
-        for (Schedule s : scheduleRepository.findByTeacherId(ctx.userId)) {
-            Integer cid = s != null && s.getClassEntity() != null ? s.getClassEntity().getId() : null;
-            Integer sid = s != null && s.getSubject() != null ? s.getSubject().getId() : null;
-            if (cid != null && sid != null) out.add(cid + "-" + sid);
-            if (cid != null && sid == null && s != null && s.getClassSection() != null && s.getClassSection().getSubject() != null) {
-                Integer sid2 = s.getClassSection().getSubject().getId();
-                if (sid2 != null) out.add(cid + "-" + sid2);
-            }
         }
         return out;
     }

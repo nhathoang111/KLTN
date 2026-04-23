@@ -14,6 +14,7 @@ import {
 } from '../ScheduleListPage/schoolScheduleTimeline';
 import { colorsForSubject } from '../ScheduleListPage/subjectColors';
 import './ScheduleFullCalendarPage.css';
+import { buildTeacherVisibleClasses } from '../../../../shared/lib/teacherScope';
 
 const lessonRows = [...TIMELINE_MORNING, ...TIMELINE_AFTERNOON].filter(
   (row) => row.type === 'lesson' && typeof row.period === 'number'
@@ -90,20 +91,14 @@ const ScheduleFullCalendarPage = () => {
         }
       } else if (userRole === 'TEACHER' && user?.id) {
         try {
-          const schedulesRes = await api.get(`/schedules/teacher/${user.id}`);
-          const teacherSchedules = schedulesRes.data.schedules || [];
-          const taughtClassIds = new Set();
-          teacherSchedules.forEach((schedule) => {
-            const classId = schedule.classEntity?.id || schedule.class_id;
-            if (classId) taughtClassIds.add(classId);
-          });
-
-          allClasses = allClasses.filter((cls) => {
-            const isSameSchool = cls.school?.id === schoolId;
-            const homeroomTeacherId = cls.homeroomTeacher?.id || cls.homeroomTeacherId;
-            const isHomeroomTeacher = homeroomTeacherId === user.id;
-            const isTeachingClass = taughtClassIds.has(cls.id);
-            return isSameSchool && (isHomeroomTeacher || isTeachingClass);
+          const sectionsRes = await api.get(`/class-sections/teacher/${user.id}`);
+          const teacherSections = sectionsRes.data.classSections || [];
+          allClasses = buildTeacherVisibleClasses({
+            allClasses,
+            classSections: teacherSections,
+            teacherId: Number(user.id),
+            schoolId: Number(schoolId),
+            includeHomeroom: true,
           });
         } catch (_) {
           allClasses = [];

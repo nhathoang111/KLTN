@@ -11,6 +11,8 @@ import {
 } from './schoolScheduleTimeline';
 import { colorsForSubject } from './subjectColors';
 import { scheduleSubjectDisplayName } from '../../../../shared/lib/scheduleLabels';
+import { isTeachingActiveClass } from '../../../../shared/lib/classStatus';
+import { buildTeacherVisibleClasses } from '../../../../shared/lib/teacherScope';
 
 const ScheduleListPage = () => {
   const { user } = useAuth();
@@ -111,42 +113,21 @@ const ScheduleListPage = () => {
           allClasses = [];
         }
       } else if (userRole === 'TEACHER' && user?.id) {
-        // Filter classes for teacher - show all classes they teach (from schedules) + classes they are homeroom teacher for
+        // Filter classes for teacher by class_sections + homeroom.
         try {
-          // Fetch schedules for this teacher to get all classes they teach
-          const schedulesRes = await api.get(`/schedules/teacher/${user.id}`);
-          const teacherSchedules = schedulesRes.data.schedules || [];
-
-          // Get unique class IDs from schedules
-          const taughtClassIds = new Set();
-          teacherSchedules.forEach(schedule => {
-            const classId = schedule.classEntity?.id || schedule.class_id;
-            if (classId) {
-              taughtClassIds.add(classId);
-            }
+          const sectionsRes = await api.get(`/class-sections/teacher/${user.id}`);
+          const teacherSections = sectionsRes.data.classSections || [];
+          allClasses = buildTeacherVisibleClasses({
+            allClasses,
+            classSections: teacherSections,
+            teacherId: Number(user.id),
+            schoolId: Number(schoolId),
+            includeHomeroom: true,
           });
-
-          console.log('Teacher schedules:', teacherSchedules.length);
-          console.log('Classes taught by teacher (from schedules):', Array.from(taughtClassIds));
-
-          // Filter classes: show classes they teach OR classes they are homeroom teacher for
-          allClasses = allClasses.filter(cls => {
-            const isSameSchool = cls.school?.id === schoolId;
-            if (!isSameSchool) return false;
-
-            // Check if teacher is homeroom teacher
-            const homeroomTeacherId = cls.homeroomTeacher?.id || cls.homeroomTeacherId;
-            const isHomeroomTeacher = homeroomTeacherId === user.id;
-
-            // Check if teacher teaches this class (from schedules)
-            const isTeachingClass = taughtClassIds.has(cls.id);
-
-            return isHomeroomTeacher || isTeachingClass;
-          });
-
-          console.log('Filtered classes for teacher (all classes they teach):', allClasses.length);
-        } catch (scheduleError) {
-          console.error('Error fetching teacher schedules:', scheduleError);
+          console.log('Teacher class sections:', teacherSections.length);
+          console.log('Filtered classes for teacher:', allClasses.length);
+        } catch (sectionError) {
+          console.error('Error fetching teacher class sections:', sectionError);
           // If error, show no classes for teacher
           allClasses = [];
         }
@@ -866,6 +847,10 @@ const ScheduleListPage = () => {
       return { dayOfWeek: d, short: short[d], dayNum, count: getLessonCountForDay(d) };
     });
   }, [currentWeekStart, schedules]);
+  const teachingActionClasses = useMemo(
+    () => (classes || []).filter(isTeachingActiveClass),
+    [classes]
+  );
 
   const userRole = user?.role?.name?.toUpperCase();
   const isSuperAdmin = userRole === 'SUPER_ADMIN';
@@ -1257,7 +1242,7 @@ const ScheduleListPage = () => {
                   required
                 >
                   <option value="">-- Chọn lớp --</option>
-                  {classes.map(cls => (
+                  {teachingActionClasses.map(cls => (
                     <option key={cls.id} value={cls.id}>{cls.name}</option>
                   ))}
                 </select>
@@ -1385,7 +1370,7 @@ const ScheduleListPage = () => {
                 required
               >
                 <option value="">-- Chọn lớp --</option>
-                {classes.map(cls => (
+                {teachingActionClasses.map(cls => (
                   <option key={cls.id} value={cls.id}>{cls.name}</option>
                 ))}
               </select>

@@ -10,6 +10,7 @@ import com.example.schoolmanagement.dto.schedule.ScheduleGenerateResult;
 import com.example.schoolmanagement.dto.schedule.ScheduleGenerateResult.UnmetAssignment;
 import com.example.schoolmanagement.exception.BadRequestException;
 import com.example.schoolmanagement.exception.ResourceNotFoundException;
+import com.example.schoolmanagement.util.ClassStatusPolicy;
 import com.example.schoolmanagement.repository.ScheduleRepository;
 import com.example.schoolmanagement.repository.ClassRepository;
 import com.example.schoolmanagement.repository.SubjectRepository;
@@ -243,6 +244,7 @@ public class ScheduleService {
 
         ClassEntity classEntity = classRepository.findById(classId)
                 .orElseThrow(() -> new ResourceNotFoundException("Class not found"));
+        ClassStatusPolicy.assertTeachActionAllowed(classEntity, "tạo thời khóa biểu");
         School school = classEntity.getSchool();
         if (school == null) {
             throw new ResourceNotFoundException("School not found for class");
@@ -842,6 +844,7 @@ public class ScheduleService {
         if (classId == null) throw new BadRequestException("classId is required");
         ClassEntity classEntity = classRepository.findById(classId)
                 .orElseThrow(() -> new BadRequestException("Class not found"));
+        ClassStatusPolicy.assertTeachActionAllowed(classEntity, "tạo thời khóa biểu");
         schedule.setClassEntity(classEntity);
         schedule.setSchool(classEntity.getSchool());
 
@@ -931,10 +934,12 @@ public class ScheduleService {
             if (classId != null) {
                 ClassEntity classEntity = classRepository.findById(classId)
                         .orElseThrow(() -> new BadRequestException("Class not found"));
+                ClassStatusPolicy.assertTeachActionAllowed(classEntity, "cập nhật thời khóa biểu");
                 schedule.setClassEntity(classEntity);
                 schedule.setSchool(classEntity.getSchool());
             }
         }
+        ClassStatusPolicy.assertTeachActionAllowed(schedule.getClassEntity(), "cập nhật thời khóa biểu");
 
         Object subjectIdObj = scheduleData.get("subjectId");
         Integer subjectId = null;

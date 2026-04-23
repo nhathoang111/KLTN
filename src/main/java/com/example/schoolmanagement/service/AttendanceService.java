@@ -11,6 +11,7 @@ import com.example.schoolmanagement.dto.attendance.AttendanceItemDto;
 import com.example.schoolmanagement.exception.BadRequestException;
 import com.example.schoolmanagement.exception.ForbiddenException;
 import com.example.schoolmanagement.exception.ResourceNotFoundException;
+import com.example.schoolmanagement.util.ClassStatusPolicy;
 import com.example.schoolmanagement.repository.AttendanceRepository;
 import com.example.schoolmanagement.repository.ClassRepository;
 import com.example.schoolmanagement.repository.ClassSectionRepository;
@@ -158,6 +159,7 @@ public class AttendanceService {
         }
         ClassEntity cls = classSection.getClassRoom();
         if (cls == null || cls.getId() == null) throw new BadRequestException("Class section is missing class");
+        ClassStatusPolicy.assertTeachActionAllowed(cls, "điểm danh");
 
         Integer classId = cls.getId();
         var enrollments = enrollmentRepository.findActiveEnrollmentsByClassId(classId);
@@ -285,6 +287,7 @@ public class AttendanceService {
         if (classId != null) {
             ClassEntity classEntity = classRepository.findById(classId)
                     .orElseThrow(() -> new BadRequestException("Invalid class ID"));
+            ClassStatusPolicy.assertTeachActionAllowed(classEntity, "điểm danh");
             attendance.setClassEntity(classEntity);
         }
 
@@ -309,6 +312,7 @@ public class AttendanceService {
                 || !markingTeacherId.equals(attendance.getClassSection().getTeacher().getId())) {
             throw new ForbiddenException("Access denied");
         }
+        ClassStatusPolicy.assertTeachActionAllowed(attendance.getClassEntity(), "cập nhật điểm danh");
 
         if (attendanceData.containsKey("studentId")) {
             Object studentIdObj = attendanceData.get("studentId");
@@ -345,6 +349,7 @@ public class AttendanceService {
             if (classId != null) {
                 ClassEntity classEntity = classRepository.findById(classId)
                         .orElseThrow(() -> new BadRequestException("Invalid class ID"));
+                ClassStatusPolicy.assertTeachActionAllowed(classEntity, "cập nhật điểm danh");
                 attendance.setClassEntity(classEntity);
             }
         }

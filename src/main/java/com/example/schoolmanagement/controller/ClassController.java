@@ -63,6 +63,9 @@ public class ClassController {
         if (isTeacherRole(userRole)) {
             return ResponseEntity.status(403).body(Map.of("error", "Giáo viên không có quyền thao tác này"));
         }
+        if (isAdminRole(userRole)) {
+            return ResponseEntity.status(403).body(Map.of("error", "Admin không sử dụng thao tác này"));
+        }
         Integer schoolId = parseInteger(body.get("schoolId"));
         String sy = body.get("schoolYear") != null ? body.get("schoolYear").toString().trim() : null;
         int n = classService.archiveClassesForSchoolYear(schoolId, sy);
@@ -163,6 +166,12 @@ public class ClassController {
         if (userRole == null) return false;
         String u = userRole.toUpperCase();
         return "TEACHER".equals(u) || u.startsWith("TEACHER");
+    }
+
+    private static boolean isAdminRole(String userRole) {
+        if (userRole == null) return false;
+        String u = userRole.toUpperCase();
+        return "ADMIN".equals(u) || u.startsWith("ADMIN_");
     }
 
     private static Integer parseInteger(Object o) {

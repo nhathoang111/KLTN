@@ -8,6 +8,7 @@ import { Archive, ArrowRightLeft, Eye, Pencil, Plus, Trash2 } from 'lucide-react
 import ClassFormModal from '../../components/ClassFormModal';
 import ClassYearArchiveModal from '../../components/ClassYearArchiveModal';
 import ClassRolloverModal from '../../components/ClassRolloverModal';
+import { buildTeacherVisibleClasses } from '../../../../shared/lib/teacherScope';
 
 /** Tên niên khóa từ object lớp (API có thể trả schoolYear là object hoặc chuỗi). */
 function schoolYearLabel(c) {
@@ -128,40 +129,21 @@ const ClassListPage = () => {
         allClasses = allClasses.filter(cls => cls.school?.id === user.school.id);
       }
 
-      // Filter classes for teacher - show all classes they teach (from schedules) + classes they are homeroom teacher for
+      // Filter classes for teacher - source of teaching permission is class_sections.
       if (userRole === 'TEACHER' && user?.id) {
         try {
-          // Fetch schedules for this teacher to get all classes they teach
-          const schedulesRes = await api.get(`/schedules/teacher/${user.id}`);
-          const teacherSchedules = schedulesRes.data.schedules || [];
-
-          // Get unique class IDs from schedules
-          const taughtClassIds = new Set();
-          teacherSchedules.forEach(schedule => {
-            const classId = schedule.classEntity?.id || schedule.class_id;
-            if (classId) {
-              taughtClassIds.add(classId);
-            }
+          const sectionRes = await api.get(`/class-sections/teacher/${user.id}`);
+          const teacherSections = sectionRes.data.classSections || [];
+          allClasses = buildTeacherVisibleClasses({
+            allClasses,
+            classSections: teacherSections,
+            teacherId: Number(user.id),
+            schoolId: Number(user.school?.id),
+            includeHomeroom: true,
           });
-
-          // Filter classes: show classes they teach OR classes they are homeroom teacher for
-          allClasses = allClasses.filter(cls => {
-            const isSameSchool = cls.school?.id === user.school?.id;
-            if (!isSameSchool) return false;
-
-            // Check if teacher is homeroom teacher
-            const homeroomTeacherId = cls.homeroomTeacher?.id || cls.homeroomTeacherId;
-            const isHomeroomTeacher = homeroomTeacherId === user.id;
-
-            // Check if teacher teaches this class (from schedules)
-            const isTeachingClass = taughtClassIds.has(cls.id);
-
-            return isHomeroomTeacher || isTeachingClass;
-          });
-
-        } catch (scheduleError) {
-          console.error('Error fetching teacher schedules:', scheduleError);
-          // Fallback to homeroom teacher only if schedule fetch fails
+        } catch (sectionError) {
+          console.error('Error fetching teacher class sections:', sectionError);
+          // Fallback to homeroom teacher only if class-section fetch fails
           allClasses = allClasses.filter(cls => {
             const homeroomTeacherId = cls.homeroomTeacher?.id || cls.homeroomTeacherId;
             const isHomeroomTeacher = homeroomTeacherId === user.id;
@@ -216,6 +198,11 @@ const ClassListPage = () => {
     try {
       const gradeLevel = parseInt(formData.gradeLevel, 10);
       const classNumber = parseInt(formData.classNumber, 10);
+      const capacity = parseInt(formData.capacity, 10);
+      if (Number.isNaN(capacity) || capacity < 1 || capacity > 50) {
+        toast.error('Sĩ số tối đa chỉ được nhập từ 1 đến 50.');
+        return;
+      }
       const schoolYearStr = (typeof formData.schoolYear === 'string' ? formData.schoolYear : (formData.schoolYear?.name ?? '')).trim();
       const name = schoolYearStr ? `${gradeLevel}/${classNumber} (${schoolYearStr})` : `Khối ${gradeLevel} - Lớp ${classNumber}`;
       const submitData = {
@@ -223,7 +210,7 @@ const ClassListPage = () => {
         name,
         gradeLevel,
         classNumber,
-        capacity: parseInt(formData.capacity, 10),
+        capacity,
         schoolId: parseInt(formData.schoolId, 10),
         homeroomTeacherId: formData.homeroomTeacherId ? parseInt(formData.homeroomTeacherId, 10) : null,
         room: formData.room || null
@@ -525,6 +512,7 @@ const ClassListPage = () => {
   const isAdmin = userRole === 'ADMIN';
   const isSuperAdmin = userRole === 'SUPER_ADMIN';
   const canManageClasses = isAdmin || isSuperAdmin; // Chỉ ADMIN và SUPER_ADMIN mới có thể quản lý lớp
+  const canArchiveSchoolYear = isSuperAdmin;
 
   return (
     <div className="min-h-screen bg-slate-100 px-4 py-6">
@@ -550,14 +538,16 @@ const ClassListPage = () => {
                   />
                   Hiện lớp đã lưu trữ
                 </label>
-                <button
-                  type="button"
-                  className="inline-flex items-center gap-2 rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-                  onClick={openYearArchiveModal}
-                >
-                  <Archive size={16} />
-                  Kết thúc niên khóa
-                </button>
+                {canArchiveSchoolYear && (
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-2 rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                    onClick={openYearArchiveModal}
+                  >
+                    <Archive size={16} />
+                    Kết thúc niên khóa
+                  </button>
+                )}
                 <button
                   type="button"
                   className="inline-flex items-center gap-2 rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
@@ -727,18 +717,20 @@ const ClassListPage = () => {
         availableHomeroomTeachers={availableHomeroomTeachers}
       />
 
-      <ClassYearArchiveModal
-        open={showYearArchiveModal}
-        yearArchiveLoading={yearArchiveLoading}
-        setShowYearArchiveModal={setShowYearArchiveModal}
-        handleYearArchiveSubmit={handleYearArchiveSubmit}
-        user={user}
-        archiveYearSchoolId={archiveYearSchoolId}
-        setArchiveYearSchoolId={setArchiveYearSchoolId}
-        schools={schools}
-        yearArchiveSchoolYear={yearArchiveSchoolYear}
-        setYearArchiveSchoolYear={setYearArchiveSchoolYear}
-      />
+      {canArchiveSchoolYear && (
+        <ClassYearArchiveModal
+          open={showYearArchiveModal}
+          yearArchiveLoading={yearArchiveLoading}
+          setShowYearArchiveModal={setShowYearArchiveModal}
+          handleYearArchiveSubmit={handleYearArchiveSubmit}
+          user={user}
+          archiveYearSchoolId={archiveYearSchoolId}
+          setArchiveYearSchoolId={setArchiveYearSchoolId}
+          schools={schools}
+          yearArchiveSchoolYear={yearArchiveSchoolYear}
+          setYearArchiveSchoolYear={setYearArchiveSchoolYear}
+        />
+      )}
 
       <ClassRolloverModal
         open={showRolloverModal}

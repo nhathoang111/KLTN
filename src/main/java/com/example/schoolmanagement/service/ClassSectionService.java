@@ -6,6 +6,7 @@ import com.example.schoolmanagement.entity.Subject;
 import com.example.schoolmanagement.entity.User;
 import com.example.schoolmanagement.exception.BadRequestException;
 import com.example.schoolmanagement.exception.ResourceNotFoundException;
+import com.example.schoolmanagement.util.ClassStatusPolicy;
 import com.example.schoolmanagement.repository.ClassRepository;
 import com.example.schoolmanagement.repository.ClassSectionRepository;
 import com.example.schoolmanagement.repository.SubjectRepository;
@@ -79,6 +80,7 @@ public class ClassSectionService {
 
         ClassEntity cls = classRepository.findById(classId)
                 .orElseThrow(() -> new ResourceNotFoundException("Class not found with id: " + classId));
+        ClassStatusPolicy.assertTeachActionAllowed(cls, "gán môn vào lớp");
         Subject subject = subjectRepository.findById(subjectId)
                 .orElseThrow(() -> new ResourceNotFoundException("Subject not found with id: " + subjectId));
         User teacher = userRepository.findById(teacherId)

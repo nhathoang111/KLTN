@@ -230,6 +230,11 @@ const ClassDetailPage = () => {
     try {
       const gradeLevel = parseInt(editFormData.gradeLevel, 10);
       const classNumber = parseInt(editFormData.classNumber, 10);
+      const capacity = parseInt(editFormData.capacity, 10);
+      if (Number.isNaN(capacity) || capacity < 1 || capacity > 50) {
+        toast.error("Sĩ số tối đa chỉ được nhập từ 1 đến 50.");
+        return;
+      }
       const schoolYearStr = (editFormData.schoolYear || "").trim();
       const name = schoolYearStr
         ? `${gradeLevel}/${classNumber} (${schoolYearStr})`
@@ -240,7 +245,7 @@ const ClassDetailPage = () => {
         name,
         gradeLevel,
         classNumber,
-        capacity: parseInt(editFormData.capacity, 10),
+        capacity,
         schoolId: parseInt(editFormData.schoolId, 10),
         homeroomTeacherId: editFormData.homeroomTeacherId ? parseInt(editFormData.homeroomTeacherId, 10) : null,
         room: editFormData.room || null,

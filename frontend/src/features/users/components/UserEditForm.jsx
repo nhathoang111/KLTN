@@ -3,6 +3,9 @@ import { Lock, Mail, School, Shield, ToggleLeft, User } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { useAuth } from '../../auth/context/AuthContext';
 import api from '../../../shared/lib/api';
+import { isValidEmail } from '../../../shared/lib/emailFormat';
+import { isValidOptionalVietnamMobile } from '../../../shared/lib/phoneFormat';
+import { isTeachingActiveClass } from '../../../shared/lib/classStatus';
 
 function isClassAtMaxCapacity(cls) {
   if (!cls) return false;
@@ -106,7 +109,7 @@ const UserEditForm = ({
     try {
       const res = await api.get('/classes');
       const all = res.data.classes || [];
-      setClasses(all.filter((cls) => (cls.school?.id || cls.school_id) === parseInt(schoolId, 10)));
+      setClasses(all.filter((cls) => (cls.school?.id || cls.school_id) === parseInt(schoolId, 10)).filter(isTeachingActiveClass));
     } catch (_) {
       setClasses([]);
     }
@@ -297,14 +300,35 @@ const UserEditForm = ({
   };
 
   const validateForm = () => {
-    if (!formData.email) return setError('Email là bắt buộc') || false;
-    if (!formData.fullName) return setError('Họ tên là bắt buộc') || false;
+    const emailTrim = formData.email?.trim() || '';
+    if (!emailTrim) {
+      setError('Email là bắt buộc');
+      return false;
+    }
+    if (!isValidEmail(emailTrim)) {
+      setError('Email không hợp lệ');
+      return false;
+    }
+    if (!isValidOptionalVietnamMobile(formData.phone ?? '')) {
+      setError('Số điện thoại không hợp lệ');
+      return false;
+    }
+    if (!formData.fullName?.trim()) {
+      setError('Họ tên là bắt buộc');
+      return false;
+    }
     if (formData.password && formData.password !== formData.confirmPassword) {
       setError('Mật khẩu xác nhận không khớp');
       return false;
     }
-    if (!formData.roleId) return setError('Vai trò là bắt buộc') || false;
-    if (!formData.schoolId) return setError('Trường là bắt buộc') || false;
+    if (!formData.roleId) {
+      setError('Vai trò là bắt buộc');
+      return false;
+    }
+    if (!formData.schoolId) {
+      setError('Trường là bắt buộc');
+      return false;
+    }
     const roleUpper = (selectedRole?.name || '').toUpperCase();
     const isAdminRole = roleUpper === 'ADMIN' || roleUpper.startsWith('ADMIN_');
     if (isAdminRole && !formData.schoolId) {
@@ -354,12 +378,12 @@ const UserEditForm = ({
         fullName: formData.fullName.trim(),
         roleId: roleIdNum,
         schoolId: schoolIdNum,
-        status: formData.status || 'ACTIVE'
+        status: formData.status || 'ACTIVE',
+        phone: String(formData.phone ?? '').trim()
       };
       if (formData.password && formData.password.trim()) userData.password = formData.password;
       if (formData.dateOfBirth && formData.dateOfBirth.trim()) userData.dateOfBirth = formData.dateOfBirth;
       if (formData.gender && formData.gender.trim()) userData.gender = formData.gender.trim();
-      if (formData.phone != null && String(formData.phone).trim()) userData.phone = String(formData.phone).trim();
       if (formData.department != null && String(formData.department).trim()) userData.department = String(formData.department).trim();
       if (formData.relationship != null && String(formData.relationship).trim()) userData.relationship = String(formData.relationship).trim();
 
