@@ -446,20 +446,14 @@ public class UserService {
             .collect(Collectors.toList());
     }
 
-    public boolean existsByEmail(String email, Integer schoolId) {
+    public boolean existsByEmail(String email) {
         if (email == null) return false;
-        if (schoolId == null) {
-            return userRepository.existsByEmailWithSchoolNull(email);
-        }
-        return userRepository.existsByEmailAndSchoolId(email, schoolId);
+        return userRepository.existsByEmailGlobal(email);
     }
 
-    public boolean isEmailTakenByOtherUser(String email, Integer schoolId, Integer excludeUserId) {
+    public boolean isEmailTakenByOtherUser(String email, Integer excludeUserId) {
         if (email == null) return false;
-        if (schoolId == null) {
-            return userRepository.existsByEmailWithSchoolNullAndIdNot(email, excludeUserId);
-        }
-        return userRepository.existsByEmailAndSchoolIdAndIdNot(email, schoolId, excludeUserId);
+        return userRepository.existsByEmailGlobalAndIdNot(email, excludeUserId);
     }
 
     @Transactional(readOnly = true)
@@ -665,8 +659,7 @@ public class UserService {
 
         setUserProfileFieldsFromMap(user, userData);
 
-        Integer targetSchoolId = user.getSchool() != null ? user.getSchool().getId() : null;
-        if (user.getEmail() != null && existsByEmail(user.getEmail(), targetSchoolId)) {
+        if (user.getEmail() != null && existsByEmail(user.getEmail())) {
             throw new BadRequestException("Email already exists");
         }
 
@@ -833,9 +826,8 @@ public class UserService {
         if (schoolId != null) {
             existingUser.setSchool(schoolRepository.findById(schoolId).orElseThrow(() -> new BadRequestException("Invalid school ID")));
         }
-        Integer targetSchoolIdForUpdate = existingUser.getSchool() != null ? existingUser.getSchool().getId() : null;
         if (existingUser.getEmail() != null
-                && isEmailTakenByOtherUser(existingUser.getEmail(), targetSchoolIdForUpdate, id)) {
+                && isEmailTakenByOtherUser(existingUser.getEmail(), id)) {
             throw new BadRequestException("Email already exists");
         }
         String targetRoleName = existingUser.getRole() != null && existingUser.getRole().getName() != null

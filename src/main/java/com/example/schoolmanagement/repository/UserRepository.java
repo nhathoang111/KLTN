@@ -30,6 +30,10 @@ public interface UserRepository extends JpaRepository<User, Integer> {
     
     @Query("SELECT u FROM User u WHERE u.email = :email AND u.school.id = :schoolId")
     Optional<User> findByEmailAndSchoolId(@Param("email") String email, @Param("schoolId") Integer schoolId);
+    @Query("SELECT CASE WHEN COUNT(u) > 0 THEN true ELSE false END FROM User u WHERE u.email = :email")
+    boolean existsByEmailGlobal(@Param("email") String email);
+    @Query("SELECT CASE WHEN COUNT(u) > 0 THEN true ELSE false END FROM User u WHERE u.email = :email AND u.id <> :excludeId")
+    boolean existsByEmailGlobalAndIdNot(@Param("email") String email, @Param("excludeId") Integer excludeId);
     @Query("SELECT CASE WHEN COUNT(u) > 0 THEN true ELSE false END FROM User u WHERE u.email = :email AND u.school.id = :schoolId")
     boolean existsByEmailAndSchoolId(@Param("email") String email, @Param("schoolId") Integer schoolId);
 
