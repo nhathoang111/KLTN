@@ -62,6 +62,8 @@ const ClassFormModal = ({
               value={typeof formData.schoolYear === 'string' ? formData.schoolYear : (formData.schoolYear?.name ?? '')}
               onChange={(e) => setFormData({ ...formData, schoolYear: e.target.value })}
               placeholder="VD: 2024-2025"
+              pattern="\d{4}-\d{4}"
+              title="Niên khóa phải đúng định dạng YYYY-YYYY (ví dụ 2024-2025)"
               required
               className="block h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100"
             />

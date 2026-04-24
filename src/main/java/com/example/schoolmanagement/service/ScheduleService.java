@@ -212,11 +212,15 @@ public class ScheduleService {
     }
 
     public void deleteSchedule(Integer id) {
-        getScheduleById(id);
+        Schedule existing = getScheduleById(id);
+        ClassStatusPolicy.assertTeachActionAllowed(existing.getClassEntity(), "xóa thời khóa biểu");
         scheduleRepository.deleteById(id);
     }
 
     public int deleteAllSchedulesByClass(Integer classId) {
+        ClassEntity classEntity = classRepository.findById(classId)
+                .orElseThrow(() -> new BadRequestException("Class not found"));
+        ClassStatusPolicy.assertTeachActionAllowed(classEntity, "xóa thời khóa biểu");
         List<Schedule> schedules = scheduleRepository.findByClassEntityId(classId);
         int count = schedules.size();
         scheduleRepository.deleteAll(schedules);

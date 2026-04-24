@@ -116,7 +116,8 @@ public class ClassSectionService {
     public void deleteById(Integer id) {
         if (id == null) throw new BadRequestException("Thiếu id lớp học phần");
         // Check tồn tại để trả lỗi 404 thay vì silent fail
-        getById(id);
+        ClassSection cs = getById(id);
+        ClassStatusPolicy.assertTeachActionAllowed(cs.getClassRoom(), "xóa gán môn vào lớp");
         try {
             classSectionRepository.deleteById(id);
         } catch (org.springframework.dao.DataIntegrityViolationException e) {

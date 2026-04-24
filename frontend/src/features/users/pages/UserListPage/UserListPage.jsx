@@ -4,6 +4,7 @@ import { Pencil, Trash2 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { useAuth } from '../../../auth/context/AuthContext';
 import api from '../../../../shared/lib/api';
+import { isTeachingActiveClass } from '../../../../shared/lib/classStatus';
 import './UserListPage.css';
 import CreateUserModal from './components/CreateUserModal';
 import ImportUsersExcelModal from './components/ImportUsersExcelModal';
@@ -363,7 +364,8 @@ const UserListPage = () => {
     setBulkClassLoading(true);
     try {
       const res = await api.get(`/classes/school/${schoolId}`);
-      setBulkClasses(res.data?.classes || res.data || []);
+      const all = res.data?.classes || res.data || [];
+      setBulkClasses(all.filter(isTeachingActiveClass));
     } catch (_) {
       setBulkClasses([]);
     } finally {

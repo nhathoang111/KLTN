@@ -4,6 +4,7 @@ import { toast } from "react-toastify";
 import api from "../../../../shared/lib/api";
 import { useAuth } from "../../../auth/context/AuthContext";
 import ClassFormModal from "../../components/ClassFormModal";
+import { isValidSchoolYearFormat } from "../../../../shared/lib/schoolYearFormat";
 
 const tabs = [
   { id: "overview", label: "Thông tin lớp" },
@@ -236,6 +237,10 @@ const ClassDetailPage = () => {
         return;
       }
       const schoolYearStr = (editFormData.schoolYear || "").trim();
+      if (!isValidSchoolYearFormat(schoolYearStr)) {
+        toast.error("Niên khóa phải đúng định dạng YYYY-YYYY (ví dụ 2024-2025).");
+        return;
+      }
       const name = schoolYearStr
         ? `${gradeLevel}/${classNumber} (${schoolYearStr})`
         : `Khối ${gradeLevel} - Lớp ${classNumber}`;

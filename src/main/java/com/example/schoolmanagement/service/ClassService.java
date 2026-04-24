@@ -29,11 +29,13 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.*;
 import java.util.stream.Collectors;
+import java.util.regex.Pattern;
 
 @Service
 public class ClassService {
     private static final int MIN_CLASS_CAPACITY = 1;
     private static final int MAX_CLASS_CAPACITY = 50;
+    private static final Pattern SCHOOL_YEAR_FORMAT = Pattern.compile("^\\d{4}-\\d{4}$");
 
     private static final Logger log = LoggerFactory.getLogger(ClassService.class);
 
@@ -271,11 +273,9 @@ public class ClassService {
     @Transactional
     public int archiveClassesForSchoolYear(Integer schoolId, String schoolYearName) {
         if (schoolId == null) throw new BadRequestException("Thiếu schoolId.");
-        if (schoolYearName == null || schoolYearName.isBlank()) {
-            throw new BadRequestException("Thiếu tên niên khóa (schoolYear).");
-        }
-        SchoolYear sy = schoolYearRepository.findBySchoolIdAndName(schoolId, schoolYearName.trim())
-                .orElseThrow(() -> new BadRequestException("Không tìm thấy niên khóa \"" + schoolYearName.trim() + "\" của trường."));
+        String normalizedYear = normalizeAndValidateSchoolYearName(schoolYearName);
+        SchoolYear sy = schoolYearRepository.findBySchoolIdAndName(schoolId, normalizedYear)
+                .orElseThrow(() -> new BadRequestException("Không tìm thấy niên khóa \"" + normalizedYear + "\" của trường."));
         List<ClassEntity> all = classRepository.findBySchoolId(schoolId);
         int n = 0;
         for (ClassEntity c : all) {
@@ -301,11 +301,8 @@ public class ClassService {
         if (schoolId == null) {
             throw new BadRequestException("Thiếu schoolId.");
         }
-        if (fromYearName == null || fromYearName.isBlank() || toYearName == null || toYearName.isBlank()) {
-            throw new BadRequestException("Thiếu niên khóa nguồn hoặc đích.");
-        }
-        String fromTrim = fromYearName.trim();
-        String toTrim = toYearName.trim();
+        String fromTrim = normalizeAndValidateSchoolYearName(fromYearName);
+        String toTrim = normalizeAndValidateSchoolYearName(toYearName);
         if (fromTrim.equalsIgnoreCase(toTrim)) {
             throw new BadRequestException("Niên khóa nguồn và đích không được trùng nhau.");
         }
@@ -529,6 +526,17 @@ public class ClassService {
             throw new BadRequestException(
                     "Sĩ số tối đa phải nằm trong khoảng từ " + MIN_CLASS_CAPACITY + " đến " + MAX_CLASS_CAPACITY + ".");
         }
+    }
+
+    private String normalizeAndValidateSchoolYearName(String schoolYearName) {
+        String value = schoolYearName == null ? "" : schoolYearName.trim();
+        if (value.isEmpty()) {
+            throw new BadRequestException("Thiếu tên niên khóa (schoolYear).");
+        }
+        if (!SCHOOL_YEAR_FORMAT.matcher(value).matches()) {
+            throw new BadRequestException("Niên khóa phải đúng định dạng YYYY-YYYY (ví dụ 2024-2025).");
+        }
+        return value;
     }
 
     private static Integer toInteger(Object v) {
@@ -813,7 +821,7 @@ public class ClassService {
             classEntity.setSchoolYear(null);
             return;
         }
-        String name = schoolYearNameObj.toString().trim();
+        String name = normalizeAndValidateSchoolYearName(schoolYearNameObj.toString());
         Integer schoolId = null;
         if (schoolIdObj instanceof Integer) schoolId = (Integer) schoolIdObj;
         else if (schoolIdObj instanceof Number) schoolId = ((Number) schoolIdObj).intValue();

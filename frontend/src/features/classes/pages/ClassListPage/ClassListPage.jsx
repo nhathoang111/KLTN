@@ -9,6 +9,7 @@ import ClassFormModal from '../../components/ClassFormModal';
 import ClassYearArchiveModal from '../../components/ClassYearArchiveModal';
 import ClassRolloverModal from '../../components/ClassRolloverModal';
 import { buildTeacherVisibleClasses } from '../../../../shared/lib/teacherScope';
+import { isValidSchoolYearFormat } from '../../../../shared/lib/schoolYearFormat';
 
 /** Tên niên khóa từ object lớp (API có thể trả schoolYear là object hoặc chuỗi). */
 function schoolYearLabel(c) {
@@ -204,6 +205,10 @@ const ClassListPage = () => {
         return;
       }
       const schoolYearStr = (typeof formData.schoolYear === 'string' ? formData.schoolYear : (formData.schoolYear?.name ?? '')).trim();
+      if (!isValidSchoolYearFormat(schoolYearStr)) {
+        toast.error('Niên khóa phải đúng định dạng YYYY-YYYY (ví dụ 2024-2025).');
+        return;
+      }
       const name = schoolYearStr ? `${gradeLevel}/${classNumber} (${schoolYearStr})` : `Khối ${gradeLevel} - Lớp ${classNumber}`;
       const submitData = {
         ...formData,
@@ -383,8 +388,13 @@ const ClassListPage = () => {
       toast.error('Vui lòng chọn trường.');
       return;
     }
-    if (!yearArchiveSchoolYear.trim()) {
+    const archiveYear = yearArchiveSchoolYear.trim();
+    if (!archiveYear) {
       toast.error('Nhập tên niên khóa (ví dụ 2024-2025).');
+      return;
+    }
+    if (!isValidSchoolYearFormat(archiveYear)) {
+      toast.error('Niên khóa phải đúng định dạng YYYY-YYYY (ví dụ 2024-2025).');
       return;
     }
     try {
@@ -392,7 +402,7 @@ const ClassListPage = () => {
       const headers = { 'X-User-Role': user?.role?.name || '' };
       const res = await api.post(
         '/classes/actions/archive-school-year',
-        { schoolId: sid, schoolYear: yearArchiveSchoolYear.trim() },
+        { schoolId: sid, schoolYear: archiveYear },
         { headers }
       );
       toast.success(res.data?.message || `Đã lưu trữ ${res.data?.archivedCount ?? 0} lớp.`);
@@ -425,8 +435,14 @@ const ClassListPage = () => {
       toast.error('Vui lòng chọn trường.');
       return;
     }
-    if (!rolloverFromYear.trim() || !rolloverToYear.trim()) {
+    const fromYear = rolloverFromYear.trim();
+    const toYear = rolloverToYear.trim();
+    if (!fromYear || !toYear) {
       toast.error('Nhập đủ niên khóa nguồn và đích.');
+      return;
+    }
+    if (!isValidSchoolYearFormat(fromYear) || !isValidSchoolYearFormat(toYear)) {
+      toast.error('Niên khóa phải đúng định dạng YYYY-YYYY (ví dụ 2024-2025).');
       return;
     }
     try {
@@ -436,8 +452,8 @@ const ClassListPage = () => {
         '/classes/actions/rollover-school-year',
         {
           schoolId: sid,
-          fromSchoolYear: rolloverFromYear.trim(),
-          toSchoolYear: rolloverToYear.trim(),
+          fromSchoolYear: fromYear,
+          toSchoolYear: toYear,
         },
         { headers }
       );
@@ -450,7 +466,7 @@ const ClassListPage = () => {
         toast.warn(d.errors.slice(0, 5).join(' | ') + (d.errors.length > 5 ? ' …' : ''));
       }
       setShowRolloverModal(false);
-      setFilterSchoolYear(rolloverToYear.trim());
+      setFilterSchoolYear(toYear);
       fetchData();
     } catch (err) {
       const m = err.response?.data?.message || err.response?.data?.error || 'Chuyển niên khóa thất bại';

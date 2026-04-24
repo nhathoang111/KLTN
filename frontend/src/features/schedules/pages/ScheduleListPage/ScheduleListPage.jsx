@@ -847,9 +847,10 @@ const ScheduleListPage = () => {
       return { dayOfWeek: d, short: short[d], dayNum, count: getLessonCountForDay(d) };
     });
   }, [currentWeekStart, schedules]);
-  const teachingActionClasses = useMemo(
-    () => (classes || []).filter(isTeachingActiveClass),
-    [classes]
+  const viewClasses = classes || [];
+  const actionClasses = useMemo(
+    () => viewClasses.filter(isTeachingActiveClass),
+    [viewClasses]
   );
 
   const userRole = user?.role?.name?.toUpperCase();
@@ -909,7 +910,7 @@ const ScheduleListPage = () => {
                 style={{ padding: '5px' }}
               >
                 <option value="">-- Chọn lớp --</option>
-                {classes.map(cls => (
+                {viewClasses.map(cls => (
                   <option key={cls.id} value={cls.id}>{cls.name}</option>
                 ))}
               </select>
@@ -1242,7 +1243,7 @@ const ScheduleListPage = () => {
                   required
                 >
                   <option value="">-- Chọn lớp --</option>
-                  {teachingActionClasses.map(cls => (
+                  {actionClasses.map(cls => (
                     <option key={cls.id} value={cls.id}>{cls.name}</option>
                   ))}
                 </select>
@@ -1370,7 +1371,7 @@ const ScheduleListPage = () => {
                 required
               >
                 <option value="">-- Chọn lớp --</option>
-                {teachingActionClasses.map(cls => (
+                {actionClasses.map(cls => (
                   <option key={cls.id} value={cls.id}>{cls.name}</option>
                 ))}
               </select>

@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import api from '../../../../shared/lib/api';
 import { useAuth } from '../../../auth/context/AuthContext';
+import { isValidSchoolYearFormat } from '../../../../shared/lib/schoolYearFormat';
 
 function getApiErrorMessage(err, fallback) {
   const d = err?.response?.data;
@@ -218,6 +219,10 @@ const ClassEditPage = () => {
         return;
       }
       const schoolYearStr = (formData.schoolYear || '').trim();
+      if (!isValidSchoolYearFormat(schoolYearStr)) {
+        setError('Niên khóa phải đúng định dạng YYYY-YYYY (ví dụ 2024-2025).');
+        return;
+      }
       const name = schoolYearStr
         ? `${gradeLevel}/${classNumber} (${schoolYearStr})`
         : `Khối ${gradeLevel} - Lớp ${classNumber}`;
@@ -344,6 +349,8 @@ const ClassEditPage = () => {
                 id="schoolYear"
                 required
                 placeholder="VD: 2024-2025"
+                pattern="\d{4}-\d{4}"
+                title="Niên khóa phải đúng định dạng YYYY-YYYY (ví dụ 2024-2025)"
                 value={formData.schoolYear}
                 onChange={handleChange}
                 className="mt-1 block w-full rounded-md border border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"

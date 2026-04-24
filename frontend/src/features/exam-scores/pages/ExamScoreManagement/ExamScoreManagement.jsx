@@ -10,6 +10,7 @@ import {
   teacherClassIdsFromSections,
   teacherSubjectIdsFromSections,
 } from '../../../../shared/lib/teacherScope';
+import { isTeachingActiveClass } from '../../../../shared/lib/classStatus';
 
 const ADMIN_VIEW_SEMESTERS = [
   { value: '1', label: 'Học kỳ 1' },
@@ -1548,6 +1549,17 @@ const ExamScoreManagement = () => {
     return <span className={`es-score-pill ${scoreCellClass(n)}`}>{n.toFixed(1)}</span>;
   };
 
+  const userRole = user?.role?.name?.toUpperCase();
+  const isStudent = userRole === 'STUDENT';
+  const isParent = userRole === 'PARENT';
+  const isAdmin = userRole === 'ADMIN' || (userRole && userRole.startsWith('ADMIN'));
+  const isViewOnly = isStudent || isParent;
+  const viewClasses = classes || [];
+  const actionClasses = useMemo(
+    () => viewClasses.filter(isTeachingActiveClass),
+    [viewClasses]
+  );
+
   if (loading) {
     return (
       <div className="min-h-screen bg-slate-100 px-4 py-6">
@@ -1560,12 +1572,6 @@ const ExamScoreManagement = () => {
       </div>
     );
   }
-
-  const userRole = user?.role?.name?.toUpperCase();
-  const isStudent = userRole === 'STUDENT';
-  const isParent = userRole === 'PARENT';
-  const isAdmin = userRole === 'ADMIN' || (userRole && userRole.startsWith('ADMIN'));
-  const isViewOnly = isStudent || isParent;
 
   const handleToggleLock = async () => {
     const userRole = user?.role?.name?.toUpperCase();
@@ -1689,7 +1695,7 @@ const ExamScoreManagement = () => {
                 }}
               >
                 <option value="">-- Tất cả các lớp --</option>
-                {classes.map(cls => (
+                {viewClasses.map(cls => (
                   <option key={cls.id} value={cls.id}>
                     {cls.name}
                   </option>
@@ -2048,7 +2054,7 @@ const ExamScoreManagement = () => {
                     required
                   >
                     <option value="">Chọn lớp</option>
-                    {classes.map((classItem) => (
+                    {actionClasses.map((classItem) => (
                       <option key={classItem.id} value={classItem.id}>
                         {classItem.name}
                       </option>
