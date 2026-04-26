@@ -1014,6 +1014,23 @@ public class ScheduleService {
             schedule.setClassSection(matched);
         }
 
+        LocalDate effectiveDate = schedule.getDate();
+        Integer effectivePeriod = schedule.getPeriod();
+        Integer effectiveClassId = schedule.getClassEntity() != null ? schedule.getClassEntity().getId() : null;
+        Integer effectiveTeacherIdForConflict = schedule.getTeacher() != null ? schedule.getTeacher().getId() : null;
+        if (effectiveDate != null && effectivePeriod != null && (effectiveClassId != null || effectiveTeacherIdForConflict != null)) {
+            List<Schedule> conflicts = findConflictsByDate(
+                    effectiveDate,
+                    effectivePeriod,
+                    effectiveTeacherIdForConflict,
+                    effectiveClassId);
+            boolean hasConflict = conflicts.stream()
+                    .anyMatch(conflict -> conflict.getId() == null || !conflict.getId().equals(schedule.getId()));
+            if (hasConflict) {
+                throw new BadRequestException("Schedule conflict detected");
+            }
+        }
+
         Schedule saved = scheduleRepository.save(schedule);
         return scheduleRepository.findByIdWithRelations(saved.getId()).orElse(saved);
     }

@@ -75,6 +75,7 @@ const LeftSideBar = ({ user, onLogout }) => {
             case "/subjects":
                 return BookOpen;
             case "/schedules":
+            case "/schedules-template":
                 return CalendarDays;
             case "/exam-scores":
                 return NotebookPen;
@@ -111,6 +112,7 @@ const LeftSideBar = ({ user, onLogout }) => {
             { path: "/classes", label: "Quản lý lớp học", roles: ["ADMIN"] },
             { path: "/subjects", label: "Quản lý môn học", roles: ["ADMIN"] },
             { path: "/schedules", label: "Quản lý thời khóa biểu", roles: ["ADMIN"] },
+            { path: "/schedules-template", label: "Thiết lập TKB mẫu", roles: ["ADMIN"] },
             { path: "/exam-scores", label: "Quản lý điểm số", roles: ["ADMIN"] },
             { path: "/attendance", label: "Quản lý điểm danh", roles: ["ADMIN"] },
             { path: "/announcements", label: "Thông báo & Tài liệu", roles: ["ADMIN"] },

@@ -1,9 +1,12 @@
 package com.example.schoolmanagement.controller;
 
-import com.example.schoolmanagement.dto.schedule.ScheduleGenerateResult;
+import com.example.schoolmanagement.dto.schedule.ScheduleTemplateSaveRequest;
+import com.example.schoolmanagement.dto.schedule.GenerateFromTemplateRequest;
 import com.example.schoolmanagement.entity.Schedule;
+import com.example.schoolmanagement.entity.ScheduleTemplate;
 import com.example.schoolmanagement.exception.BadRequestException;
 import com.example.schoolmanagement.service.ScheduleService;
+import com.example.schoolmanagement.service.ScheduleTemplateService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -19,6 +22,8 @@ public class ScheduleController {
 
     @Autowired
     private ScheduleService scheduleService;
+    @Autowired
+    private ScheduleTemplateService scheduleTemplateService;
 
     @GetMapping
     public ResponseEntity<?> getAllSchedules(
@@ -101,29 +106,7 @@ public class ScheduleController {
 
     @PostMapping("/generate")
     public ResponseEntity<?> generateSchedules(@RequestBody Map<String, Object> request) {
-        Object classIdObj = request.get("classId");
-        Integer classId = null;
-        if (classIdObj instanceof Number) {
-            classId = ((Number) classIdObj).intValue();
-        }
-        Object schoolIdObj = request.get("schoolId");
-        Integer schoolId = schoolIdObj instanceof Number ? ((Number) schoolIdObj).intValue() : null;
-        @SuppressWarnings("unchecked")
-        List<Map<String, Object>> subjectAssignments = (List<Map<String, Object>>) request.get("subjectAssignments");
-        Object numberOfWeeksObj = request.get("numberOfWeeks");
-        Integer numberOfWeeks = numberOfWeeksObj instanceof Number
-                ? ((Number) numberOfWeeksObj).intValue() : 1;
-        String session = request.get("session") != null ? String.valueOf(request.get("session")) : "BOTH";
-        if (numberOfWeeks == null || numberOfWeeks < 1) {
-            numberOfWeeks = 1;
-        }
-
-        if (classId == null || subjectAssignments == null || subjectAssignments.isEmpty()) {
-            throw new BadRequestException("classId and subjectAssignments are required");
-        }
-
-        ScheduleGenerateResult result = scheduleService.generateSchedules(classId, schoolId, subjectAssignments, numberOfWeeks, session);
-        return ResponseEntity.ok(result);
+        throw new BadRequestException("Chức năng tạo thời khóa biểu tự động đã tắt. Vui lòng sinh từ thời khóa biểu mẫu.");
     }
 
     @DeleteMapping("/class/{classId}")
@@ -140,5 +123,44 @@ public class ScheduleController {
         return ResponseEntity.ok(Map.of(
                 "message", "All schedules deleted successfully",
                 "count", deletedCount));
+    }
+
+    @PostMapping("/template")
+    public ResponseEntity<?> saveScheduleTemplate(@RequestBody ScheduleTemplateSaveRequest request) {
+        List<ScheduleTemplate> templates = scheduleTemplateService.saveTemplate(request);
+        return ResponseEntity.ok(Map.of(
+                "message", "Đã lưu thời khóa biểu mẫu thành công.",
+                "templates", templates,
+                "count", templates.size()));
+    }
+
+    @GetMapping("/template/class/{classId}")
+    public ResponseEntity<?> getScheduleTemplate(@PathVariable Integer classId,
+                                                 @RequestParam String weekStart) {
+        if (weekStart == null || weekStart.trim().isEmpty()) {
+            throw new BadRequestException("weekStart is required");
+        }
+        List<ScheduleTemplate> templates = scheduleTemplateService.getTemplateByClassAndWeekStart(
+                classId, java.time.LocalDate.parse(weekStart.trim()));
+        return ResponseEntity.ok(Map.of(
+                "templates", templates,
+                "count", templates.size()));
+    }
+
+    @DeleteMapping("/template/class/{classId}")
+    public ResponseEntity<?> deleteScheduleTemplate(@PathVariable Integer classId,
+                                                    @RequestParam String weekStart) {
+        if (weekStart == null || weekStart.trim().isEmpty()) {
+            throw new BadRequestException("weekStart is required");
+        }
+        int deletedCount = scheduleTemplateService.deleteTemplate(classId, java.time.LocalDate.parse(weekStart.trim()));
+        return ResponseEntity.ok(Map.of(
+                "message", "Đã xóa thời khóa biểu mẫu thành công.",
+                "count", deletedCount));
+    }
+
+    @PostMapping("/generate-from-template")
+    public ResponseEntity<?> generateFromTemplate(@RequestBody GenerateFromTemplateRequest request) {
+        return ResponseEntity.ok(scheduleTemplateService.generateFromTemplate(request));
     }
 }

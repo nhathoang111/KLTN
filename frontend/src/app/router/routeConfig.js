@@ -19,8 +19,8 @@ import RoleManagement from "../../features/roles/pages/RoleManagement/RoleManage
 import ExamScoreManagement from "../../features/exam-scores/pages/ExamScoreManagement/ExamScoreManagement";
 import AttendanceManagement from "../../features/attendance/pages/AttendanceManagement/AttendanceManagement";
 import RecordListPage from "../../features/records/pages/RecordListPage/RecordListPage";
-import ScheduleListPage from "../../features/schedules/pages/ScheduleListPage/ScheduleListPage";
 import ScheduleFullCalendarPage from "../../features/schedules/pages/ScheduleFullCalendarPage/ScheduleFullCalendarPage";
+import ScheduleTemplatePage from "../../features/schedules/pages/ScheduleTemplatePage/ScheduleTemplatePage";
 import ProfilePageWrapper from "../../features/dashboard/pages/ProfilePageWrapper";
 
 export const protectedRoutes = [
@@ -45,7 +45,7 @@ export const protectedRoutes = [
   { path: "exam-scores", Component: ExamScoreManagement, roles: ["SUPER_ADMIN", "ADMIN", "TEACHER", "STUDENT", "PARENT"] },
   { path: "attendance", Component: AttendanceManagement, roles: ["SUPER_ADMIN", "ADMIN", "TEACHER", "STUDENT", "PARENT"] },
   { path: "records", Component: RecordListPage, roles: ["SUPER_ADMIN", "ADMIN"] },
-  { path: "schedules", Component: ScheduleListPage, roles: ["SUPER_ADMIN", "ADMIN", "TEACHER", "STUDENT", "PARENT"] },
-  { path: "schedules-fullcalendar", Component: ScheduleFullCalendarPage, roles: ["SUPER_ADMIN", "ADMIN", "TEACHER", "STUDENT", "PARENT"] },
+  { path: "schedules", Component: ScheduleFullCalendarPage, roles: ["SUPER_ADMIN", "ADMIN", "TEACHER", "STUDENT", "PARENT"] },
+  { path: "schedules-template", Component: ScheduleTemplatePage, roles: ["SUPER_ADMIN", "ADMIN"] },
   { path: "profile", Component: ProfilePageWrapper, roles: ["STUDENT", "TEACHER"] },
 ];

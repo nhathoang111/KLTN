@@ -15,6 +15,7 @@ import {
 import { colorsForSubject } from '../ScheduleListPage/subjectColors';
 import './ScheduleFullCalendarPage.css';
 import { buildTeacherVisibleClasses } from '../../../../shared/lib/teacherScope';
+import { useNavigate } from 'react-router-dom';
 
 const lessonRows = [...TIMELINE_MORNING, ...TIMELINE_AFTERNOON].filter(
   (row) => row.type === 'lesson' && typeof row.period === 'number'
@@ -36,16 +37,43 @@ const toIsoDateTime = (dateInput, minutesFromStartOfDay) => {
 
 const ScheduleFullCalendarPage = () => {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [classes, setClasses] = useState([]);
+  const [subjects, setSubjects] = useState([]);
+  const [teachers, setTeachers] = useState([]);
   const [selectedClassId, setSelectedClassId] = useState('');
   const [schedules, setSchedules] = useState([]);
   const [currentView, setCurrentView] = useState('timeGridWeek');
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [showGenerateFromTemplateModal, setShowGenerateFromTemplateModal] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [generatingFromTemplate, setGeneratingFromTemplate] = useState(false);
+  const [formData, setFormData] = useState({
+    classId: '',
+    subjectId: '',
+    teacherId: '',
+    date: '',
+    period: '',
+    room: '',
+  });
+  const [templateWeekStart, setTemplateWeekStart] = useState(() => {
+    const d = new Date();
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  });
+  const [generateFromTemplateData, setGenerateFromTemplateData] = useState({
+    semesterStart: '',
+    semesterEnd: '',
+  });
 
   const userRole = user?.role?.name?.toUpperCase();
   const isStudent = userRole === 'STUDENT';
   const isTeacher = userRole === 'TEACHER';
   const isParent = userRole === 'PARENT';
+  const isAdmin = userRole === 'ADMIN' || userRole === 'SUPER_ADMIN';
   const isViewOnly = isStudent || isTeacher || isParent;
 
   useEffect(() => {
@@ -109,6 +137,25 @@ const ScheduleFullCalendarPage = () => {
       if (allClasses.length > 0 && !selectedClassId) {
         setSelectedClassId(String(allClasses[0].id));
       }
+
+      if (isAdmin) {
+        try {
+          const schoolIdForFetch = schoolId || allClasses[0]?.school?.id || null;
+          const [subjectsRes, usersRes] = await Promise.all([
+            schoolIdForFetch ? api.get(`/subjects/school/${schoolIdForFetch}`) : api.get('/subjects'),
+            schoolIdForFetch ? api.get(`/users?userRole=ADMIN&schoolId=${schoolIdForFetch}`) : api.get('/users?userRole=TEACHER'),
+          ]);
+          setSubjects(subjectsRes.data?.subjects || []);
+          const teacherUsers = (usersRes.data?.users || []).filter((u) => {
+            const rn = (u?.role?.name || '').toUpperCase();
+            return rn === 'TEACHER' || rn.startsWith('TEACHER') || rn.includes('GIÁO VIÊN') || rn.includes('GIAO VIEN');
+          });
+          setTeachers(teacherUsers);
+        } catch (_) {
+          setSubjects([]);
+          setTeachers([]);
+        }
+      }
     } finally {
       setLoading(false);
     }
@@ -140,6 +187,23 @@ const ScheduleFullCalendarPage = () => {
       setSchedules(schedulesData);
     } catch (_) {
       setSchedules([]);
+    }
+  };
+
+  const handleDeleteAllByClass = async () => {
+    if (!selectedClassId) {
+      window.alert('Vui lòng chọn lớp trước khi xóa toàn bộ thời khóa biểu.');
+      return;
+    }
+    if (!window.confirm('Bạn có chắc muốn xóa toàn bộ thời khóa biểu của lớp đang chọn?')) {
+      return;
+    }
+    try {
+      await api.delete(`/schedules/class/${selectedClassId}`);
+      window.alert('Đã xóa toàn bộ thời khóa biểu của lớp.');
+      fetchSchedules();
+    } catch (error) {
+      window.alert(error?.response?.data?.error || 'Xóa thời khóa biểu thất bại.');
     }
   };
 
@@ -180,6 +244,95 @@ const ScheduleFullCalendarPage = () => {
       .filter(Boolean);
   }, [schedules]);
 
+  const openAddModal = () => {
+    setFormData({
+      classId: selectedClassId || '',
+      subjectId: '',
+      teacherId: '',
+      date: '',
+      period: '',
+      room: '',
+    });
+    setShowAddModal(true);
+  };
+
+  const handleAddSchedule = async (e) => {
+    e.preventDefault();
+    if (!formData.classId || !formData.date || !formData.period) {
+      window.alert('Vui lòng chọn lớp, ngày và tiết.');
+      return;
+    }
+    try {
+      setSubmitting(true);
+      await api.post('/schedules', {
+        classId: Number(formData.classId),
+        subjectId: formData.subjectId ? Number(formData.subjectId) : null,
+        teacherId: formData.teacherId ? Number(formData.teacherId) : null,
+        date: formData.date,
+        period: Number(formData.period),
+        room: formData.room || null,
+      });
+      window.alert('Đã thêm lịch học bù thành công.');
+      setShowAddModal(false);
+      if (String(selectedClassId) !== String(formData.classId)) {
+        setSelectedClassId(String(formData.classId));
+      } else {
+        fetchSchedules();
+      }
+    } catch (error) {
+      window.alert(error?.response?.data?.error || 'Thêm lịch học bù thất bại.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const normalizeToMonday = (dateStr) => {
+    if (!dateStr) return dateStr;
+    const d = new Date(dateStr);
+    const day = d.getDay();
+    const diff = day === 0 ? -6 : 1 - day;
+    d.setDate(d.getDate() + diff);
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${dd}`;
+  };
+
+  const handleGenerateFromTemplate = async () => {
+    if (!selectedClassId) {
+      window.alert('Vui lòng chọn lớp.');
+      return;
+    }
+    if (!templateWeekStart || !generateFromTemplateData.semesterStart || !generateFromTemplateData.semesterEnd) {
+      window.alert('Vui lòng nhập đầy đủ tuần mẫu, ngày bắt đầu và ngày kết thúc học kỳ.');
+      return;
+    }
+    if (!window.confirm('Hệ thống sẽ xóa toàn bộ thời khóa biểu hiện có của lớp trong khoảng học kỳ trước khi sinh lại. Tiếp tục?')) {
+      return;
+    }
+    try {
+      setGeneratingFromTemplate(true);
+      const payload = {
+        classId: Number(selectedClassId),
+        weekStartTemplate: normalizeToMonday(templateWeekStart),
+        semesterStart: generateFromTemplateData.semesterStart,
+        semesterEnd: generateFromTemplateData.semesterEnd,
+      };
+      const res = await api.post('/schedules/generate-from-template', payload);
+      const data = res.data || {};
+      window.alert(
+        `${data.message || 'Đã sinh thời khóa biểu từ mẫu.'}\n` +
+        `Đã xóa: ${data.deletedCount ?? 0} | Đã tạo: ${data.createdCount ?? 0} | Bỏ qua (quá khứ): ${data.skippedPastDateCount ?? 0}`
+      );
+      setShowGenerateFromTemplateModal(false);
+      fetchSchedules();
+    } catch (error) {
+      window.alert(error?.response?.data?.error || 'Sinh thời khóa biểu từ mẫu thất bại.');
+    } finally {
+      setGeneratingFromTemplate(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="schedule-fullcalendar-page">
@@ -190,8 +343,47 @@ const ScheduleFullCalendarPage = () => {
 
   return (
     <div className="schedule-fullcalendar-page">
-      <div className="common-page-header">
-        <h1>Thời khóa biểu (FullCalendar)</h1>
+      <div className="schedule-fullcalendar-hero">
+        <div className="schedule-fullcalendar-hero__main">
+          <div className="schedule-fullcalendar-hero__icon" aria-hidden="true">📅</div>
+          <div className="schedule-fullcalendar-hero__text">
+            <h1>Thời khóa biểu</h1>
+            <p>Quản lý và thao tác thời khóa biểu dễ dàng, nhanh chóng</p>
+          </div>
+        </div>
+        {isAdmin && (
+          <div className="schedule-fullcalendar-actions">
+            <button
+              type="button"
+              className="inline-flex items-center gap-2 rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              onClick={() => navigate('/schedules-template')}
+            >
+              Thiết lập TKB mẫu
+            </button>
+            <button
+              type="button"
+              className="inline-flex items-center gap-2 rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              onClick={() => setShowGenerateFromTemplateModal(true)}
+            >
+              Sinh TKB mẫu
+            </button>
+            <button
+              type="button"
+              className="inline-flex items-center gap-2 rounded-full bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-md shadow-indigo-500/30 hover:bg-indigo-500"
+              onClick={openAddModal}
+            >
+              Thêm lịch học bù
+            </button>
+            <button
+              type="button"
+              className="inline-flex items-center gap-2 rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+              onClick={handleDeleteAllByClass}
+              disabled={!selectedClassId}
+            >
+              Xóa toàn bộ TKB lớp này
+            </button>
+          </div>
+        )}
       </div>
 
       {!isStudent && (
@@ -289,6 +481,142 @@ const ScheduleFullCalendarPage = () => {
                 : 'Chưa có dữ liệu thời khóa biểu cho lớp hiện tại.'}
             </div>
           )}
+        </div>
+      )}
+      {showAddModal && (
+        <div className="modal-overlay" onClick={() => setShowAddModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <h2>Thêm lịch học bù</h2>
+            <form onSubmit={handleAddSchedule}>
+              <div className="form-group">
+                <label>Lớp *</label>
+                <select
+                  value={formData.classId}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, classId: e.target.value }))}
+                  required
+                >
+                  <option value="">-- Chọn lớp --</option>
+                  {classes.map((cls) => (
+                    <option key={cls.id} value={cls.id}>{cls.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="form-group">
+                <label>Môn học</label>
+                <select
+                  value={formData.subjectId}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, subjectId: e.target.value }))}
+                >
+                  <option value="">-- Chọn môn --</option>
+                  {subjects.map((s) => (
+                    <option key={s.id} value={s.id}>{s.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="form-group">
+                <label>Giáo viên</label>
+                <select
+                  value={formData.teacherId}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, teacherId: e.target.value }))}
+                >
+                  <option value="">-- Chọn giáo viên --</option>
+                  {teachers.map((t) => (
+                    <option key={t.id} value={t.id}>{t.fullName}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="form-group">
+                <label>Ngày *</label>
+                <input
+                  type="date"
+                  value={formData.date}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, date: e.target.value }))}
+                  required
+                />
+              </div>
+              <div className="form-group">
+                <label>Tiết *</label>
+                <select
+                  value={formData.period}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, period: e.target.value }))}
+                  required
+                >
+                  <option value="">-- Chọn tiết --</option>
+                  {Array.from({ length: 10 }, (_, i) => (
+                    <option key={i + 1} value={i + 1}>Tiết {i + 1}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="form-group">
+                <label>Phòng học</label>
+                <input
+                  type="text"
+                  value={formData.room}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, room: e.target.value }))}
+                  placeholder="VD: A101"
+                />
+              </div>
+              <div className="form-actions">
+                <button type="submit" className="btn btn-primary" disabled={submitting}>
+                  {submitting ? 'Đang thêm...' : 'Thêm'}
+                </button>
+                <button type="button" className="btn btn-secondary" onClick={() => setShowAddModal(false)}>
+                  Hủy
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+      {showGenerateFromTemplateModal && (
+        <div className="modal-overlay" onClick={() => setShowGenerateFromTemplateModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '560px' }}>
+            <h2>Sinh thời khóa biểu học kỳ từ mẫu</h2>
+            <div className="form-group">
+              <label>Tuần mẫu</label>
+              <input
+                type="date"
+                value={templateWeekStart}
+                onChange={(e) => setTemplateWeekStart(normalizeToMonday(e.target.value))}
+              />
+            </div>
+            <div className="form-group">
+              <label>Ngày bắt đầu học kỳ</label>
+              <input
+                type="date"
+                value={generateFromTemplateData.semesterStart}
+                onChange={(e) => setGenerateFromTemplateData((p) => ({ ...p, semesterStart: e.target.value }))}
+              />
+            </div>
+            <div className="form-group">
+              <label>Ngày kết thúc học kỳ</label>
+              <input
+                type="date"
+                value={generateFromTemplateData.semesterEnd}
+                onChange={(e) => setGenerateFromTemplateData((p) => ({ ...p, semesterEnd: e.target.value }))}
+              />
+            </div>
+            <p style={{ color: '#c0392b', fontSize: '0.9rem' }}>
+              Lưu ý: hệ thống sẽ xóa toàn bộ lịch hiện có của lớp trong khoảng học kỳ trước khi sinh lại.
+            </p>
+            <div className="form-actions">
+              <button
+                type="button"
+                className="inline-flex items-center justify-center gap-2 rounded-full bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-md shadow-indigo-500/30 hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
+                onClick={handleGenerateFromTemplate}
+                disabled={generatingFromTemplate}
+              >
+                {generatingFromTemplate ? 'Đang sinh...' : 'Sinh học kỳ'}
+              </button>
+              <button
+                type="button"
+                className="inline-flex items-center justify-center gap-2 rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                onClick={() => setShowGenerateFromTemplateModal(false)}
+              >
+                Hủy
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
