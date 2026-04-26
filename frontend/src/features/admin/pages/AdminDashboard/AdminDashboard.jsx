@@ -23,17 +23,45 @@ const AdminDashboard = () => {
     { title: 'Thông báo', icon: 'AN', path: '/announcements', color: '#22c55e', description: 'Đăng thông báo của nhà trường' },
   ];
 
-  const attendanceData = [
-    { day: 'Mon', value: 75 },
-    { day: 'Tue', value: 82 },
-    { day: 'Wed', value: 95 },
-    { day: 'Thu', value: 88 },
-    { day: 'Fri', value: 91 },
-  ];
+  const [attendanceData, setAttendanceData] = useState([]);
 
   const [notifications, setNotifications] = useState([]);
   /** Thống kê số lớp theo khối: [{ gradeLevel: 6, count: 2 }, ...] */
   const [classStatsByGrade, setClassStatsByGrade] = useState([]);
+
+  const buildRecentWeekAttendance = async (classes) => {
+    const labels = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
+    const now = new Date();
+    const workDays = [5, 4, 3, 2, 1].map((offset) => {
+      const d = new Date(now);
+      d.setDate(now.getDate() - offset);
+      return d;
+    });
+    const values = await Promise.all(
+      workDays.map(async (day) => {
+        const dateStr = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')}`;
+        const records = await Promise.all(
+          classes.map(async (cls) => {
+            try {
+              const res = await api.get('/attendance', { params: { classId: cls.id, date: dateStr } });
+              return res.data?.attendance || res.data?.items || [];
+            } catch {
+              return [];
+            }
+          })
+        );
+        const flat = records.flat();
+        if (flat.length === 0) return { day: labels[day.getDay()], value: 0 };
+        const presentLike = flat.filter((it) => {
+          const st = String(it.status || '').toUpperCase();
+          return st === 'PRESENT' || st === 'LATE';
+        }).length;
+        const pct = Math.round((presentLike / flat.length) * 100);
+        return { day: labels[day.getDay()], value: pct };
+      })
+    );
+    setAttendanceData(values);
+  };
 
   const formatTimeAgo = (dateStr) => {
     if (!dateStr) return '';
@@ -86,6 +114,7 @@ const AdminDashboard = () => {
           .map(([gradeLevel, count]) => ({ gradeLevel: Number(gradeLevel), count }))
           .sort((a, b) => a.gradeLevel - b.gradeLevel);
         setClassStatsByGrade(gradeStats);
+        await buildRecentWeekAttendance(classes);
       } else {
         const response = await api.get('/schools');
         const firstSchool = response.data.schools?.[0] || null;
@@ -122,6 +151,7 @@ const AdminDashboard = () => {
             .map(([gradeLevel, count]) => ({ gradeLevel: Number(gradeLevel), count }))
             .sort((a, b) => a.gradeLevel - b.gradeLevel);
           setClassStatsByGrade(gradeStats);
+          await buildRecentWeekAttendance(classes);
         } else {
           const annRes = await api.get('/announcements');
           const list = annRes.data?.announcements || [];
@@ -130,6 +160,7 @@ const AdminDashboard = () => {
           );
           setNotifications(sorted.slice(0, 5));
           setClassStatsByGrade([]);
+          setAttendanceData([]);
         }
       }
     } catch (error) {
@@ -289,7 +320,7 @@ const AdminDashboard = () => {
               <span>Đi học</span>
             </div>
             <div className="ad-attendance-chart">
-              {attendanceData.map((item) => (
+              {(attendanceData.length ? attendanceData : [{ day: 'T2', value: 0 }, { day: 'T3', value: 0 }, { day: 'T4', value: 0 }, { day: 'T5', value: 0 }, { day: 'T6', value: 0 }]).map((item) => (
                 <div key={item.day} className="ad-attendance-bar-item">
                   <div
                     className="ad-attendance-bar"

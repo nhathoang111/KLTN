@@ -1033,6 +1033,23 @@ public class UserService {
                 .collect(Collectors.toList());
     }
 
+    /** Danh sách phụ huynh của học sinh (phục vụ dashboard hồ sơ học sinh). */
+    @Transactional(readOnly = true)
+    public List<Map<String, Object>> getParentsForStudent(Integer studentId) {
+        List<ParentStudent> list = parentStudentRepository.findByStudentIdWithRelations(studentId);
+        return list.stream()
+                .map(ps -> {
+                    User p = ps.getParent();
+                    Map<String, Object> row = new HashMap<>();
+                    row.put("id", p != null ? p.getId() : null);
+                    row.put("fullName", p != null ? p.getFullName() : null);
+                    row.put("phone", p != null ? p.getPhone() : null);
+                    row.put("email", p != null ? p.getEmail() : null);
+                    return row;
+                })
+                .collect(Collectors.toList());
+    }
+
     /** Danh sách subjectId của giáo viên (dùng cho form sửa TEACHER). Không load entity Subject. */
     @Transactional(readOnly = true)
     public List<Integer> getSubjectIdsForTeacher(Integer teacherId) {

@@ -117,6 +117,16 @@ public class UserController {
         return ResponseEntity.ok(Map.of("studentIds", studentIds));
     }
 
+    @GetMapping("/{id}/parents")
+    public ResponseEntity<?> getParentsByStudent(@PathVariable Integer id,
+                                                 @RequestHeader(value = "X-User-Id", required = false) Integer currentUserId,
+                                                 @RequestHeader(value = "X-User-Role", required = false) String currentUserRole) {
+        if (currentUserRole != null && currentUserRole.toUpperCase().contains("STUDENT") && currentUserId != null && !id.equals(currentUserId)) {
+            return ResponseEntity.status(403).body(Map.of("error", "Học sinh chỉ được xem thông tin phụ huynh của chính mình."));
+        }
+        return ResponseEntity.ok(Map.of("parents", userService.getParentsForStudent(id)));
+    }
+
     @GetMapping("/{id}/teacher-subjects")
     public ResponseEntity<?> getTeacherSubjectIds(@PathVariable Integer id) {
         List<Integer> subjectIds = userService.getSubjectIdsForTeacher(id);

@@ -11,7 +11,6 @@ import api from '../../../../shared/lib/api';
 import { formatGradeAnalysisForDisplay } from '../../../../shared/lib/formatGradeAnalysisForDisplay';
 import { scheduleSubjectDisplayName } from '../../../../shared/lib/scheduleLabels';
 import { useAuth } from '../../../auth/context/AuthContext';
-import { MOCK_PROGRESS_CHART } from '../StudentDashboard/mockData';
 import '../StudentDashboard/StudentDashboard.css';
 import './ParentDashboard.css';
 
@@ -105,6 +104,17 @@ function buildMonthlyProgressFromScores(examScores) {
   });
   const isReal = data.length >= 2;
   return { data, isReal };
+}
+
+function getAcademicYearLabelFromData(studentDetail, classInfo) {
+  const fromDetail = studentDetail?.class?.schoolYear;
+  if (typeof fromDetail === 'string' && fromDetail.trim()) return fromDetail;
+  const fromClass = classInfo?.schoolYear;
+  if (typeof fromClass === 'string' && fromClass.trim()) return fromClass;
+  const now = new Date();
+  const y = now.getFullYear();
+  const startYear = now.getMonth() >= 7 ? y : y - 1;
+  return `${startYear} - ${startYear + 1}`;
 }
 
 // --- MAIN COMPONENT ---
@@ -396,6 +406,7 @@ const ParentDashboard = () => {
   const className = displayUser?.class?.name || classInfo?.name || '—';
   const schoolName = displayUser?.school?.name || user?.school?.name || 'Trường';
   const studentCode = displayUser?.studentCode || displayUser?.student_code || displayUser?.code || `HS${String(selectedChildId).padStart(5, '0')}`;
+  const academicYearLabel = getAcademicYearLabelFromData(studentDetail, classInfo);
 
   const scheduleRowsWithAttendance = useMemo(() => {
     return todaySchedules.map((schedule) => {
@@ -454,7 +465,7 @@ const ParentDashboard = () => {
                 <span className="sd2-dot">•</span>
                 Học kỳ {semesterUi}
                 <span className="sd2-dot">•</span>
-                Năm học 2025 - 2026
+                Năm học {academicYearLabel}
               </p>
               <div className="sd2-hero-tags">
                 <span className="sd2-tag">

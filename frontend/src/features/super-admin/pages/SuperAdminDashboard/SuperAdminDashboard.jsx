@@ -34,6 +34,12 @@ const SuperAdminDashboard = () => {
     inactive: 0,
   });
   const [recentSchools, setRecentSchools] = useState([]);
+  const [roleStats, setRoleStats] = useState({
+    admin: 0,
+    teacher: 0,
+    student: 0,
+    parent: 0,
+  });
 
   useEffect(() => {
     fetchStats();
@@ -70,6 +76,19 @@ const SuperAdminDashboard = () => {
         schools: schoolsData.length || 0,
         users: usersRes.data.users?.length || 0,
       });
+      const users = usersRes.data.users || [];
+      const nextRoleStats = users.reduce(
+        (acc, u) => {
+          const rn = String(u?.role?.name || '').toUpperCase();
+          if (rn.includes('TEACHER')) acc.teacher += 1;
+          else if (rn.includes('STUDENT')) acc.student += 1;
+          else if (rn.includes('PARENT')) acc.parent += 1;
+          else if (rn.includes('ADMIN')) acc.admin += 1;
+          return acc;
+        },
+        { admin: 0, teacher: 0, student: 0, parent: 0 }
+      );
+      setRoleStats(nextRoleStats);
     } catch (error) {
       console.error('Error fetching stats:', error);
     } finally {
@@ -93,6 +112,19 @@ const SuperAdminDashboard = () => {
     const maxPixel = 120;
     return `${(value / max) * maxPixel}px`;
   };
+  const totalRoleUsers = roleStats.admin + roleStats.teacher + roleStats.student + roleStats.parent;
+  const donutBackground = (() => {
+    if (!totalRoleUsers) return 'conic-gradient(#e2e8f0 0 360deg)';
+    const adminDeg = (roleStats.admin / totalRoleUsers) * 360;
+    const teacherDeg = (roleStats.teacher / totalRoleUsers) * 360;
+    const studentDeg = (roleStats.student / totalRoleUsers) * 360;
+    return `conic-gradient(
+      #6366f1 0 ${adminDeg}deg,
+      #06b6d4 ${adminDeg}deg ${adminDeg + teacherDeg}deg,
+      #22c55e ${adminDeg + teacherDeg}deg ${adminDeg + teacherDeg + studentDeg}deg,
+      #f59e0b ${adminDeg + teacherDeg + studentDeg}deg 360deg
+    )`;
+  })();
 
   if (loading) {
     return (
@@ -171,7 +203,7 @@ const SuperAdminDashboard = () => {
             <span className="sa-card-title">Người dùng theo vai trò</span>
           </div>
           <div className="sa-chart-body">
-            <div className="sa-donut-chart">
+            <div className="sa-donut-chart" style={{ background: donutBackground }}>
               <div className="sa-donut-center">
                 <span>{stats.users}</span>
                 <span>Người dùng</span>
@@ -180,19 +212,19 @@ const SuperAdminDashboard = () => {
             <div className="sa-legend">
               <div className="sa-legend-item">
                 <span className="sa-legend-dot sa-legend-dot--admin" />
-                <span>Admin</span>
+                <span>Admin ({roleStats.admin})</span>
               </div>
               <div className="sa-legend-item">
                 <span className="sa-legend-dot sa-legend-dot--teacher" />
-                <span>Giáo viên</span>
+                <span>Giáo viên ({roleStats.teacher})</span>
               </div>
               <div className="sa-legend-item">
                 <span className="sa-legend-dot sa-legend-dot--student" />
-                <span>Học sinh</span>
+                <span>Học sinh ({roleStats.student})</span>
               </div>
               <div className="sa-legend-item">
                 <span className="sa-legend-dot sa-legend-dot--parent" />
-                <span>Phụ huynh</span>
+                <span>Phụ huynh ({roleStats.parent})</span>
               </div>
             </div>
           </div>
