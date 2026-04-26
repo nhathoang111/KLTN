@@ -106,10 +106,8 @@ function buildMonthlyProgressFromScores(examScores) {
   return { data, isReal };
 }
 
-function getAcademicYearLabelFromData(studentDetail, classInfo) {
-  const fromDetail = studentDetail?.class?.schoolYear;
-  if (typeof fromDetail === 'string' && fromDetail.trim()) return fromDetail;
-  const fromClass = classInfo?.schoolYear;
+function getAcademicYearLabelFromData(classInfo, studentDetail) {
+  const fromClass = classInfo?.schoolYear || studentDetail?.class?.schoolYear;
   if (typeof fromClass === 'string' && fromClass.trim()) return fromClass;
   const now = new Date();
   const startYear = now.getMonth() >= 7 ? now.getFullYear() : now.getFullYear() - 1;
@@ -405,7 +403,7 @@ const ParentDashboard = () => {
   const className = displayUser?.class?.name || classInfo?.name || '—';
   const schoolName = displayUser?.school?.name || user?.school?.name || 'Trường';
   const studentCode = displayUser?.studentCode || displayUser?.student_code || displayUser?.code || `HS${String(selectedChildId).padStart(5, '0')}`;
-  const academicYearLabel = getAcademicYearLabelFromData(studentDetail, classInfo);
+  const academicYearLabel = getAcademicYearLabelFromData(classInfo, studentDetail);
 
   const scheduleRowsWithAttendance = useMemo(() => {
     return todaySchedules.map((schedule) => {

@@ -23,45 +23,10 @@ const AdminDashboard = () => {
     { title: 'Thông báo', icon: 'AN', path: '/announcements', color: '#22c55e', description: 'Đăng thông báo của nhà trường' },
   ];
 
-  const [attendanceData, setAttendanceData] = useState([]);
-
   const [notifications, setNotifications] = useState([]);
   /** Thống kê số lớp theo khối: [{ gradeLevel: 6, count: 2 }, ...] */
   const [classStatsByGrade, setClassStatsByGrade] = useState([]);
-
-  const buildRecentWeekAttendance = async (classes) => {
-    const labels = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
-    const now = new Date();
-    const workDays = [5, 4, 3, 2, 1].map((offset) => {
-      const d = new Date(now);
-      d.setDate(now.getDate() - offset);
-      return d;
-    });
-    const values = await Promise.all(
-      workDays.map(async (day) => {
-        const dateStr = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')}`;
-        const records = await Promise.all(
-          classes.map(async (cls) => {
-            try {
-              const res = await api.get('/attendance', { params: { classId: cls.id, date: dateStr } });
-              return res.data?.attendance || res.data?.items || [];
-            } catch {
-              return [];
-            }
-          })
-        );
-        const flat = records.flat();
-        if (flat.length === 0) return { day: labels[day.getDay()], value: 0 };
-        const presentLike = flat.filter((it) => {
-          const st = String(it.status || '').toUpperCase();
-          return st === 'PRESENT' || st === 'LATE';
-        }).length;
-        const pct = Math.round((presentLike / flat.length) * 100);
-        return { day: labels[day.getDay()], value: pct };
-      })
-    );
-    setAttendanceData(values);
-  };
+  const [attendanceData, setAttendanceData] = useState([]);
 
   const formatTimeAgo = (dateStr) => {
     if (!dateStr) return '';
@@ -81,6 +46,56 @@ const AdminDashboard = () => {
   useEffect(() => {
     if (user) fetchSchoolInfo();
   }, [user]);
+
+  const buildRecentWeekAttendance = async (schoolId) => {
+    const classesRes = await api.get(`/classes/school/${schoolId}`);
+    const classes = classesRes.data?.classes || [];
+    const classIds = classes.map((c) => c.id).filter(Boolean);
+    if (!classIds.length) return [];
+
+    const now = new Date();
+    const dates = [];
+    for (let i = 1; i <= 10; i += 1) {
+      const d = new Date(now);
+      d.setDate(now.getDate() - i);
+      if (d.getDay() !== 0 && d.getDay() !== 6) dates.push(d);
+      if (dates.length === 5) break;
+    }
+    dates.reverse();
+
+    const values = await Promise.all(
+      dates.map(async (d) => {
+        const date = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        let present = 0;
+        let total = 0;
+        await Promise.all(
+          classIds.map(async (classId) => {
+            try {
+              const sectionsRes = await api.get(`/class-sections/class/${classId}`);
+              const sections = sectionsRes.data?.classSections || [];
+              await Promise.all(
+                sections.map(async (section) => {
+                  try {
+                    const attRes = await api.get('/attendance', { params: { classSectionId: section.id, date } });
+                    const items = attRes.data?.items || [];
+                    total += items.length;
+                    present += items.filter((it) => ['PRESENT', 'LATE'].includes(String(it.status || '').toUpperCase())).length;
+                  } catch {
+                    // bỏ qua lỗi cục bộ
+                  }
+                })
+              );
+            } catch {
+              // bỏ qua lỗi cục bộ
+            }
+          })
+        );
+        return total > 0 ? Math.round((present / total) * 100) : 0;
+      })
+    );
+
+    return dates.map((d, idx) => ({ day: `T${d.getDay() === 0 ? 7 : d.getDay()}`, value: values[idx] ?? 0 }));
+  };
 
   const fetchSchoolInfo = async () => {
     try {
@@ -114,7 +129,8 @@ const AdminDashboard = () => {
           .map(([gradeLevel, count]) => ({ gradeLevel: Number(gradeLevel), count }))
           .sort((a, b) => a.gradeLevel - b.gradeLevel);
         setClassStatsByGrade(gradeStats);
-        await buildRecentWeekAttendance(classes);
+        const attendance = await buildRecentWeekAttendance(schoolId).catch(() => []);
+        setAttendanceData(attendance);
       } else {
         const response = await api.get('/schools');
         const firstSchool = response.data.schools?.[0] || null;
@@ -151,7 +167,8 @@ const AdminDashboard = () => {
             .map(([gradeLevel, count]) => ({ gradeLevel: Number(gradeLevel), count }))
             .sort((a, b) => a.gradeLevel - b.gradeLevel);
           setClassStatsByGrade(gradeStats);
-          await buildRecentWeekAttendance(classes);
+          const attendance = await buildRecentWeekAttendance(schoolIdForAnn).catch(() => []);
+          setAttendanceData(attendance);
         } else {
           const annRes = await api.get('/announcements');
           const list = annRes.data?.announcements || [];
@@ -174,13 +191,14 @@ const AdminDashboard = () => {
           classes: user.school.classCount ?? prev.classes,
         }));
       }
+      setAttendanceData([]);
     } finally {
       setLoading(false);
     }
   };
 
   const getAttendanceBarHeight = (value) => {
-    const max = Math.max(...attendanceData.map((item) => item.value), 1);
+    const max = Math.max(...(attendanceData.length ? attendanceData.map((item) => item.value) : [1]), 1);
     const maxPixel = 110;
     return `${(value / max) * maxPixel}px`;
   };
@@ -320,7 +338,7 @@ const AdminDashboard = () => {
               <span>Đi học</span>
             </div>
             <div className="ad-attendance-chart">
-              {(attendanceData.length ? attendanceData : [{ day: 'T2', value: 0 }, { day: 'T3', value: 0 }, { day: 'T4', value: 0 }, { day: 'T5', value: 0 }, { day: 'T6', value: 0 }]).map((item) => (
+              {attendanceData.map((item) => (
                 <div key={item.day} className="ad-attendance-bar-item">
                   <div
                     className="ad-attendance-bar"

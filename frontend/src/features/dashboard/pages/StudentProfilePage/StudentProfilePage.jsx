@@ -65,6 +65,14 @@ function monGioiYeuFromRecent(recentScores) {
   return { gioi, yeu };
 }
 
+function classifyConductByAttendance(attendancePct) {
+  if (attendancePct == null) return 'Chưa có dữ liệu';
+  if (attendancePct >= 95) return 'Tốt';
+  if (attendancePct >= 85) return 'Khá';
+  if (attendancePct >= 70) return 'Trung bình';
+  return 'Cần cải thiện';
+}
+
 const StudentProfilePage = () => {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
@@ -73,8 +81,8 @@ const StudentProfilePage = () => {
   const [classInfo, setClassInfo] = useState(null);
   const [examScores, setExamScores] = useState([]);
   const [todaySchedules, setTodaySchedules] = useState([]);
-  const [parents, setParents] = useState([]);
   const [semesterUi, setSemesterUi] = useState('2');
+  const [parents, setParents] = useState([]);
   const [attendanceBySection, setAttendanceBySection] = useState({});
 
   const studentId = user?.id;
@@ -179,12 +187,6 @@ const StudentProfilePage = () => {
 
         setTodaySchedules(todayList);
         setExamScores(scoresRes.data?.examScores || []);
-        try {
-          const pRes = await api.get(`/users/${studentId}/parents`);
-          setParents(pRes.data?.parents || []);
-        } catch {
-          setParents([]);
-        }
         const classSectionIds = [...new Set(todayList.map((s) => s.classSection?.id || s.classSectionId).filter(Boolean))];
         if (classSectionIds.length > 0) {
           const attendanceEntries = await Promise.all(
@@ -202,6 +204,12 @@ const StudentProfilePage = () => {
           setAttendanceBySection(Object.fromEntries(attendanceEntries));
         } else {
           setAttendanceBySection({});
+        }
+        try {
+          const parentRes = await api.get(`/users/${studentId}/parents`);
+          setParents(parentRes.data?.parents || []);
+        } catch {
+          setParents([]);
         }
 
         if (cId) {
@@ -252,19 +260,15 @@ const StudentProfilePage = () => {
 
   const lessonsToday = todaySchedules.length;
   const scheduleRowsWithAttendance = useMemo(() => {
-    return todaySchedules.map((s) => {
-      const sectionId = String(s.classSection?.id || s.classSectionId || '');
-      const st = attendanceBySection[sectionId] || '';
-      const isAttended = st === 'PRESENT' || st === 'LATE';
-      return {
-        schedule: s,
-        isAttended,
-      };
-    });
+    return todaySchedules.map((s) => ({
+      schedule: s,
+      status: String(attendanceBySection[String(s.classSection?.id || s.classSectionId)] || '').toUpperCase(),
+    }));
   }, [todaySchedules, attendanceBySection]);
-  const attendedCount = scheduleRowsWithAttendance.filter((r) => r.isAttended).length;
+  const attendedCount = scheduleRowsWithAttendance.filter((r) => r.status === 'PRESENT' || r.status === 'LATE').length;
   const attendancePct =
     lessonsToday > 0 ? Math.round((attendedCount / lessonsToday) * 100) : null;
+  const conductLabel = classifyConductByAttendance(attendancePct);
 
   const avgScore =
     examScores.length > 0
@@ -375,12 +379,10 @@ const StudentProfilePage = () => {
           <span className="sd2-quickbar-label">Chuyên cần</span>
           <span className="sd2-quickbar-value">{attendancePct != null ? `${attendancePct}%` : '—'}</span>
         </div>
-        <div className="sd2-quickbar-cell sd2-quickbar-cell--conduct" title="Hạnh kiểm: chưa có API">
+        <div className="sd2-quickbar-cell sd2-quickbar-cell--conduct" title="Hạnh kiểm theo tỷ lệ chuyên cần">
           <Star className="sd2-quickbar-ic sd2-quickbar-ic--gold" size={22} strokeWidth={2} aria-hidden />
           <span className="sd2-quickbar-label">Hạnh kiểm</span>
-          <span className="sd2-quickbar-value">
-            {attendancePct == null ? 'Chưa có dữ liệu' : attendancePct >= 95 ? 'Tốt' : attendancePct >= 85 ? 'Khá' : 'Cần cải thiện'}
-          </span>
+          <span className="sd2-quickbar-value">{conductLabel}</span>
         </div>
         <div className="sd2-quickbar-cell sd2-quickbar-cell--teacher">
           <div className="sd2-teacher-av" aria-hidden>
@@ -460,16 +462,12 @@ const StudentProfilePage = () => {
             <div className="sd2-pi-row">
               <User className="sd2-pi-row-ic" size={18} strokeWidth={2} aria-hidden />
               <span className="sd2-pi-row-label">Phụ huynh</span>
-              <span className="sd2-pi-row-val sd2-pi-row-val--muted">
-                {parents.length > 0 ? parents.map((p) => p.fullName).filter(Boolean).join(', ') : 'Chưa cập nhật'}
-              </span>
+              <span className="sd2-pi-row-val">{parents[0]?.fullName || 'Chưa cập nhật'}</span>
             </div>
             <div className="sd2-pi-row">
               <Phone className="sd2-pi-row-ic" size={18} strokeWidth={2} aria-hidden />
               <span className="sd2-pi-row-label">Liên hệ PH</span>
-              <span className="sd2-pi-row-val sd2-pi-row-val--muted">
-                {parents.length > 0 ? parents.map((p) => p.phone).filter(Boolean).join(', ') || 'Chưa cập nhật' : 'Chưa cập nhật'}
-              </span>
+              <span className="sd2-pi-row-val">{parents[0]?.phone || 'Chưa cập nhật'}</span>
             </div>
           </div>
         </article>

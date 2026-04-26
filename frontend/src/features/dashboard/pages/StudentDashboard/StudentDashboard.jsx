@@ -1,13 +1,6 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import {
-  Area,
-  AreaChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from 'recharts';
+import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import {
   BarChart3,
   Bell,
@@ -91,7 +84,6 @@ function classifyConductByAttendance(attendancePct) {
   if (attendancePct >= 70) return 'Trung bình';
   return 'Cần cải thiện';
 }
-
 /** Thời gian tương đối tiếng Việt đơn giản */
 function formatRelativeVi(dateInput) {
   if (!dateInput) return '';
@@ -389,45 +381,42 @@ const StudentDashboard = () => {
   }, [examScores]);
 
   const scheduleRowsWithAttendance = useMemo(() => {
-    return todaySchedules.map((s) => {
-      const sectionId = String(s.classSection?.id || s.classSectionId || '');
-      const st = attendanceBySection[sectionId] || '';
-      const isChecked = st === 'PRESENT' || st === 'LATE' || st === 'ABSENT';
-      return {
-        schedule: s,
-        isChecked,
-        status: st,
-      };
-    });
+    return todaySchedules.map((s) => ({
+      schedule: s,
+      status: String(attendanceBySection[String(s.classSection?.id || s.classSectionId)] || '').toUpperCase(),
+    }));
   }, [todaySchedules, attendanceBySection]);
 
   const attendedCount = scheduleRowsWithAttendance.filter((r) => r.status === 'PRESENT' || r.status === 'LATE').length;
-  const pendingCount = scheduleRowsWithAttendance.filter((r) => !r.isChecked).length;
-  const attendancePct = lessonsToday > 0 ? Math.round((attendedCount / lessonsToday) * 100) : null;
+  const absentCount = scheduleRowsWithAttendance.filter((r) => r.status === 'ABSENT').length;
+  const pendingCount = lessonsToday > 0 ? lessonsToday - attendedCount - absentCount : 0;
 
-  const { data: chartFromBe, isReal: chartIsReal } = useMemo(
+  const attendancePct =
+    lessonsToday > 0 ? Math.round((attendedCount / lessonsToday) * 100) : null;
+
+  const { data: chartFromBe } = useMemo(
     () => buildMonthlyProgressFromScores(examScores),
     [examScores]
   );
   const progressChartData = chartFromBe;
-  const chartUsesNoData = !chartIsReal;
-  const currentGpaDisplay = avgScore ?? '—';
-  const academicYearLabel = getAcademicYearLabel(classInfo, displayUser);
+  const chartHasData = chartFromBe.length > 0;
+
+  const currentGpaDisplay = avgScore ?? (chartFromBe.length ? chartFromBe[chartFromBe.length - 1].score : '—');
+  const academicYearLabel = getAcademicYearLabel(classInfo, studentDetail);
   const conductLabel = classifyConductByAttendance(attendancePct);
   const achievements = useMemo(() => {
     const list = [];
-    if (avgScore && Number(avgScore) >= 8) {
-      list.push({ id: 'gpa-good', title: 'Điểm trung bình từ 8.0+', subtitle: 'Theo dữ liệu điểm thi', icon: 'trophy' });
+    if (avgScore != null && Number(avgScore) >= 8) {
+      list.push({ id: 'avg-score', title: 'Học lực tốt', subtitle: `Điểm TB ${avgScore}`, icon: 'trophy' });
     }
     if (attendancePct != null && attendancePct >= 95) {
-      list.push({ id: 'att-good', title: 'Chuyên cần cao', subtitle: `${attendancePct}% tiết đã điểm danh`, icon: 'medal' });
+      list.push({ id: 'attendance', title: 'Chuyên cần cao', subtitle: `Tỷ lệ điểm danh ${attendancePct}%`, icon: 'medal' });
     }
-    if (recentScores.length > 0) {
-      const best = [...recentScores].sort((a, b) => Number(b.score) - Number(a.score))[0];
-      list.push({ id: 'best-subject', title: `Môn nổi bật: ${best.subject}`, subtitle: `Điểm TB ${best.score}`, icon: 'medal' });
+    if (!list.length) {
+      list.push({ id: 'progress', title: 'Đang cải thiện', subtitle: 'Tiếp tục duy trì kết quả học tập', icon: 'medal' });
     }
-    return list.slice(0, 3);
-  }, [avgScore, attendancePct, recentScores]);
+    return list;
+  }, [avgScore, attendancePct]);
 
   const analyzeWithAi = async () => {
     try {
@@ -519,9 +508,7 @@ const StudentDashboard = () => {
                 Học kỳ {semesterUi}
               </span>
               <span className="sd2-dot">•</span>
-              <span className="sd2-mock-tag" title="Năm học lấy từ lớp hoặc suy ra theo thời điểm hiện tại">
-                Năm học {academicYearLabel}
-              </span>
+              <span>Năm học {academicYearLabel}</span>
             </p>
             <div className="sd2-hero-tags">
               <span className="sd2-tag">
@@ -539,75 +526,186 @@ const StudentDashboard = () => {
 
       {/* 4 thẻ thống kê */}
       <section className="sd2-stats" aria-label="Thống kê nhanh">
-      <article className="sd2-stat sd2-stat--purple">
-        <div className="sd2-stat-icon-wrap sd2-stat-icon-wrap--purple">
-          <Book size={22} strokeWidth={2} aria-hidden />
-        </div>
-        <div>
-          <p className="sd2-stat-label">Tiết hôm nay</p>
-          <p className="sd2-stat-value">{lessonsToday}</p>
-          <p className="sd2-stat-hint sd2-stat-hint--mock" title="Ước tính UI — chưa có API điểm danh theo tiết">
-            {lessonsToday > 0 ? `${attendedCount} tiết đã có điểm danh` : 'Không có tiết'}
-          </p>
-        </div>
-      </article>
-      <article className="sd2-stat sd2-stat--green">
-        <div className="sd2-stat-icon-wrap sd2-stat-icon-wrap--green">
-          <CheckCircle2 size={22} strokeWidth={2} aria-hidden />
-        </div>
-        <div>
-          <p className="sd2-stat-label">Điểm danh</p>
-          <p className="sd2-stat-value">
-            {lessonsToday > 0 ? `${attendedCount}/${lessonsToday}` : '—'}
-          </p>
-          <p className="sd2-stat-hint sd2-stat-hint--mock" title="Tính từ điểm danh theo lớp học phần trong ngày">
-            {attendancePct != null ? (
-              <>
-                {attendancePct}% • Hạnh kiểm: {conductLabel}
-              </>
-            ) : (
-              'Chưa có dữ liệu'
-            )}
-          </p>
-        </div>
-      </article>
-      <article className="sd2-stat sd2-stat--orange">
-        <div className="sd2-stat-icon-wrap sd2-stat-icon-wrap--orange">
-          <Clock size={22} strokeWidth={2} aria-hidden />
-        </div>
-        <div>
-          <p className="sd2-stat-label">Chưa điểm danh</p>
-          <p className="sd2-stat-value">{lessonsToday > 0 ? String(pendingCount) : '—'}</p>
-          <p className="sd2-stat-hint sd2-stat-hint--mock" title="Số tiết chưa có bản ghi điểm danh hôm nay">
-            {lessonsToday > 0 ? 'Dựa trên bản ghi điểm danh thực tế' : '—'}
-          </p>
-        </div>
-      </article>
-      <article className="sd2-stat sd2-stat--blue">
-        <div className="sd2-stat-icon-wrap sd2-stat-icon-wrap--blue">
-          <BarChart3 size={22} strokeWidth={2} aria-hidden />
-        </div>
-        <div>
-          <p className="sd2-stat-label">Điểm TB</p>
-          <p className="sd2-stat-value">{avgScore ?? '—'}</p>
-  <p className="sd2-stat-hint sd2-stat-hint--mock" title="Điểm TB tính theo toàn bộ bản ghi điểm thi hiện có">
-    {avgScore ? 'Dữ liệu thời gian thực' : 'Chưa có điểm thi'}
-    </p>
-  </div>
+        <article className="sd2-stat sd2-stat--purple">
+          <div className="sd2-stat-icon-wrap sd2-stat-icon-wrap--purple">
+            <Book size={22} strokeWidth={2} aria-hidden />
+          </div>
+          <div>
+            <p className="sd2-stat-label">Tiết hôm nay</p>
+            <p className="sd2-stat-value">{lessonsToday}</p>
+            <p className="sd2-stat-hint">
+              {lessonsToday > 0 ? `${attendedCount} tiết đã có điểm danh` : 'Không có tiết'}
+            </p>
+          </div>
+        </article>
+        <article className="sd2-stat sd2-stat--green">
+          <div className="sd2-stat-icon-wrap sd2-stat-icon-wrap--green">
+            <CheckCircle2 size={22} strokeWidth={2} aria-hidden />
+          </div>
+          <div>
+            <p className="sd2-stat-label">Điểm danh</p>
+            <p className="sd2-stat-value">
+              {lessonsToday > 0 ? `${attendedCount}/${lessonsToday}` : '—'}
+            </p>
+            <p className="sd2-stat-hint" title="Tính từ dữ liệu điểm danh">
+              {attendancePct != null ? (
+                <>
+                  <span className="sd2-stat-up">↑</span> {attendancePct}%
+                </>
+              ) : (
+                'Chưa có dữ liệu'
+              )}
+            </p>
+          </div>
+        </article>
+        <article className="sd2-stat sd2-stat--orange">
+          <div className="sd2-stat-icon-wrap sd2-stat-icon-wrap--orange">
+            <Clock size={22} strokeWidth={2} aria-hidden />
+          </div>
+          <div>
+            <p className="sd2-stat-label">Chưa điểm danh</p>
+            <p className="sd2-stat-value">{lessonsToday > 0 ? String(pendingCount) : '—'}</p>
+            <p className="sd2-stat-hint">
+              {lessonsToday > 0 ? 'Các tiết chưa ghi nhận điểm danh' : '—'}
+            </p>
+          </div>
+        </article>
+        <article className="sd2-stat sd2-stat--blue">
+          <div className="sd2-stat-icon-wrap sd2-stat-icon-wrap--blue">
+            <BarChart3 size={22} strokeWidth={2} aria-hidden />
+          </div>
+          <div>
+            <p className="sd2-stat-label">Điểm TB</p>
+            <p className="sd2-stat-value">{avgScore ?? '—'}</p>
+            <p className="sd2-stat-hint" title="Điểm TB từ dữ liệu điểm thi">
+              {avgScore ? `Hạnh kiểm: ${conductLabel}` : 'Chưa có điểm thi'}
+            </p>
+          </div>
         </article>
       </section>
 
       <div className="sd2-grid">
-    {/* Cột trái */}
-    <div className="sd2-col sd2-col--main">
-      <section className="sd2-card">
-        <div className="sd2-card-head">
-          <h2 className="sd2-card-title">Thời khóa biểu hôm nay</h2>
-          <div className="sd2-card-actions">
-            <button type="button" className="sd2-link-btn" onClick={() => navigate('/schedules')}>
-              Xem tuần
-            </button>
-            <div className="sd2-arrow-group" aria-label="Điều hướng tuần">
+        {/* Cột trái */}
+        <div className="sd2-col sd2-col--main">
+          <section className="sd2-card">
+            <div className="sd2-card-head">
+              <h2 className="sd2-card-title">Thời khóa biểu hôm nay</h2>
+              <div className="sd2-card-actions">
+                <button type="button" className="sd2-link-btn" onClick={() => navigate('/schedules')}>
+                  Xem tuần
+                </button>
+                <div className="sd2-arrow-group" aria-label="Điều hướng tuần">
+                  <button
+                    type="button"
+                    className="sd2-icon-btn sd2-icon-btn--sm"
+                    aria-label="Tuần trước — mở thời khóa biểu"
+                    title="Chưa có API tuần; mở trang Thời khóa biểu"
+                    onClick={() => navigate('/schedules')}
+                  >
+                    <ChevronLeft size={18} />
+                  </button>
+                  <button
+                    type="button"
+                    className="sd2-icon-btn sd2-icon-btn--sm"
+                    aria-label="Tuần sau — mở thời khóa biểu"
+                    title="Chưa có API tuần; mở trang Thời khóa biểu"
+                    onClick={() => navigate('/schedules')}
+                  >
+                    <ChevronRight size={18} />
+                  </button>
+                </div>
+              </div>
+            </div>
+            <div className="sd2-table-wrap">
+              <table className="sd2-table">
+                <thead>
+                  <tr>
+                    <th>Tiết</th>
+                    <th>Thời gian</th>
+                    <th>Môn học</th>
+                    <th>Giáo viên</th>
+                    <th>Trạng thái</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {todaySchedules.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="sd2-empty">
+                        {isSunday
+                          ? 'Hôm nay là Chủ nhật — không có tiết học trên thời khóa biểu.'
+                          : 'Không có tiết nào hôm nay.'}
+                      </td>
+                    </tr>
+                  ) : (
+                    scheduleRowsWithAttendance.map(({ schedule: s, status }) => {
+                      const subj = scheduleSubjectDisplayName(s, '—');
+                      const hue = hueFromString(subj);
+                      const isPresent = status === 'PRESENT' || status === 'LATE';
+                      const isAbsent = status === 'ABSENT';
+                      return (
+                        <tr
+                          key={s.id}
+                          className={!status ? 'sd2-row-pending' : undefined}
+                        >
+                          <td>Tiết {s.period ?? '—'}</td>
+                          <td className="sd2-nowrap">{periodTimeRange(s.period)}</td>
+                          <td>
+                            <span className="sd2-subj-cell">
+                              <span
+                                className="sd2-subj-dot"
+                                style={{ background: `hsl(${hue} 70% 52%)` }}
+                                aria-hidden
+                              />
+                              {subj}
+                            </span>
+                          </td>
+                          <td>{s.teacher?.fullName ?? s.teacher?.full_name ?? '—'}</td>
+                          <td>
+                            {isPresent ? (
+                              <span className="sd2-pill sd2-pill--ok">Đã điểm danh</span>
+                            ) : isAbsent ? (
+                              <span className="sd2-pill sd2-pill--danger">Vắng mặt</span>
+                            ) : (
+                              <span className="sd2-pill sd2-pill--wait">Chưa điểm danh</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section className="sd2-card">
+            <div className="sd2-card-head">
+              <h2 className="sd2-card-title">Điểm số gần đây</h2>
+              <button type="button" className="sd2-link-btn" onClick={() => navigate('/exam-scores')}>
+                Xem chi tiết
+              </button>
+            </div>
+            {recentScores.length === 0 ? (
+              <p className="sd2-empty sd2-empty--block">Chưa có điểm.</p>
+            ) : (
+              <ul className="sd2-grade-list">
+                {recentScores.slice(0, 8).map((r) => {
+                  const val = Math.min(10, Math.max(0, Number(r.score)));
+                  const pct = (val / 10) * 100;
+                  return (
+                    <li key={r.subject} className="sd2-grade-row">
+                      <span className="sd2-grade-name">{r.subject}</span>
+                      <div className="sd2-grade-bar-wrap">
+                        <div className="sd2-grade-bar" style={{ width: `${pct}%` }} />
+                      </div>
+                      <span className="sd2-grade-num">{r.score}</span>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+
+            <div className="sd2-ai-block">
               <button
                 type="button"
                 className="sd2-icon-btn sd2-icon-btn--sm"
@@ -627,167 +725,45 @@ const StudentDashboard = () => {
                 <ChevronRight size={18} />
               </button>
             </div>
-          </div>
-        </div>
-        <div className="sd2-table-wrap">
-          <table className="sd2-table">
-            <thead>
-              <tr>
-                <th>Tiết</th>
-                <th>Thời gian</th>
-                <th>Môn học</th>
-                <th>Giáo viên</th>
-                <th>Trạng thái</th>
-              </tr>
-            </thead>
-            <tbody>
-              {todaySchedules.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="sd2-empty">
-                    {isSunday
-                      ? 'Hôm nay là Chủ nhật — không có tiết học trên thời khóa biểu.'
-                      : 'Không có tiết nào hôm nay.'}
-                  </td>
-                </tr>
-              ) : (
-                scheduleRowsWithAttendance.map(({ schedule: s, isChecked, status }) => {
-                  const subj = scheduleSubjectDisplayName(s, '—');
-                  const hue = hueFromString(subj);
-                  return (
-                    <tr
-                      key={s.id}
-                      className={!isChecked ? 'sd2-row-pending' : undefined}
-                      title={!isChecked ? 'Chưa có bản ghi điểm danh cho tiết này' : undefined}
-                    >
-                      <td>Tiết {s.period ?? '—'}</td>
-                      <td className="sd2-nowrap">{periodTimeRange(s.period)}</td>
-                      <td>
-                        <span className="sd2-subj-cell">
-                          <span
-                            className="sd2-subj-dot"
-                            style={{ background: `hsl(${hue} 70% 52%)` }}
-                            aria-hidden
-                          />
-                          {subj}
-                        </span>
-                      </td>
-                      <td>{s.teacher?.fullName ?? s.teacher?.full_name ?? '—'}</td>
-                      <td>
-                        {status === 'ABSENT' ? (
-                          <span className="sd2-pill sd2-pill--wait">Vắng mặt</span>
-                        ) : isChecked ? (
-                          <span className="sd2-pill sd2-pill--ok">Đã điểm danh</span>
-                        ) : (
-                          <span className="sd2-pill sd2-pill--wait">Chưa điểm danh</span>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      <section className="sd2-card">
-        <div className="sd2-card-head">
-          <h2 className="sd2-card-title">Điểm số gần đây</h2>
-          <button type="button" className="sd2-link-btn" onClick={() => navigate('/exam-scores')}>
-            Xem chi tiết
-          </button>
-        </div>
-        {recentScores.length === 0 ? (
-          <p className="sd2-empty sd2-empty--block">Chưa có điểm.</p>
-        ) : (
-          <ul className="sd2-grade-list">
-            {recentScores.slice(0, 8).map((r) => {
-              const val = Math.min(10, Math.max(0, Number(r.score)));
-              const pct = (val / 10) * 100;
-              return (
-                <li key={r.subject} className="sd2-grade-row">
-                  <span className="sd2-grade-name">{r.subject}</span>
-                  <div className="sd2-grade-bar-wrap">
-                    <div className="sd2-grade-bar" style={{ width: `${pct}%` }} />
-                  </div>
-                  <span className="sd2-grade-num">{r.score}</span>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-
-        <div className="sd2-ai-block">
-          <button
-            type="button"
-            className="sd2-outline-btn"
-            onClick={analyzeWithAi}
-            disabled={aiLoading || recentScores.length === 0}
-          >
-            {aiLoading ? 'Đang phân tích...' : 'Phân tích bằng AI'}
-          </button>
-          {aiError ? <p className="sd2-ai-err">{aiError}</p> : null}
-          {aiAnalysis ? <pre className="sd2-ai-out">{aiAnalysis}</pre> : null}
-        </div>
-      </section>
-    </div>
-
-    {/* Cột giữa — biểu đồ */}
-    <div className="sd2-col sd2-col--mid">
-      <section className="sd2-card sd2-card--chart">
-        <div className="sd2-card-head">
-          <h2 className="sd2-card-title">Tiến độ học tập</h2>
-          <select
-            className="sd2-select"
-            value={semesterUi}
-            onChange={(e) => setSemesterUi(e.target.value)}
-            aria-label="Học kỳ"
-            title="Chưa lọc dữ liệu theo học kỳ — chỉ giao diện"
-          >
-            <option value="1">Học kỳ 1</option>
-            <option value="2">Học kỳ 2</option>
-          </select>
-        </div>
-{
-  chartUsesNoData ? (
-    <p className="sd2-chart-note">
-      Chưa đủ dữ liệu để hiển thị xu hướng theo tháng (cần ít nhất 2 tháng có điểm).
-    </p>
-  ) : null
-}
             <div className="sd2-chart-box">
-              {progressChartData.length === 0 ? (
-                <p className="sd2-empty sd2-empty--block">Chưa có dữ liệu biểu đồ.</p>
-              ) : (
+              {chartHasData ? (
                 <ResponsiveContainer width="100%" height={220}>
                   <AreaChart data={progressChartData} margin={{ top: 8, right: 8, left: -8, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="sd2grad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#3b82f6" stopOpacity={0.35} />
-                      <stop offset="100%" stopColor="#3b82f6" stopOpacity={0.02} />
-                    </linearGradient>
-                  </defs>
-                  <XAxis dataKey="label" tick={{ fontSize: 11 }} stroke="#94a3b8" />
-                  <YAxis domain={[0, 10]} tick={{ fontSize: 11 }} stroke="#94a3b8" width={28} />
-                  <Tooltip
-                    formatter={(v) => [`${v}`, 'Điểm TB']}
-                    contentStyle={{ borderRadius: 8, border: '1px solid #e2e8f0' }}
-                  />
-                  <Area
-                    type="monotone"
-                    dataKey="score"
-                    stroke="#2563eb"
-                    strokeWidth={2}
-                    fill="url(#sd2grad)"
-                    dot={{ r: 4, fill: '#2563eb' }}
-                    activeDot={{ r: 6 }}
-                  />
+                    <defs>
+                      <linearGradient id="sd2grad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#3b82f6" stopOpacity={0.35} />
+                        <stop offset="100%" stopColor="#3b82f6" stopOpacity={0.02} />
+                      </linearGradient>
+                    </defs>
+                    <XAxis dataKey="label" tick={{ fontSize: 11 }} stroke="#94a3b8" />
+                    <YAxis domain={[0, 10]} tick={{ fontSize: 11 }} stroke="#94a3b8" width={28} />
+                    <Tooltip
+                      formatter={(v) => [`${v}`, 'Điểm TB']}
+                      contentStyle={{ borderRadius: 8, border: '1px solid #e2e8f0' }}
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="score"
+                      stroke="#2563eb"
+                      strokeWidth={2}
+                      fill="url(#sd2grad)"
+                      dot={{ r: 4, fill: '#2563eb' }}
+                      activeDot={{ r: 6 }}
+                    />
                   </AreaChart>
                 </ResponsiveContainer>
+              ) : (
+                <p className="sd2-empty sd2-empty--block">Chưa đủ dữ liệu điểm theo tháng để hiển thị biểu đồ.</p>
               )}
             </div>
             <div className="sd2-chart-foot">
-              <span className="sd2-chart-metric sd2-chart-metric--mock">Nguồn: điểm thi đã ghi nhận</span>
+              <span className="sd2-chart-metric">
+                <span className="sd2-stat-up">↑</span> Chuyên cần: {attendancePct != null ? `${attendancePct}%` : '—'}
+              </span>
+              <span className="sd2-chart-metric">
+                <Trophy size={16} strokeWidth={2} aria-hidden />
+                Hạnh kiểm: {conductLabel}
+              </span>
             </div>
             <p className="sd2-chart-current">
               Điểm hiện tại (tháng cuối biểu đồ): <strong>{currentGpaDisplay}</strong>
@@ -879,12 +855,9 @@ const StudentDashboard = () => {
           <section className="sd2-card sd2-card--achieve">
             <div className="sd2-card-head">
               <h2 className="sd2-card-title">Thành tích &amp; khen thưởng</h2>
-              <span className="sd2-mock-pill">Dữ liệu thực</span>
             </div>
             <ul className="sd2-achieve-list">
-              {achievements.length === 0 ? (
-                <li className="sd2-empty sd2-empty--block">Chưa có chỉ dấu thành tích từ dữ liệu hiện tại.</li>
-              ) : achievements.map((item) => (
+              {achievements.map((item) => (
                 <li key={item.id} className="sd2-achieve-item">
                   {item.icon === 'trophy' ? (
                     <Trophy size={20} className="sd2-achieve-ic" aria-hidden />
@@ -898,7 +871,7 @@ const StudentDashboard = () => {
                 </li>
               ))}
             </ul>
-            <button type="button" className="sd2-link-btn sd2-link-btn--block" disabled title="Danh sách chi tiết sẽ mở khi có module thành tích riêng">
+            <button type="button" className="sd2-link-btn sd2-link-btn--block" disabled title="Chưa có trang danh sách thành tích">
               Xem tất cả
             </button>
           </section>

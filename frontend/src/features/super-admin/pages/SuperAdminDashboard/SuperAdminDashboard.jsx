@@ -35,10 +35,10 @@ const SuperAdminDashboard = () => {
   });
   const [recentSchools, setRecentSchools] = useState([]);
   const [roleStats, setRoleStats] = useState({
-    admin: 0,
-    teacher: 0,
-    student: 0,
-    parent: 0,
+    ADMIN: 0,
+    TEACHER: 0,
+    STUDENT: 0,
+    PARENT: 0,
   });
 
   useEffect(() => {
@@ -53,6 +53,7 @@ const SuperAdminDashboard = () => {
       ]);
 
       const schoolsData = schoolsRes.data.schools || [];
+      const usersData = usersRes.data.users || [];
 
       setSchools(schoolsData);
 
@@ -74,21 +75,20 @@ const SuperAdminDashboard = () => {
 
       setStats({
         schools: schoolsData.length || 0,
-        users: usersRes.data.users?.length || 0,
+        users: usersData.length || 0,
       });
-      const users = usersRes.data.users || [];
-      const nextRoleStats = users.reduce(
+      const statsByRole = usersData.reduce(
         (acc, u) => {
-          const rn = String(u?.role?.name || '').toUpperCase();
-          if (rn.includes('TEACHER')) acc.teacher += 1;
-          else if (rn.includes('STUDENT')) acc.student += 1;
-          else if (rn.includes('PARENT')) acc.parent += 1;
-          else if (rn.includes('ADMIN')) acc.admin += 1;
+          const role = String(u?.role?.name || '').toUpperCase();
+          if (role === 'ADMIN') acc.ADMIN += 1;
+          if (role === 'TEACHER') acc.TEACHER += 1;
+          if (role === 'STUDENT') acc.STUDENT += 1;
+          if (role === 'PARENT') acc.PARENT += 1;
           return acc;
         },
-        { admin: 0, teacher: 0, student: 0, parent: 0 }
+        { ADMIN: 0, TEACHER: 0, STUDENT: 0, PARENT: 0 }
       );
-      setRoleStats(nextRoleStats);
+      setRoleStats(statsByRole);
     } catch (error) {
       console.error('Error fetching stats:', error);
     } finally {
@@ -112,19 +112,20 @@ const SuperAdminDashboard = () => {
     const maxPixel = 120;
     return `${(value / max) * maxPixel}px`;
   };
-  const totalRoleUsers = roleStats.admin + roleStats.teacher + roleStats.student + roleStats.parent;
-  const donutBackground = (() => {
-    if (!totalRoleUsers) return 'conic-gradient(#e2e8f0 0 360deg)';
-    const adminDeg = (roleStats.admin / totalRoleUsers) * 360;
-    const teacherDeg = (roleStats.teacher / totalRoleUsers) * 360;
-    const studentDeg = (roleStats.student / totalRoleUsers) * 360;
-    return `conic-gradient(
-      #6366f1 0 ${adminDeg}deg,
-      #06b6d4 ${adminDeg}deg ${adminDeg + teacherDeg}deg,
-      #22c55e ${adminDeg + teacherDeg}deg ${adminDeg + teacherDeg + studentDeg}deg,
-      #f59e0b ${adminDeg + teacherDeg + studentDeg}deg 360deg
-    )`;
-  })();
+
+  const roleTotal = roleStats.ADMIN + roleStats.TEACHER + roleStats.STUDENT + roleStats.PARENT;
+  const adminPct = roleTotal > 0 ? (roleStats.ADMIN / roleTotal) * 100 : 0;
+  const teacherPct = roleTotal > 0 ? (roleStats.TEACHER / roleTotal) * 100 : 0;
+  const studentPct = roleTotal > 0 ? (roleStats.STUDENT / roleTotal) * 100 : 0;
+  const donutBackground =
+    roleTotal > 0
+      ? `conic-gradient(
+          #6366f1 0% ${adminPct}%,
+          #0ea5e9 ${adminPct}% ${adminPct + teacherPct}%,
+          #22c55e ${adminPct + teacherPct}% ${adminPct + teacherPct + studentPct}%,
+          #f59e0b ${adminPct + teacherPct + studentPct}% 100%
+        )`
+      : 'conic-gradient(#e5e7eb 0 100%)';
 
   if (loading) {
     return (
@@ -212,19 +213,19 @@ const SuperAdminDashboard = () => {
             <div className="sa-legend">
               <div className="sa-legend-item">
                 <span className="sa-legend-dot sa-legend-dot--admin" />
-                <span>Admin ({roleStats.admin})</span>
+                <span>Admin ({roleStats.ADMIN})</span>
               </div>
               <div className="sa-legend-item">
                 <span className="sa-legend-dot sa-legend-dot--teacher" />
-                <span>Giáo viên ({roleStats.teacher})</span>
+                <span>Giáo viên ({roleStats.TEACHER})</span>
               </div>
               <div className="sa-legend-item">
                 <span className="sa-legend-dot sa-legend-dot--student" />
-                <span>Học sinh ({roleStats.student})</span>
+                <span>Học sinh ({roleStats.STUDENT})</span>
               </div>
               <div className="sa-legend-item">
                 <span className="sa-legend-dot sa-legend-dot--parent" />
-                <span>Phụ huynh ({roleStats.parent})</span>
+                <span>Phụ huynh ({roleStats.PARENT})</span>
               </div>
             </div>
           </div>
