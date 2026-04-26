@@ -112,8 +112,7 @@ function getAcademicYearLabelFromData(studentDetail, classInfo) {
   const fromClass = classInfo?.schoolYear;
   if (typeof fromClass === 'string' && fromClass.trim()) return fromClass;
   const now = new Date();
-  const y = now.getFullYear();
-  const startYear = now.getMonth() >= 7 ? y : y - 1;
+  const startYear = now.getMonth() >= 7 ? now.getFullYear() : now.getFullYear() - 1;
   return `${startYear} - ${startYear + 1}`;
 }
 
@@ -121,14 +120,14 @@ function getAcademicYearLabelFromData(studentDetail, classInfo) {
 const ParentDashboard = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
-  
+
   // State chung
   const [children, setChildren] = useState([]);
   const [loading, setLoading] = useState(true);
-  
+
   // State học sinh đang chọn
   const [selectedChildId, setSelectedChildId] = useState(localStorage.getItem('activeStudentId'));
-  
+
   // State dữ liệu màn chi tiết
   const [loadingDetails, setLoadingDetails] = useState(false);
   const [studentDetail, setStudentDetail] = useState(null);
@@ -138,7 +137,7 @@ const ParentDashboard = () => {
   const [assignments, setAssignments] = useState([]);
   const [announcements, setAnnouncements] = useState([]);
   const [examScores, setExamScores] = useState([]);
-  
+
   const [aiLoading, setAiLoading] = useState(false);
   const [aiAnalysis, setAiAnalysis] = useState(null);
   const [aiError, setAiError] = useState('');
@@ -206,26 +205,26 @@ const ParentDashboard = () => {
           const detailRes = await api.get(`/users/${selectedChildId}`);
           detail = detailRes.data;
           // Cố gắng lấy classId từ nhiều nguồn trong object user
-          cId = detail?.class?.id || 
-                detail?.classId || 
-                detail?.classEntity?.id || 
-                detail?.enrollment?.classId;
+          cId = detail?.class?.id ||
+            detail?.classId ||
+            detail?.classEntity?.id ||
+            detail?.enrollment?.classId;
         } catch (e) {
           console.error('Lỗi tải thông tin học sinh', e);
         }
-        
+
         // Nếu API user entity không trả về class do serialization, gọi enrollment
         if (!cId) {
           try {
             const enrRes = await api.get(`/users/${selectedChildId}/enrollment`);
             if (enrRes.data?.enrollment?.classId) cId = enrRes.data.enrollment.classId;
-          } catch (e) {}
+          } catch (e) { }
         }
         setStudentDetail(detail);
 
         // 2. TKB & ExamScores
-        const examUrl = schoolId 
-          ? `/exam-scores?studentId=${selectedChildId}&schoolId=${schoolId}` 
+        const examUrl = schoolId
+          ? `/exam-scores?studentId=${selectedChildId}&schoolId=${schoolId}`
           : `/exam-scores?studentId=${selectedChildId}`;
 
         const [scoresRes, studentSchRes] = await Promise.all([
@@ -239,7 +238,7 @@ const ParentDashboard = () => {
           try {
             const classSchRes = await api.get(`/schedules/class/${cId}`);
             schedules = classSchRes.data?.schedules || [];
-          } catch (e) {}
+          } catch (e) { }
         }
         if (!schedules.length) schedules = studentSchRes.data?.schedules || [];
 
@@ -284,29 +283,29 @@ const ParentDashboard = () => {
         // 3. Điểm danh
         try {
           const classSectionIds = [...new Set(todayList.map(s => s.classSection?.id || s.classSectionId).filter(Boolean))];
-          
+
           if (classSectionIds.length === 0) {
             setTodayAttendance([]);
             return;
           }
 
           const attendancePromises = classSectionIds.map(async (classSectionId) => {
-             try {
-                 const res = await api.get(`/attendance`, { params: { classSectionId, date: todayStr } });
-                 const items = res.data?.items || [];
-                 // Tìm bản ghi điểm danh của đúng con mình trong lớp học phần này
-                 const myChildRecord = items.find(it => String(it.studentId) === String(selectedChildId));
-                 if (myChildRecord) {
-                      return { ...myChildRecord, boundClassSectionId: classSectionId };
-                 }
-             } catch (e) {}
-             return null;
+            try {
+              const res = await api.get(`/attendance`, { params: { classSectionId, date: todayStr } });
+              const items = res.data?.items || [];
+              // Tìm bản ghi điểm danh của đúng con mình trong lớp học phần này
+              const myChildRecord = items.find(it => String(it.studentId) === String(selectedChildId));
+              if (myChildRecord) {
+                return { ...myChildRecord, boundClassSectionId: classSectionId };
+              }
+            } catch (e) { }
+            return null;
           });
-          
+
           // Chờ tất cả các request lấy điểm danh xong
           const attendanceResults = (await Promise.all(attendancePromises)).filter(item => item !== null);
           setTodayAttendance(attendanceResults);
-        } catch (e) {}
+        } catch (e) { }
 
         // 4. Assignments & Announcements (cần cId)
         if (cId) {
@@ -316,12 +315,12 @@ const ParentDashboard = () => {
             schoolId ? api.get(`/announcements?schoolId=${schoolId}`).catch(() => ({ data: { announcements: [] } })) : Promise.resolve({ data: { announcements: [] } }),
             api.get(`/classes/${cId}`).catch(() => ({ data: { class: null } })),
           ]);
-          
+
           const allAssignments = assignmentsRes.data?.assignments || [];
           const mySubs = mySubRes.data?.submissions || [];
           const submittedAssignmentIds = new Set(mySubs.map((s) => s.assignment?.id ?? s.assignment_id).filter(Boolean));
           setAssignments(allAssignments.filter((a) => !submittedAssignmentIds.has(a.id)));
-          
+
           const allAnn = annRes.data?.announcements || [];
           setAnnouncements(allAnn.filter((a) => {
             const ac = a.classEntity?.id ?? a.class_id;
@@ -384,7 +383,7 @@ const ParentDashboard = () => {
           previousScore: null,
         })),
       };
-      
+
       const res = await api.post('/ai/grade-analysis', payload);
       setAiAnalysis(formatGradeAnalysisForDisplay(res.data) || '');
     } catch (e) {
@@ -412,13 +411,13 @@ const ParentDashboard = () => {
     return todaySchedules.map((schedule) => {
       const sSectionId = String(schedule.classSectionId || schedule.classSection?.id);
       const attRecord = todayAttendance.find(a => String(a.boundClassSectionId) === sSectionId);
-      
+
       let status = 'pending'; let statusText = 'Chưa điểm danh';
       if (attRecord && attRecord.status) {
-         const uppercaseStatus = String(attRecord.status).toUpperCase();
-         if (uppercaseStatus === 'PRESENT') { status = 'present'; statusText = 'Đã điểm danh'; }
-         if (uppercaseStatus === 'ABSENT') { status = 'absent'; statusText = 'Vắng mặt'; }
-         if (uppercaseStatus === 'LATE') { status = 'late'; statusText = 'Đi trễ'; }
+        const uppercaseStatus = String(attRecord.status).toUpperCase();
+        if (uppercaseStatus === 'PRESENT') { status = 'present'; statusText = 'Đã điểm danh'; }
+        if (uppercaseStatus === 'ABSENT') { status = 'absent'; statusText = 'Vắng mặt'; }
+        if (uppercaseStatus === 'LATE') { status = 'late'; statusText = 'Đi trễ'; }
       }
       return { schedule, status, statusText };
     });
@@ -431,9 +430,9 @@ const ParentDashboard = () => {
   // Tính điểm trung bình và xếp loại
   const avgScoreNum = examScores.length > 0 ? (examScores.reduce((sum, e) => sum + Number(e.score), 0) / examScores.length) : 0;
   const avgScoreDisplay = examScores.length > 0 ? avgScoreNum.toFixed(1) : '—';
-  
+
   let classification = 'Chưa xếp loại';
-  let classColor = '#64748b'; 
+  let classColor = '#64748b';
   let classBg = '#f1f5f9';
   if (avgScoreNum >= 8.0) { classification = 'Giỏi'; classColor = '#16a34a'; classBg = '#dcfce3'; }
   else if (avgScoreNum >= 6.5) { classification = 'Khá'; classColor = '#0284c7'; classBg = '#e0f2fe'; }
@@ -461,7 +460,7 @@ const ParentDashboard = () => {
             <div className="sd2-hero-text">
               <h1 className="sd2-hero-name">{fullName}</h1>
               <p className="sd2-hero-sub">
-              Lớp {className}
+                Lớp {className}
                 <span className="sd2-dot">•</span>
                 Học kỳ {semesterUi}
                 <span className="sd2-dot">•</span>
@@ -478,7 +477,7 @@ const ParentDashboard = () => {
                 </span>
               </div>
             </div>
-            
+
             {/* Nút Hủy Chọn Con ở góc phải banner */}
             <div style={{ position: 'absolute', right: '32px', top: '50%', transform: 'translateY(-50%)' }}>
               <button className="pd-btn-sm" onClick={handleUnselect}>
@@ -529,10 +528,10 @@ const ParentDashboard = () => {
 
         {/* Layout Chính Lưới 2 cột (sử dụng class CSS mới pd-grid-2col) */}
         <div className="pd-grid-2col">
-          
+
           {/* == Cột Trái == */}
           <div className="sd2-col">
-            
+
             {/* Thời khóa biểu hôm nay */}
             <section className="sd2-card">
               <div className="sd2-card-head">
@@ -584,7 +583,7 @@ const ParentDashboard = () => {
                               ) : status === 'absent' ? (
                                 <span className="sd2-pill sd2-pill--danger">{statusText}</span>
                               ) : status === 'late' ? (
-                                <span style={{backgroundColor: '#ffedd5', color: '#ea580c', padding: '4px 10px', borderRadius:'14px', fontSize:'0.75rem', fontWeight:'600'}}>{statusText}</span>
+                                <span style={{ backgroundColor: '#ffedd5', color: '#ea580c', padding: '4px 10px', borderRadius: '14px', fontSize: '0.75rem', fontWeight: '600' }}>{statusText}</span>
                               ) : (
                                 <span className="sd2-pill sd2-pill--ok">{statusText}</span>
                               )}
@@ -615,7 +614,7 @@ const ParentDashboard = () => {
                 {aiError ? <p className="sd2-ai-err">{aiError}</p> : null}
                 {aiAnalysis ? <pre className="sd2-ai-out">{aiAnalysis}</pre> : null}
                 {!aiAnalysis && !aiError && !aiLoading && (
-                  <p className="sd2-chart-note" style={{marginTop:'10px'}}>Nhấn nút để AI phân tích toàn bộ điểm số của con bạn và đưa ra lời khuyên học tập phù hợp!</p>
+                  <p className="sd2-chart-note" style={{ marginTop: '10px' }}>Nhấn nút để AI phân tích toàn bộ điểm số của con bạn và đưa ra lời khuyên học tập phù hợp!</p>
                 )}
               </div>
             </section>
@@ -624,7 +623,7 @@ const ParentDashboard = () => {
 
           {/* == Cột Phải == */}
           <div className="sd2-col">
-            
+
             {/* Bài tập cần nộp */}
             <section className="sd2-card">
               <div className="sd2-card-head">
@@ -636,7 +635,7 @@ const ParentDashboard = () => {
               <ul className="sd2-list">
                 {assignments.length === 0 ? (
                   <li className="sd2-empty sd2-empty--block" style={{ backgroundColor: '#f0fdf4', border: '1px dashed #bbf7d0', color: '#166534', padding: '20px' }}>
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px'}}>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
                       <ClipboardList size={24} style={{ color: '#10b981' }} />
                       <span style={{ fontWeight: '600' }}>Không có bài tập cần nộp</span>
                       <span style={{ fontSize: '0.85rem' }}>Con bạn đã hoàn thành đầy đủ bài tập.</span>
@@ -656,8 +655,8 @@ const ParentDashboard = () => {
                           <span className="sd2-list-title">{a.title}</span>
                           {overdue ? <span className="sd2-pill sd2-pill--danger">Quá hạn</span>
                             : soon && dLeft != null ? <span className="sd2-pill sd2-pill--info">Còn {dLeft} ngày</span>
-                            : dLeft != null ? <span className="sd2-pill sd2-pill--muted">Còn {dLeft} ngày</span>
-                            : <span className="sd2-pill sd2-pill--muted">Chưa có hạn</span>}
+                              : dLeft != null ? <span className="sd2-pill sd2-pill--muted">Còn {dLeft} ngày</span>
+                                : <span className="sd2-pill sd2-pill--muted">Chưa có hạn</span>}
                         </div>
                       </li>
                     );
@@ -815,8 +814,8 @@ const ParentDashboard = () => {
                 border: '2px solid rgba(99,102,241,0.15)',
               }}>
                 <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
-                  <path d="M22 10v6M2 10l10-5 10 5-10 5-10-5z" stroke="#4f46e5" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
-                  <path d="M6 12v5c0 1.657 2.686 3 6 3s6-1.343 6-3v-5" stroke="#4f46e5" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                  <path d="M22 10v6M2 10l10-5 10 5-10 5-10-5z" stroke="#4f46e5" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                  <path d="M6 12v5c0 1.657 2.686 3 6 3s6-1.343 6-3v-5" stroke="#4f46e5" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
               </div>
 
@@ -832,8 +831,8 @@ const ParentDashboard = () => {
                 fontSize: '0.8rem', color: '#64748b', marginBottom: '6px',
               }}>
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
-                  <rect x="2" y="4" width="20" height="16" rx="2" stroke="#94a3b8" strokeWidth="1.8"/>
-                  <path d="M2 7l10 7 10-7" stroke="#94a3b8" strokeWidth="1.8"/>
+                  <rect x="2" y="4" width="20" height="16" rx="2" stroke="#94a3b8" strokeWidth="1.8" />
+                  <path d="M2 7l10 7 10-7" stroke="#94a3b8" strokeWidth="1.8" />
                 </svg>
                 <span style={{ maxWidth: '150px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {child.email || '—'}
@@ -846,25 +845,25 @@ const ParentDashboard = () => {
                 fontSize: '0.8rem', color: '#64748b', marginBottom: '6px',
               }}>
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
-                  <path d="M3 21V9l9-6 9 6v12" stroke="#94a3b8" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
-                  <path d="M9 21V15h6v6" stroke="#94a3b8" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                  <path d="M3 21V9l9-6 9 6v12" stroke="#94a3b8" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                  <path d="M9 21V15h6v6" stroke="#94a3b8" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
                 <span>
                   {(() => {
                     // Ưu tiên lấy tên lớp từ object class được enrich hoặc các trường fallback
-                    const clsName = 
-                      (child.class && typeof child.class === 'object' ? child.class.name : null) || 
-                      child.className || 
-                      child.classEntity?.name || 
-                      child.class_name || 
+                    const clsName =
+                      (child.class && typeof child.class === 'object' ? child.class.name : null) ||
+                      child.className ||
+                      child.classEntity?.name ||
+                      child.class_name ||
                       (typeof child.class === 'string' ? child.class : null);
-                    
+
                     return clsName ? `Lớp: ${clsName}` : 'Lớp: Chưa xếp lớp';
                   })()}
                 </span>
               </div>
 
-             
+
               {/* Button */}
               <button
                 style={{

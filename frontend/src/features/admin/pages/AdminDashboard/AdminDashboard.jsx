@@ -229,22 +229,22 @@ const AdminDashboard = () => {
       {/* Hàng thẻ thống kê */}
       <div className="ad-kpi-row">
         <div className="ad-kpi-card ad-kpi-card--students">
-          <div className="ad-kpi-pill">+15%</div>
+          <div className="ad-kpi-pill">Thực tế</div>
           <span className="ad-kpi-label">Học sinh</span>
           <span className="ad-kpi-value">{stats.students.toLocaleString('vi-VN')}</span>
         </div>
         <div className="ad-kpi-card ad-kpi-card--teachers">
-          <div className="ad-kpi-pill">+3%</div>
+          <div className="ad-kpi-pill">Thực tế</div>
           <span className="ad-kpi-label">Giáo viên</span>
           <span className="ad-kpi-value">{stats.teachers.toLocaleString('vi-VN')}</span>
         </div>
         <div className="ad-kpi-card ad-kpi-card--parents">
-          <div className="ad-kpi-pill">+1%</div>
+          <div className="ad-kpi-pill">Thực tế</div>
           <span className="ad-kpi-label">Phụ huynh</span>
           <span className="ad-kpi-value">{stats.parents.toLocaleString('vi-VN')}</span>
         </div>
         <div className="ad-kpi-card ad-kpi-card--classes">
-          <div className="ad-kpi-pill">+5%</div>
+          <div className="ad-kpi-pill">Thực tế</div>
           <span className="ad-kpi-label">Số lớp học</span>
           <span className="ad-kpi-value">{stats.classes.toLocaleString('vi-VN')}</span>
         </div>

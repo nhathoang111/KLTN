@@ -211,12 +211,12 @@ const StudentProfilePage = () => {
             const teacher = raw?.homeroomTeacher ?? raw?.homeroom_teacher;
             const cls = raw
               ? {
-                  ...raw,
-                  name: raw.name ?? raw.className,
-                  homeroomTeacher: teacher
-                    ? { fullName: teacher.fullName ?? teacher.full_name ?? '—' }
-                    : null,
-                }
+                ...raw,
+                name: raw.name ?? raw.className,
+                homeroomTeacher: teacher
+                  ? { fullName: teacher.fullName ?? teacher.full_name ?? '—' }
+                  : null,
+              }
               : null;
             setClassInfo(cls);
           } catch {
@@ -239,8 +239,10 @@ const StudentProfilePage = () => {
   const className = displayUser?.class?.name || classInfo?.name || '—';
   const schoolName = displayUser?.school?.name || user?.school?.name || 'Trường';
 
-  const schoolYearFromBe = displayUser?.class?.schoolYear;
-  const schoolYearLine = schoolYearFromBe || '2025';
+  const schoolYearFromBe = displayUser?.class?.schoolYear || classInfo?.schoolYear;
+  const now = new Date();
+  const syStart = now.getMonth() >= 7 ? now.getFullYear() : now.getFullYear() - 1;
+  const schoolYearLine = schoolYearFromBe || `${syStart} - ${syStart + 1}`;
   const schoolYearIsMock = !schoolYearFromBe;
   const homeroomTeacherName = classInfo?.homeroomTeacher?.fullName ?? null;
   const rollnoDisplay = displayUser?.rollno != null ? String(displayUser.rollno) : '—';
@@ -319,7 +321,7 @@ const StudentProfilePage = () => {
               className="sd2-hero-sub--single sd2-hero-sub--with-sem"
               title={
                 schoolYearIsMock
-                  ? 'Năm học: BE không trả schoolYear trên lớp — hiển thị 2025 (mẫu)'
+                  ? 'Năm học: BE không trả schoolYear trên lớp — suy theo năm học hiện tại'
                   : undefined
               }
             >
@@ -367,7 +369,7 @@ const StudentProfilePage = () => {
         </div>
         <div
           className="sd2-quickbar-cell sd2-quickbar-cell--att"
-          title="Chuyên cần: mock theo tiết hôm nay — chưa có API"
+          title="Chuyên cần tính từ dữ liệu điểm danh thực tế"
         >
           <CheckSquare className="sd2-quickbar-ic" size={22} strokeWidth={2} aria-hidden />
           <span className="sd2-quickbar-label">Chuyên cần</span>
