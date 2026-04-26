@@ -17,7 +17,6 @@ import {
 } from 'lucide-react';
 import api from '../../../../shared/lib/api';
 import { useAuth } from '../../../auth/context/AuthContext';
-import { BE_DATA_GAP_ITEMS, MOCK_CONDUCT_LABEL } from '../StudentDashboard/mockData';
 import './studentProfileDashboard.css';
 
 function scheduleDayOfWeekFromRow(s) {
@@ -66,6 +65,14 @@ function monGioiYeuFromRecent(recentScores) {
   return { gioi, yeu };
 }
 
+function classifyConductByAttendance(attendancePct) {
+  if (attendancePct == null) return 'Chưa có dữ liệu';
+  if (attendancePct >= 95) return 'Tốt';
+  if (attendancePct >= 85) return 'Khá';
+  if (attendancePct >= 70) return 'Trung bình';
+  return 'Cần cải thiện';
+}
+
 const StudentProfilePage = () => {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
@@ -75,7 +82,8 @@ const StudentProfilePage = () => {
   const [examScores, setExamScores] = useState([]);
   const [todaySchedules, setTodaySchedules] = useState([]);
   const [semesterUi, setSemesterUi] = useState('2');
-  const [showBeNotes, setShowBeNotes] = useState(false);
+  const [parents, setParents] = useState([]);
+  const [attendanceBySection, setAttendanceBySection] = useState({});
 
   const studentId = user?.id;
   const schoolId = user?.school?.id;
@@ -179,6 +187,30 @@ const StudentProfilePage = () => {
 
         setTodaySchedules(todayList);
         setExamScores(scoresRes.data?.examScores || []);
+        const classSectionIds = [...new Set(todayList.map((s) => s.classSection?.id || s.classSectionId).filter(Boolean))];
+        if (classSectionIds.length > 0) {
+          const attendanceEntries = await Promise.all(
+            classSectionIds.map(async (classSectionId) => {
+              try {
+                const res = await api.get('/attendance', { params: { classSectionId, date: todayStr } });
+                const items = res.data?.items || [];
+                const me = items.find((it) => String(it.studentId) === String(studentId));
+                return [String(classSectionId), String(me?.status || '').toUpperCase()];
+              } catch {
+                return [String(classSectionId), ''];
+              }
+            })
+          );
+          setAttendanceBySection(Object.fromEntries(attendanceEntries));
+        } else {
+          setAttendanceBySection({});
+        }
+        try {
+          const parentRes = await api.get(`/users/${studentId}/parents`);
+          setParents(parentRes.data?.parents || []);
+        } catch {
+          setParents([]);
+        }
 
         if (cId) {
           try {
@@ -187,12 +219,12 @@ const StudentProfilePage = () => {
             const teacher = raw?.homeroomTeacher ?? raw?.homeroom_teacher;
             const cls = raw
               ? {
-                  ...raw,
-                  name: raw.name ?? raw.className,
-                  homeroomTeacher: teacher
-                    ? { fullName: teacher.fullName ?? teacher.full_name ?? '—' }
-                    : null,
-                }
+                ...raw,
+                name: raw.name ?? raw.className,
+                homeroomTeacher: teacher
+                  ? { fullName: teacher.fullName ?? teacher.full_name ?? '—' }
+                  : null,
+              }
               : null;
             setClassInfo(cls);
           } catch {
@@ -215,8 +247,10 @@ const StudentProfilePage = () => {
   const className = displayUser?.class?.name || classInfo?.name || '—';
   const schoolName = displayUser?.school?.name || user?.school?.name || 'Trường';
 
-  const schoolYearFromBe = displayUser?.class?.schoolYear;
-  const schoolYearLine = schoolYearFromBe || '2025';
+  const schoolYearFromBe = displayUser?.class?.schoolYear || classInfo?.schoolYear;
+  const now = new Date();
+  const syStart = now.getMonth() >= 7 ? now.getFullYear() : now.getFullYear() - 1;
+  const schoolYearLine = schoolYearFromBe || `${syStart} - ${syStart + 1}`;
   const schoolYearIsMock = !schoolYearFromBe;
   const homeroomTeacherName = classInfo?.homeroomTeacher?.fullName ?? null;
   const rollnoDisplay = displayUser?.rollno != null ? String(displayUser.rollno) : '—';
@@ -225,15 +259,16 @@ const StudentProfilePage = () => {
     !displayUser?.status || String(displayUser.status).toUpperCase() === 'ACTIVE';
 
   const lessonsToday = todaySchedules.length;
-  const scheduleRowsWithMockAttendance = useMemo(() => {
-    return todaySchedules.map((s, idx, arr) => ({
+  const scheduleRowsWithAttendance = useMemo(() => {
+    return todaySchedules.map((s) => ({
       schedule: s,
-      attendedMock: arr.length === 0 ? false : idx < arr.length - 1,
+      status: String(attendanceBySection[String(s.classSection?.id || s.classSectionId)] || '').toUpperCase(),
     }));
-  }, [todaySchedules]);
-  const mockAttendedCount = scheduleRowsWithMockAttendance.filter((r) => r.attendedMock).length;
+  }, [todaySchedules, attendanceBySection]);
+  const attendedCount = scheduleRowsWithAttendance.filter((r) => r.status === 'PRESENT' || r.status === 'LATE').length;
   const attendancePct =
-    lessonsToday > 0 ? Math.round((mockAttendedCount / lessonsToday) * 100) : null;
+    lessonsToday > 0 ? Math.round((attendedCount / lessonsToday) * 100) : null;
+  const conductLabel = classifyConductByAttendance(attendancePct);
 
   const avgScore =
     examScores.length > 0
@@ -290,7 +325,7 @@ const StudentProfilePage = () => {
               className="sd2-hero-sub--single sd2-hero-sub--with-sem"
               title={
                 schoolYearIsMock
-                  ? 'Năm học: BE không trả schoolYear trên lớp — hiển thị 2025 (mẫu)'
+                  ? 'Năm học: BE không trả schoolYear trên lớp — suy theo năm học hiện tại'
                   : undefined
               }
             >
@@ -338,16 +373,16 @@ const StudentProfilePage = () => {
         </div>
         <div
           className="sd2-quickbar-cell sd2-quickbar-cell--att"
-          title="Chuyên cần: mock theo tiết hôm nay — chưa có API"
+          title="Chuyên cần tính từ dữ liệu điểm danh thực tế"
         >
           <CheckSquare className="sd2-quickbar-ic" size={22} strokeWidth={2} aria-hidden />
           <span className="sd2-quickbar-label">Chuyên cần</span>
           <span className="sd2-quickbar-value">{attendancePct != null ? `${attendancePct}%` : '—'}</span>
         </div>
-        <div className="sd2-quickbar-cell sd2-quickbar-cell--conduct" title="Hạnh kiểm: chưa có API">
+        <div className="sd2-quickbar-cell sd2-quickbar-cell--conduct" title="Hạnh kiểm theo tỷ lệ chuyên cần">
           <Star className="sd2-quickbar-ic sd2-quickbar-ic--gold" size={22} strokeWidth={2} aria-hidden />
           <span className="sd2-quickbar-label">Hạnh kiểm</span>
-          <span className="sd2-quickbar-value">{MOCK_CONDUCT_LABEL}</span>
+          <span className="sd2-quickbar-value">{conductLabel}</span>
         </div>
         <div className="sd2-quickbar-cell sd2-quickbar-cell--teacher">
           <div className="sd2-teacher-av" aria-hidden>
@@ -418,7 +453,7 @@ const StudentProfilePage = () => {
           </div>
         </article>
 
-        <article className="sd2-pi-card sd2-pi-card--mock" title="Chưa có API phụ huynh cho học sinh">
+        <article className="sd2-pi-card">
           <h2 className="sd2-pi-card-title">
             <Users className="sd2-pi-card-title-ic" size={20} strokeWidth={2} aria-hidden />
             Thông tin phụ huynh
@@ -427,12 +462,12 @@ const StudentProfilePage = () => {
             <div className="sd2-pi-row">
               <User className="sd2-pi-row-ic" size={18} strokeWidth={2} aria-hidden />
               <span className="sd2-pi-row-label">Phụ huynh</span>
-              <span className="sd2-pi-row-val sd2-pi-row-val--muted">Chưa cập nhật</span>
+              <span className="sd2-pi-row-val">{parents[0]?.fullName || 'Chưa cập nhật'}</span>
             </div>
             <div className="sd2-pi-row">
               <Phone className="sd2-pi-row-ic" size={18} strokeWidth={2} aria-hidden />
               <span className="sd2-pi-row-label">Liên hệ PH</span>
-              <span className="sd2-pi-row-val sd2-pi-row-val--muted">Chưa cập nhật</span>
+              <span className="sd2-pi-row-val">{parents[0]?.phone || 'Chưa cập nhật'}</span>
             </div>
           </div>
         </article>
@@ -464,18 +499,6 @@ const StudentProfilePage = () => {
         </article>
       </section>
 
-      <footer className="spp-d2-foot">
-        <button type="button" className="spp-d2-foot-toggle" onClick={() => setShowBeNotes((v) => !v)}>
-          {showBeNotes ? 'Ẩn' : 'Hiện'} ghi chú phần chưa có API backend
-        </button>
-        {showBeNotes ? (
-          <ul className="spp-d2-foot-list">
-            {BE_DATA_GAP_ITEMS.map((t) => (
-              <li key={t}>{t}</li>
-            ))}
-          </ul>
-        ) : null}
-      </footer>
     </div>
   );
 };

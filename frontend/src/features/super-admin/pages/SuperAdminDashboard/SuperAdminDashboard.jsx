@@ -34,6 +34,12 @@ const SuperAdminDashboard = () => {
     inactive: 0,
   });
   const [recentSchools, setRecentSchools] = useState([]);
+  const [roleStats, setRoleStats] = useState({
+    ADMIN: 0,
+    TEACHER: 0,
+    STUDENT: 0,
+    PARENT: 0,
+  });
 
   useEffect(() => {
     fetchStats();
@@ -47,6 +53,7 @@ const SuperAdminDashboard = () => {
       ]);
 
       const schoolsData = schoolsRes.data.schools || [];
+      const usersData = usersRes.data.users || [];
 
       setSchools(schoolsData);
 
@@ -68,8 +75,20 @@ const SuperAdminDashboard = () => {
 
       setStats({
         schools: schoolsData.length || 0,
-        users: usersRes.data.users?.length || 0,
+        users: usersData.length || 0,
       });
+      const statsByRole = usersData.reduce(
+        (acc, u) => {
+          const role = String(u?.role?.name || '').toUpperCase();
+          if (role === 'ADMIN') acc.ADMIN += 1;
+          if (role === 'TEACHER') acc.TEACHER += 1;
+          if (role === 'STUDENT') acc.STUDENT += 1;
+          if (role === 'PARENT') acc.PARENT += 1;
+          return acc;
+        },
+        { ADMIN: 0, TEACHER: 0, STUDENT: 0, PARENT: 0 }
+      );
+      setRoleStats(statsByRole);
     } catch (error) {
       console.error('Error fetching stats:', error);
     } finally {
@@ -93,6 +112,20 @@ const SuperAdminDashboard = () => {
     const maxPixel = 120;
     return `${(value / max) * maxPixel}px`;
   };
+
+  const roleTotal = roleStats.ADMIN + roleStats.TEACHER + roleStats.STUDENT + roleStats.PARENT;
+  const adminPct = roleTotal > 0 ? (roleStats.ADMIN / roleTotal) * 100 : 0;
+  const teacherPct = roleTotal > 0 ? (roleStats.TEACHER / roleTotal) * 100 : 0;
+  const studentPct = roleTotal > 0 ? (roleStats.STUDENT / roleTotal) * 100 : 0;
+  const donutBackground =
+    roleTotal > 0
+      ? `conic-gradient(
+          #6366f1 0% ${adminPct}%,
+          #0ea5e9 ${adminPct}% ${adminPct + teacherPct}%,
+          #22c55e ${adminPct + teacherPct}% ${adminPct + teacherPct + studentPct}%,
+          #f59e0b ${adminPct + teacherPct + studentPct}% 100%
+        )`
+      : 'conic-gradient(#e5e7eb 0 100%)';
 
   if (loading) {
     return (
@@ -171,7 +204,7 @@ const SuperAdminDashboard = () => {
             <span className="sa-card-title">Người dùng theo vai trò</span>
           </div>
           <div className="sa-chart-body">
-            <div className="sa-donut-chart">
+            <div className="sa-donut-chart" style={{ background: donutBackground }}>
               <div className="sa-donut-center">
                 <span>{stats.users}</span>
                 <span>Người dùng</span>
@@ -180,19 +213,19 @@ const SuperAdminDashboard = () => {
             <div className="sa-legend">
               <div className="sa-legend-item">
                 <span className="sa-legend-dot sa-legend-dot--admin" />
-                <span>Admin</span>
+                <span>Admin ({roleStats.ADMIN})</span>
               </div>
               <div className="sa-legend-item">
                 <span className="sa-legend-dot sa-legend-dot--teacher" />
-                <span>Giáo viên</span>
+                <span>Giáo viên ({roleStats.TEACHER})</span>
               </div>
               <div className="sa-legend-item">
                 <span className="sa-legend-dot sa-legend-dot--student" />
-                <span>Học sinh</span>
+                <span>Học sinh ({roleStats.STUDENT})</span>
               </div>
               <div className="sa-legend-item">
                 <span className="sa-legend-dot sa-legend-dot--parent" />
-                <span>Phụ huynh</span>
+                <span>Phụ huynh ({roleStats.PARENT})</span>
               </div>
             </div>
           </div>

@@ -23,17 +23,10 @@ const AdminDashboard = () => {
     { title: 'Thông báo', icon: 'AN', path: '/announcements', color: '#22c55e', description: 'Đăng thông báo của nhà trường' },
   ];
 
-  const attendanceData = [
-    { day: 'Mon', value: 75 },
-    { day: 'Tue', value: 82 },
-    { day: 'Wed', value: 95 },
-    { day: 'Thu', value: 88 },
-    { day: 'Fri', value: 91 },
-  ];
-
   const [notifications, setNotifications] = useState([]);
   /** Thống kê số lớp theo khối: [{ gradeLevel: 6, count: 2 }, ...] */
   const [classStatsByGrade, setClassStatsByGrade] = useState([]);
+  const [attendanceData, setAttendanceData] = useState([]);
 
   const formatTimeAgo = (dateStr) => {
     if (!dateStr) return '';
@@ -53,6 +46,56 @@ const AdminDashboard = () => {
   useEffect(() => {
     if (user) fetchSchoolInfo();
   }, [user]);
+
+  const buildRecentWeekAttendance = async (schoolId) => {
+    const classesRes = await api.get(`/classes/school/${schoolId}`);
+    const classes = classesRes.data?.classes || [];
+    const classIds = classes.map((c) => c.id).filter(Boolean);
+    if (!classIds.length) return [];
+
+    const now = new Date();
+    const dates = [];
+    for (let i = 1; i <= 10; i += 1) {
+      const d = new Date(now);
+      d.setDate(now.getDate() - i);
+      if (d.getDay() !== 0 && d.getDay() !== 6) dates.push(d);
+      if (dates.length === 5) break;
+    }
+    dates.reverse();
+
+    const values = await Promise.all(
+      dates.map(async (d) => {
+        const date = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        let present = 0;
+        let total = 0;
+        await Promise.all(
+          classIds.map(async (classId) => {
+            try {
+              const sectionsRes = await api.get(`/class-sections/class/${classId}`);
+              const sections = sectionsRes.data?.classSections || [];
+              await Promise.all(
+                sections.map(async (section) => {
+                  try {
+                    const attRes = await api.get('/attendance', { params: { classSectionId: section.id, date } });
+                    const items = attRes.data?.items || [];
+                    total += items.length;
+                    present += items.filter((it) => ['PRESENT', 'LATE'].includes(String(it.status || '').toUpperCase())).length;
+                  } catch {
+                    // bỏ qua lỗi cục bộ
+                  }
+                })
+              );
+            } catch {
+              // bỏ qua lỗi cục bộ
+            }
+          })
+        );
+        return total > 0 ? Math.round((present / total) * 100) : 0;
+      })
+    );
+
+    return dates.map((d, idx) => ({ day: `T${d.getDay() === 0 ? 7 : d.getDay()}`, value: values[idx] ?? 0 }));
+  };
 
   const fetchSchoolInfo = async () => {
     try {
@@ -86,6 +129,8 @@ const AdminDashboard = () => {
           .map(([gradeLevel, count]) => ({ gradeLevel: Number(gradeLevel), count }))
           .sort((a, b) => a.gradeLevel - b.gradeLevel);
         setClassStatsByGrade(gradeStats);
+        const attendance = await buildRecentWeekAttendance(schoolId).catch(() => []);
+        setAttendanceData(attendance);
       } else {
         const response = await api.get('/schools');
         const firstSchool = response.data.schools?.[0] || null;
@@ -122,6 +167,8 @@ const AdminDashboard = () => {
             .map(([gradeLevel, count]) => ({ gradeLevel: Number(gradeLevel), count }))
             .sort((a, b) => a.gradeLevel - b.gradeLevel);
           setClassStatsByGrade(gradeStats);
+          const attendance = await buildRecentWeekAttendance(schoolIdForAnn).catch(() => []);
+          setAttendanceData(attendance);
         } else {
           const annRes = await api.get('/announcements');
           const list = annRes.data?.announcements || [];
@@ -130,6 +177,7 @@ const AdminDashboard = () => {
           );
           setNotifications(sorted.slice(0, 5));
           setClassStatsByGrade([]);
+          setAttendanceData([]);
         }
       }
     } catch (error) {
@@ -143,13 +191,14 @@ const AdminDashboard = () => {
           classes: user.school.classCount ?? prev.classes,
         }));
       }
+      setAttendanceData([]);
     } finally {
       setLoading(false);
     }
   };
 
   const getAttendanceBarHeight = (value) => {
-    const max = Math.max(...attendanceData.map((item) => item.value), 1);
+    const max = Math.max(...(attendanceData.length ? attendanceData.map((item) => item.value) : [1]), 1);
     const maxPixel = 110;
     return `${(value / max) * maxPixel}px`;
   };
@@ -198,22 +247,22 @@ const AdminDashboard = () => {
       {/* Hàng thẻ thống kê */}
       <div className="ad-kpi-row">
         <div className="ad-kpi-card ad-kpi-card--students">
-          <div className="ad-kpi-pill">+15%</div>
+          <div className="ad-kpi-pill">Thực tế</div>
           <span className="ad-kpi-label">Học sinh</span>
           <span className="ad-kpi-value">{stats.students.toLocaleString('vi-VN')}</span>
         </div>
         <div className="ad-kpi-card ad-kpi-card--teachers">
-          <div className="ad-kpi-pill">+3%</div>
+          <div className="ad-kpi-pill">Thực tế</div>
           <span className="ad-kpi-label">Giáo viên</span>
           <span className="ad-kpi-value">{stats.teachers.toLocaleString('vi-VN')}</span>
         </div>
         <div className="ad-kpi-card ad-kpi-card--parents">
-          <div className="ad-kpi-pill">+1%</div>
+          <div className="ad-kpi-pill">Thực tế</div>
           <span className="ad-kpi-label">Phụ huynh</span>
           <span className="ad-kpi-value">{stats.parents.toLocaleString('vi-VN')}</span>
         </div>
         <div className="ad-kpi-card ad-kpi-card--classes">
-          <div className="ad-kpi-pill">+5%</div>
+          <div className="ad-kpi-pill">Thực tế</div>
           <span className="ad-kpi-label">Số lớp học</span>
           <span className="ad-kpi-value">{stats.classes.toLocaleString('vi-VN')}</span>
         </div>

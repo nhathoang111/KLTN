@@ -1,13 +1,6 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import {
-  Area,
-  AreaChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from 'recharts';
+import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import {
   BarChart3,
   Bell,
@@ -28,7 +21,6 @@ import api from '../../../../shared/lib/api';
 import { formatGradeAnalysisForDisplay } from '../../../../shared/lib/formatGradeAnalysisForDisplay';
 import { scheduleSubjectDisplayName } from '../../../../shared/lib/scheduleLabels';
 import { useAuth } from '../../../auth/context/AuthContext';
-import { BE_DATA_GAP_ITEMS, MOCK_ACHIEVEMENTS, MOCK_PROGRESS_CHART } from './mockData';
 import './StudentDashboard.css';
 
 /** Tiết 1–10 — khớp thời khóa biểu */
@@ -77,6 +69,21 @@ function hueFromString(s) {
   return hues[h % hues.length];
 }
 
+function getAcademicYearLabel(classInfo, detailUser) {
+  const fromClass = classInfo?.schoolYear || detailUser?.class?.schoolYear;
+  if (typeof fromClass === 'string' && fromClass.trim()) return fromClass;
+  const now = new Date();
+  const startYear = now.getMonth() >= 7 ? now.getFullYear() : now.getFullYear() - 1;
+  return `${startYear} - ${startYear + 1}`;
+}
+
+function classifyConductByAttendance(attendancePct) {
+  if (attendancePct == null) return 'Chưa có dữ liệu';
+  if (attendancePct >= 95) return 'Tốt';
+  if (attendancePct >= 85) return 'Khá';
+  if (attendancePct >= 70) return 'Trung bình';
+  return 'Cần cải thiện';
+}
 /** Thời gian tương đối tiếng Việt đơn giản */
 function formatRelativeVi(dateInput) {
   if (!dateInput) return '';
@@ -151,7 +158,7 @@ const StudentDashboard = () => {
   const [aiAnalysis, setAiAnalysis] = useState(null);
   const [aiError, setAiError] = useState('');
   const [semesterUi, setSemesterUi] = useState('2'); // chỉ UI, chưa có BE lọc theo học kỳ
-  const [showBeNotes, setShowBeNotes] = useState(false);
+  const [attendanceBySection, setAttendanceBySection] = useState({});
 
   const studentId = user?.id;
   const schoolId = user?.school?.id;
@@ -259,6 +266,24 @@ const StudentDashboard = () => {
 
       setTodaySchedules(todayList);
       setExamScores(scoresRes.data?.examScores || []);
+      const classSectionIds = [...new Set(todayList.map((s) => s.classSection?.id || s.classSectionId).filter(Boolean))];
+      if (classSectionIds.length > 0) {
+        const attendanceEntries = await Promise.all(
+          classSectionIds.map(async (classSectionId) => {
+            try {
+              const res = await api.get('/attendance', { params: { classSectionId, date: todayStr } });
+              const items = res.data?.items || [];
+              const me = items.find((it) => String(it.studentId) === String(studentId));
+              return [String(classSectionId), String(me?.status || '').toUpperCase()];
+            } catch {
+              return [String(classSectionId), ''];
+            }
+          })
+        );
+        setAttendanceBySection(Object.fromEntries(attendanceEntries));
+      } else {
+        setAttendanceBySection({});
+      }
 
       if (cId) {
         const [assignmentsRes, mySubmissionsRes, announcementsRes, classRes, countsRes] = await Promise.all([
@@ -284,12 +309,12 @@ const StudentDashboard = () => {
         const teacher = raw?.homeroomTeacher ?? raw?.homeroom_teacher;
         const cls = raw
           ? {
-              ...raw,
-              name: raw.name ?? raw.className,
-              room: raw.room ?? '',
-              homeroomTeacher: teacher ? { fullName: teacher.fullName ?? teacher.full_name ?? '—' } : null,
-              studentCount: Number(studentCount) || 0,
-            }
+            ...raw,
+            name: raw.name ?? raw.className,
+            room: raw.room ?? '',
+            homeroomTeacher: teacher ? { fullName: teacher.fullName ?? teacher.full_name ?? '—' } : null,
+            studentCount: Number(studentCount) || 0,
+          }
           : null;
         setClassInfo(cls);
       } else {
@@ -355,33 +380,43 @@ const StudentDashboard = () => {
     return by;
   }, [examScores]);
 
-  /** Điểm danh: chưa có BE — mô phỏng: tất cả trừ tiết cuối là đã điểm danh */
-  const scheduleRowsWithMockAttendance = useMemo(() => {
-    return todaySchedules.map((s, idx, arr) => ({
+  const scheduleRowsWithAttendance = useMemo(() => {
+    return todaySchedules.map((s) => ({
       schedule: s,
-      attendedMock: arr.length === 0 ? false : idx < arr.length - 1,
+      status: String(attendanceBySection[String(s.classSection?.id || s.classSectionId)] || '').toUpperCase(),
     }));
-  }, [todaySchedules]);
+  }, [todaySchedules, attendanceBySection]);
 
-  const mockAttendedCount = scheduleRowsWithMockAttendance.filter((r) => r.attendedMock).length;
-  const mockPendingCount = lessonsToday > 0 ? lessonsToday - mockAttendedCount : 0;
-  const lastPeriodRow = scheduleRowsWithMockAttendance[scheduleRowsWithMockAttendance.length - 1];
-  const pendingTimeHint =
-    lastPeriodRow && !lastPeriodRow.attendedMock
-      ? `Tiết ${lastPeriodRow.schedule.period ?? '?'}: ${periodTimeRange(lastPeriodRow.schedule.period)}`
-      : '—';
+  const attendedCount = scheduleRowsWithAttendance.filter((r) => r.status === 'PRESENT' || r.status === 'LATE').length;
+  const absentCount = scheduleRowsWithAttendance.filter((r) => r.status === 'ABSENT').length;
+  const pendingCount = lessonsToday > 0 ? lessonsToday - attendedCount - absentCount : 0;
 
   const attendancePct =
-    lessonsToday > 0 ? Math.round((mockAttendedCount / lessonsToday) * 100) : null;
+    lessonsToday > 0 ? Math.round((attendedCount / lessonsToday) * 100) : null;
 
-  const { data: chartFromBe, isReal: chartIsReal } = useMemo(
+  const { data: chartFromBe } = useMemo(
     () => buildMonthlyProgressFromScores(examScores),
     [examScores]
   );
-  const progressChartData = chartIsReal ? chartFromBe : MOCK_PROGRESS_CHART;
-  const chartUsesMock = !chartIsReal;
+  const progressChartData = chartFromBe;
+  const chartHasData = chartFromBe.length > 0;
 
-  const currentGpaDisplay = avgScore ?? MOCK_PROGRESS_CHART[MOCK_PROGRESS_CHART.length - 1].score;
+  const currentGpaDisplay = avgScore ?? (chartFromBe.length ? chartFromBe[chartFromBe.length - 1].score : '—');
+  const academicYearLabel = getAcademicYearLabel(classInfo, studentDetail);
+  const conductLabel = classifyConductByAttendance(attendancePct);
+  const achievements = useMemo(() => {
+    const list = [];
+    if (avgScore != null && Number(avgScore) >= 8) {
+      list.push({ id: 'avg-score', title: 'Học lực tốt', subtitle: `Điểm TB ${avgScore}`, icon: 'trophy' });
+    }
+    if (attendancePct != null && attendancePct >= 95) {
+      list.push({ id: 'attendance', title: 'Chuyên cần cao', subtitle: `Tỷ lệ điểm danh ${attendancePct}%`, icon: 'medal' });
+    }
+    if (!list.length) {
+      list.push({ id: 'progress', title: 'Đang cải thiện', subtitle: 'Tiếp tục duy trì kết quả học tập', icon: 'medal' });
+    }
+    return list;
+  }, [avgScore, attendancePct]);
 
   const analyzeWithAi = async () => {
     try {
@@ -454,7 +489,7 @@ const StudentDashboard = () => {
         </div>
       </header>
 
-      {/* Hồ sơ — BE: tên, lớp, trường, mã HS (mã có thể fallback) | mock: học kỳ/năm học */}
+      {/* Hồ sơ — dữ liệu thật từ BE, học kỳ là bộ lọc UI */}
       <section className="sd2-hero" aria-label="Hồ sơ học sinh">
         <div className="sd2-hero-inner">
           <div className="sd2-avatar" aria-hidden>
@@ -473,9 +508,7 @@ const StudentDashboard = () => {
                 Học kỳ {semesterUi}
               </span>
               <span className="sd2-dot">•</span>
-              <span className="sd2-mock-tag" title="Chưa có API năm học — hiển thị mẫu">
-                Năm học 2025 - 2026
-              </span>
+              <span>Năm học {academicYearLabel}</span>
             </p>
             <div className="sd2-hero-tags">
               <span className="sd2-tag">
@@ -500,8 +533,8 @@ const StudentDashboard = () => {
           <div>
             <p className="sd2-stat-label">Tiết hôm nay</p>
             <p className="sd2-stat-value">{lessonsToday}</p>
-            <p className="sd2-stat-hint sd2-stat-hint--mock" title="Ước tính UI — chưa có API điểm danh theo tiết">
-              {lessonsToday > 0 ? `${mockAttendedCount} tiết đã hoàn thành (mẫu)` : 'Không có tiết'}
+            <p className="sd2-stat-hint">
+              {lessonsToday > 0 ? `${attendedCount} tiết đã có điểm danh` : 'Không có tiết'}
             </p>
           </div>
         </article>
@@ -512,12 +545,12 @@ const StudentDashboard = () => {
           <div>
             <p className="sd2-stat-label">Điểm danh</p>
             <p className="sd2-stat-value">
-              {lessonsToday > 0 ? `${mockAttendedCount}/${lessonsToday}` : '—'}
+              {lessonsToday > 0 ? `${attendedCount}/${lessonsToday}` : '—'}
             </p>
-            <p className="sd2-stat-hint sd2-stat-hint--mock" title="Chưa có API chuyên cần">
+            <p className="sd2-stat-hint" title="Tính từ dữ liệu điểm danh">
               {attendancePct != null ? (
                 <>
-                  <span className="sd2-stat-up">↑</span> {attendancePct}% (mẫu)
+                  <span className="sd2-stat-up">↑</span> {attendancePct}%
                 </>
               ) : (
                 'Chưa có dữ liệu'
@@ -531,9 +564,9 @@ const StudentDashboard = () => {
           </div>
           <div>
             <p className="sd2-stat-label">Chưa điểm danh</p>
-            <p className="sd2-stat-value">{lessonsToday > 0 ? String(mockPendingCount) : '—'}</p>
-            <p className="sd2-stat-hint sd2-stat-hint--mock" title="Chưa có API — gợi ý theo tiết cuối (mẫu)">
-              {lessonsToday > 0 ? pendingTimeHint : '—'}
+            <p className="sd2-stat-value">{lessonsToday > 0 ? String(pendingCount) : '—'}</p>
+            <p className="sd2-stat-hint">
+              {lessonsToday > 0 ? 'Các tiết chưa ghi nhận điểm danh' : '—'}
             </p>
           </div>
         </article>
@@ -544,14 +577,8 @@ const StudentDashboard = () => {
           <div>
             <p className="sd2-stat-label">Điểm TB</p>
             <p className="sd2-stat-value">{avgScore ?? '—'}</p>
-            <p className="sd2-stat-hint sd2-stat-hint--mock" title="Điểm TB từ điểm thi; so sánh HK chưa có API">
-              {avgScore ? (
-                <>
-                  <span className="sd2-stat-up">↑</span> 0.6 so với Học kỳ 1 (mẫu)
-                </>
-              ) : (
-                'Chưa có điểm thi'
-              )}
+            <p className="sd2-stat-hint" title="Điểm TB từ dữ liệu điểm thi">
+              {avgScore ? `Hạnh kiểm: ${conductLabel}` : 'Chưa có điểm thi'}
             </p>
           </div>
         </article>
@@ -610,14 +637,15 @@ const StudentDashboard = () => {
                       </td>
                     </tr>
                   ) : (
-                    scheduleRowsWithMockAttendance.map(({ schedule: s, attendedMock }) => {
+                    scheduleRowsWithAttendance.map(({ schedule: s, status }) => {
                       const subj = scheduleSubjectDisplayName(s, '—');
                       const hue = hueFromString(subj);
+                      const isPresent = status === 'PRESENT' || status === 'LATE';
+                      const isAbsent = status === 'ABSENT';
                       return (
                         <tr
                           key={s.id}
-                          className={!attendedMock ? 'sd2-row-pending' : undefined}
-                          title={!attendedMock ? 'Trạng thái điểm danh: dữ liệu mẫu (chưa có API)' : undefined}
+                          className={!status ? 'sd2-row-pending' : undefined}
                         >
                           <td>Tiết {s.period ?? '—'}</td>
                           <td className="sd2-nowrap">{periodTimeRange(s.period)}</td>
@@ -633,8 +661,10 @@ const StudentDashboard = () => {
                           </td>
                           <td>{s.teacher?.fullName ?? s.teacher?.full_name ?? '—'}</td>
                           <td>
-                            {attendedMock ? (
+                            {isPresent ? (
                               <span className="sd2-pill sd2-pill--ok">Đã điểm danh</span>
+                            ) : isAbsent ? (
+                              <span className="sd2-pill sd2-pill--danger">Vắng mặt</span>
                             ) : (
                               <span className="sd2-pill sd2-pill--wait">Chưa điểm danh</span>
                             )}
@@ -678,73 +708,61 @@ const StudentDashboard = () => {
             <div className="sd2-ai-block">
               <button
                 type="button"
-                className="sd2-outline-btn"
-                onClick={analyzeWithAi}
-                disabled={aiLoading || recentScores.length === 0}
+                className="sd2-icon-btn sd2-icon-btn--sm"
+                aria-label="Tuần trước — mở thời khóa biểu"
+                title="Chưa có API tuần; mở trang Thời khóa biểu"
+                onClick={() => navigate('/schedules')}
               >
-                {aiLoading ? 'Đang phân tích...' : 'Phân tích bằng AI'}
+                <ChevronLeft size={18} />
               </button>
-              {aiError ? <p className="sd2-ai-err">{aiError}</p> : null}
-              {aiAnalysis ? <pre className="sd2-ai-out">{aiAnalysis}</pre> : null}
-            </div>
-          </section>
-        </div>
-
-        {/* Cột giữa — biểu đồ */}
-        <div className="sd2-col sd2-col--mid">
-          <section className="sd2-card sd2-card--chart">
-            <div className="sd2-card-head">
-              <h2 className="sd2-card-title">Tiến độ học tập</h2>
-              <select
-                className="sd2-select"
-                value={semesterUi}
-                onChange={(e) => setSemesterUi(e.target.value)}
-                aria-label="Học kỳ"
-                title="Chưa lọc dữ liệu theo học kỳ — chỉ giao diện"
+              <button
+                type="button"
+                className="sd2-icon-btn sd2-icon-btn--sm"
+                aria-label="Tuần sau — mở thời khóa biểu"
+                title="Chưa có API tuần; mở trang Thời khóa biểu"
+                onClick={() => navigate('/schedules')}
               >
-                <option value="1">Học kỳ 1</option>
-                <option value="2">Học kỳ 2</option>
-              </select>
+                <ChevronRight size={18} />
+              </button>
             </div>
-            {chartUsesMock ? (
-              <p className="sd2-chart-note">
-                Đang dùng đường mẫu — cần ít nhất 2 tháng có điểm (theo ngày tạo bản ghi điểm) để vẽ từ API.
-              </p>
-            ) : null}
             <div className="sd2-chart-box">
-              <ResponsiveContainer width="100%" height={220}>
-                <AreaChart data={progressChartData} margin={{ top: 8, right: 8, left: -8, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="sd2grad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#3b82f6" stopOpacity={0.35} />
-                      <stop offset="100%" stopColor="#3b82f6" stopOpacity={0.02} />
-                    </linearGradient>
-                  </defs>
-                  <XAxis dataKey="label" tick={{ fontSize: 11 }} stroke="#94a3b8" />
-                  <YAxis domain={[0, 10]} tick={{ fontSize: 11 }} stroke="#94a3b8" width={28} />
-                  <Tooltip
-                    formatter={(v) => [`${v}`, 'Điểm TB']}
-                    contentStyle={{ borderRadius: 8, border: '1px solid #e2e8f0' }}
-                  />
-                  <Area
-                    type="monotone"
-                    dataKey="score"
-                    stroke="#2563eb"
-                    strokeWidth={2}
-                    fill="url(#sd2grad)"
-                    dot={{ r: 4, fill: '#2563eb' }}
-                    activeDot={{ r: 6 }}
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
+              {chartHasData ? (
+                <ResponsiveContainer width="100%" height={220}>
+                  <AreaChart data={progressChartData} margin={{ top: 8, right: 8, left: -8, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="sd2grad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#3b82f6" stopOpacity={0.35} />
+                        <stop offset="100%" stopColor="#3b82f6" stopOpacity={0.02} />
+                      </linearGradient>
+                    </defs>
+                    <XAxis dataKey="label" tick={{ fontSize: 11 }} stroke="#94a3b8" />
+                    <YAxis domain={[0, 10]} tick={{ fontSize: 11 }} stroke="#94a3b8" width={28} />
+                    <Tooltip
+                      formatter={(v) => [`${v}`, 'Điểm TB']}
+                      contentStyle={{ borderRadius: 8, border: '1px solid #e2e8f0' }}
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="score"
+                      stroke="#2563eb"
+                      strokeWidth={2}
+                      fill="url(#sd2grad)"
+                      dot={{ r: 4, fill: '#2563eb' }}
+                      activeDot={{ r: 6 }}
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              ) : (
+                <p className="sd2-empty sd2-empty--block">Chưa đủ dữ liệu điểm theo tháng để hiển thị biểu đồ.</p>
+              )}
             </div>
             <div className="sd2-chart-foot">
-              <span className="sd2-chart-metric sd2-chart-metric--mock" title="Chưa có API so sánh học kỳ">
-                <span className="sd2-stat-up">↑</span> 0.6 điểm (mẫu)
+              <span className="sd2-chart-metric">
+                <span className="sd2-stat-up">↑</span> Chuyên cần: {attendancePct != null ? `${attendancePct}%` : '—'}
               </span>
-              <span className="sd2-chart-metric sd2-chart-metric--mock" title="Chưa có API xếp hạng">
+              <span className="sd2-chart-metric">
                 <Trophy size={16} strokeWidth={2} aria-hidden />
-                Top 15% trong lớp (mẫu)
+                Hạnh kiểm: {conductLabel}
               </span>
             </div>
             <p className="sd2-chart-current">
@@ -834,13 +852,12 @@ const StudentDashboard = () => {
             </ul>
           </section>
 
-          <section className="sd2-card sd2-card--achieve" data-mock="true">
+          <section className="sd2-card sd2-card--achieve">
             <div className="sd2-card-head">
               <h2 className="sd2-card-title">Thành tích &amp; khen thưởng</h2>
-              <span className="sd2-mock-pill">Dữ liệu mẫu</span>
             </div>
             <ul className="sd2-achieve-list">
-              {MOCK_ACHIEVEMENTS.map((item) => (
+              {achievements.map((item) => (
                 <li key={item.id} className="sd2-achieve-item">
                   {item.icon === 'trophy' ? (
                     <Trophy size={20} className="sd2-achieve-ic" aria-hidden />
@@ -860,19 +877,6 @@ const StudentDashboard = () => {
           </section>
         </div>
       </div>
-
-      <footer className="sd2-foot">
-        <button type="button" className="sd2-foot-toggle" onClick={() => setShowBeNotes((v) => !v)}>
-          {showBeNotes ? 'Ẩn' : 'Hiện'} ghi chú phần chưa có API backend
-        </button>
-        {showBeNotes ? (
-          <ul className="sd2-foot-list">
-            {BE_DATA_GAP_ITEMS.map((t) => (
-              <li key={t}>{t}</li>
-            ))}
-          </ul>
-        ) : null}
-      </footer>
     </div>
   );
 };
