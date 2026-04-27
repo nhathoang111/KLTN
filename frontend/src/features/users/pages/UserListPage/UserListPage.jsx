@@ -623,6 +623,7 @@ const UserListPage = () => {
                       </th>
                       <th className="px-4 py-3 text-left">Người dùng</th>
                       <th className="px-4 py-3 text-left">Vai trò</th>
+                      {isSuperAdmin && <th className="px-4 py-3 text-left">Trường</th>}
                       {!isSuperAdmin && <th className="px-4 py-3 text-left">GVCN lớp</th>}
                       {isAdmin && <th className="px-4 py-3 text-left">Liên kết</th>}
                       <th className="px-4 py-3 text-left">Trạng thái</th>
@@ -699,6 +700,19 @@ const UserListPage = () => {
                               })()
                             )}
                           </td>
+
+                          {isSuperAdmin && (
+                            <td className="px-4 py-3">
+                              {userItem.school?.name ? (
+                                <div className="flex flex-col">
+                                  <span className="text-sm font-medium text-slate-800">{userItem.school.name}</span>
+                                  <span className="text-xs text-slate-500">{userItem.school.code || '—'}</span>
+                                </div>
+                              ) : (
+                                <span className="text-slate-400">—</span>
+                              )}
+                            </td>
+                          )}
 
                           {!isSuperAdmin && (
                             <td className="px-4 py-3">

@@ -25,6 +25,8 @@ const SuperAdminDashboard = () => {
   const [stats, setStats] = useState({
     schools: 0,
     users: 0,
+    classes: 0,
+    students: 0,
   });
   const [loading, setLoading] = useState(true);
   const [schools, setSchools] = useState([]);
@@ -47,11 +49,13 @@ const SuperAdminDashboard = () => {
 
   const fetchStats = async () => {
     try {
-      const [schoolsRes, usersRes] = await Promise.all([
+      const [dashboardRes, schoolsRes, usersRes] = await Promise.all([
+        api.get('/dashboard'),
         api.get('/schools'),
         api.get('/users?userRole=SUPER_ADMIN'),
       ]);
 
+      const dashboardStats = dashboardRes?.data?.stats || {};
       const schoolsData = schoolsRes.data.schools || [];
       const usersData = usersRes.data.users || [];
 
@@ -74,8 +78,10 @@ const SuperAdminDashboard = () => {
       setRecentSchools(sortedSchools);
 
       setStats({
-        schools: schoolsData.length || 0,
-        users: usersData.length || 0,
+        schools: Number(dashboardStats.totalSchools ?? schoolsData.length ?? 0),
+        users: Number(dashboardStats.totalUsers ?? usersData.length ?? 0),
+        classes: Number(dashboardStats.totalClasses ?? 0),
+        students: Number(dashboardStats.totalStudents ?? 0),
       });
       const statsByRole = usersData.reduce(
         (acc, u) => {
@@ -185,15 +191,15 @@ const SuperAdminDashboard = () => {
         <div className="sa-kpi-card">
           <div className="sa-kpi-icon sa-kpi-icon--check" />
           <div className="sa-kpi-content">
-            <span className="sa-kpi-label">Tài khoản hoạt động</span>
-            <span className="sa-kpi-value">{stats.users}</span>
+            <span className="sa-kpi-label">Tổng số lớp học</span>
+            <span className="sa-kpi-value">{stats.classes}</span>
           </div>
         </div>
         <div className="sa-kpi-card">
           <div className="sa-kpi-icon sa-kpi-icon--home" />
           <div className="sa-kpi-content">
-            <span className="sa-kpi-label">Trường đang hoạt động</span>
-            <span className="sa-kpi-value">{schoolStatusStats.active}</span>
+            <span className="sa-kpi-label">Tổng số học sinh</span>
+            <span className="sa-kpi-value">{stats.students}</span>
           </div>
         </div>
       </div>

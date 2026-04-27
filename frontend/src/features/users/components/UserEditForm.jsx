@@ -87,8 +87,18 @@ const UserEditForm = ({
     const u = (name || '').toUpperCase();
     return u.includes('PARENT') || u.includes('PHỤ HUYNH') || u.includes('PHU HUYNH');
   };
+  const isRoleAdmin = (name) => {
+    const u = (name || '').toUpperCase();
+    return u === 'ADMIN' || u.startsWith('ADMIN_');
+  };
   const isAllowedRoleForSchoolAdmin = (roleName) => {
     return isRoleStudent(roleName) || isRoleTeacher(roleName) || isRoleParent(roleName);
+  };
+  const withCurrentRoleOption = (list, currentRole) => {
+    const normalized = Array.isArray(list) ? list.filter((r) => r && r.id != null) : [];
+    if (!currentRole || currentRole.id == null) return normalized;
+    const exists = normalized.some((r) => String(r.id) === String(currentRole.id));
+    return exists ? normalized : [...normalized, currentRole];
   };
 
   const fetchRolesForSchool = async (schoolId) => {
@@ -97,7 +107,7 @@ const UserEditForm = ({
       const res = await api.get(`/roles/school/${schoolId}`);
       let allRoles = res.data.roles || [];
       if (isSchoolAdmin) allRoles = (allRoles || []).filter((r) => isAllowedRoleForSchoolAdmin(r?.name));
-      setRoles(allRoles);
+      setRoles(withCurrentRoleOption(allRoles, loadedRoleSnapshot));
     } catch (err) {
       console.error(err);
     } finally {
@@ -162,7 +172,7 @@ const UserEditForm = ({
           const rolesRes = await api.get(`/roles/school/${schoolId}`);
           let allRoles = rolesRes.data.roles || [];
           if (isSchoolAdmin) allRoles = (allRoles || []).filter((r) => isAllowedRoleForSchoolAdmin(r?.name));
-          setRoles(allRoles);
+          setRoles(withCurrentRoleOption(allRoles, user.role));
         } catch (error) {
           console.error(error);
         }
@@ -260,6 +270,9 @@ const UserEditForm = ({
   const isStudent = isRoleStudent(selectedRole?.name);
   const isParent = isRoleParent(selectedRole?.name);
   const isTeacher = isRoleTeacher(selectedRole?.name);
+  const isSuperAdminEditingAdmin =
+    currentUserRole === 'SUPER_ADMIN' &&
+    (isRoleAdmin(loadedRoleSnapshot?.name) || isRoleAdmin(selectedRole?.name));
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -329,8 +342,7 @@ const UserEditForm = ({
       setError('Trường là bắt buộc');
       return false;
     }
-    const roleUpper = (selectedRole?.name || '').toUpperCase();
-    const isAdminRole = roleUpper === 'ADMIN' || roleUpper.startsWith('ADMIN_');
+    const isAdminRole = isRoleAdmin(selectedRole?.name);
     if (isAdminRole && !formData.schoolId) {
       setError('Tài khoản Admin bắt buộc phải gán trường');
       return false;
@@ -596,7 +608,23 @@ const UserEditForm = ({
 
               <div>
                 <label className="block text-sm font-semibold text-slate-700">Vai trò *</label>
-                {isAdmin ? (
+                {isSuperAdminEditingAdmin ? (
+                  <>
+                    <div className="relative mt-1">
+                      <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-slate-400">
+                        <Shield size={18} />
+                      </span>
+                      <input
+                        type="text"
+                        value="Quản trị trường (ADMIN)"
+                        disabled
+                        readOnly
+                        className="block w-full rounded-2xl border border-slate-200 bg-slate-50 pl-10 pr-3 py-3 text-base shadow-sm"
+                      />
+                    </div>
+                    <input type="hidden" name="roleId" value={formData.roleId} />
+                  </>
+                ) : isAdmin ? (
                   <div className="relative mt-1">
                     <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-slate-400">
                       <Shield size={18} />
