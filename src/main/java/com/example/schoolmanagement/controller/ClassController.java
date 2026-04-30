@@ -56,6 +56,12 @@ public class ClassController {
         return ResponseEntity.ok(result);
     }
 
+    @GetMapping(value = "/{id}/students/history", produces = "application/json")
+    public ResponseEntity<?> getStudentHistoryByClass(@PathVariable Integer id) {
+        Map<String, Object> result = classService.getStudentHistoryByClass(id);
+        return ResponseEntity.ok(result);
+    }
+
     /** Lưu trữ toàn bộ lớp thuộc một niên khóa (theo tên) của trường. */
     @PostMapping("/actions/archive-school-year")
     public ResponseEntity<?> archiveSchoolYear(@RequestBody Map<String, Object> body,
@@ -107,6 +113,17 @@ public class ClassController {
         String fromSy = body.get("fromSchoolYear") != null ? body.get("fromSchoolYear").toString().trim() : null;
         String toSy = body.get("toSchoolYear") != null ? body.get("toSchoolYear").toString().trim() : null;
         Map<String, Object> result = classService.rolloverSchoolYear(schoolId, fromSy, toSy);
+        return ResponseEntity.ok(result);
+    }
+
+    @PostMapping("/actions/backfill-enrollment-history")
+    public ResponseEntity<?> backfillEnrollmentHistory(@RequestBody(required = false) Map<String, Object> body,
+                                                       @RequestHeader(value = "X-User-Role", required = false) String userRole) {
+        if (isTeacherRole(userRole)) {
+            return ResponseEntity.status(403).body(Map.of("error", "Giáo viên không có quyền thao tác này"));
+        }
+        Integer schoolId = body != null && body.containsKey("schoolId") ? parseInteger(body.get("schoolId")) : null;
+        Map<String, Object> result = classService.backfillEnrollmentHistory(schoolId);
         return ResponseEntity.ok(result);
     }
 

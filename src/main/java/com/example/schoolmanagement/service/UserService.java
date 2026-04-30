@@ -106,6 +106,9 @@ public class UserService {
     @Autowired
     private ClassSectionRepository classSectionRepository;
 
+    @Autowired
+    private EnrollmentHistoryService enrollmentHistoryService;
+
     public List<User> getAllUsers() {
         return userRepository.findAll();
     }
@@ -734,6 +737,12 @@ public class UserService {
                         enrollment.setRollno(maxRollno + 1);
                         enrollmentRepository.save(enrollment);
                         enrollmentRepository.flush();
+                        enrollmentHistoryService.openHistoryForEnrollment(
+                                enrollment,
+                                "ACTIVE",
+                                "ENROLL",
+                                "Ghi danh học sinh vào lớp khi tạo mới tài khoản."
+                        );
                     }
                 }
             }
@@ -914,6 +923,12 @@ public class UserService {
             if (oldRn.startsWith("STUDENT") || oldRn.contains("STUDENT")) {
                 List<Enrollment> enrollments = enrollmentRepository.findByStudentId(id);
                 for (Enrollment e : enrollments) {
+                    enrollmentHistoryService.closeHistoryForEnrollment(
+                            e,
+                            "INACTIVE",
+                            "ROLE_CHANGED",
+                            "Đổi vai trò người dùng, kết thúc ghi danh học sinh."
+                    );
                     e.setStatus("INACTIVE");
                     enrollmentRepository.save(e);
                 }
@@ -942,6 +957,12 @@ public class UserService {
                     if (activeEnrollment != null) {
                         Integer currentClassId = activeEnrollment.getClassEntity() != null ? activeEnrollment.getClassEntity().getId() : null;
                         if (currentClassId != null && !currentClassId.equals(newClassId)) {
+                            enrollmentHistoryService.closeHistoryForEnrollment(
+                                    activeEnrollment,
+                                    "TRANSFERRED",
+                                    "CLASS_CHANGE",
+                                    "Đổi lớp học sinh từ màn hình cập nhật người dùng."
+                            );
                             activeEnrollment.setStatus("INACTIVE");
                             enrollmentRepository.save(activeEnrollment);
                         } else if (currentClassId != null && currentClassId.equals(newClassId)) {
@@ -966,6 +987,13 @@ public class UserService {
                                 .orElse(0);
                         newEnrollment.setRollno(maxRollno + 1);
                         enrollmentRepository.save(newEnrollment);
+                        enrollmentRepository.flush();
+                        enrollmentHistoryService.openHistoryForEnrollment(
+                                newEnrollment,
+                                "ACTIVE",
+                                "ENROLL",
+                                "Ghi danh học sinh vào lớp sau khi cập nhật hồ sơ."
+                        );
                     }
                 }
             }

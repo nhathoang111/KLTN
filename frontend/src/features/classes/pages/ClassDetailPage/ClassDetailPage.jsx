@@ -29,7 +29,19 @@ const toStudyStatus = (status, fallback = "Đang học") => {
   if (s === "ACTIVE") return "Đang học";
   if (s === "INACTIVE") return "Ngưng học";
   if (s === "ARCHIVED") return "Đã lưu trữ";
+  if (s === "PROMOTED") return "Đã chuyển lớp";
+  if (s === "GRADUATED") return "Đã tốt nghiệp";
   return status;
+};
+
+const historyEventLabel = (eventType) => {
+  const normalized = (eventType || "").toString().trim().toUpperCase();
+  if (!normalized) return "";
+  if (normalized === "PROMOTE_OUT") return "";
+  if (normalized === "PROMOTE_IN") return "Chuyển vào lớp";
+  if (normalized === "GRADUATE") return "Tốt nghiệp";
+  if (normalized === "ARCHIVE_CLASS") return "Lưu trữ lớp";
+  return eventType;
 };
 
 const ClassDetailPage = () => {
@@ -361,6 +373,8 @@ const ClassDetailPage = () => {
   const schoolYearName = classEntity?.schoolYear?.name;
   const homeroomTeacherName = classEntity?.homeroomTeacher?.fullName || "Chưa có";
   const schoolOptions = classEntity?.school ? [classEntity.school] : [];
+  const hasHistoricalStudents = students.some((s) => s?.isHistorical);
+  const isArchivedClass = (classEntity?.status || "").toString().toUpperCase() === "ARCHIVED";
 
   return (
     <div className="min-h-screen bg-slate-100 px-4 py-6">
@@ -377,7 +391,7 @@ const ClassDetailPage = () => {
               <Link className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50" to="/classes">
                 Quay lại
               </Link>
-              {canEditClass && (
+              {canEditClass && !isArchivedClass && (
                 <button
                   type="button"
                   className="rounded-full bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-md shadow-indigo-500/30 hover:bg-indigo-500"
@@ -442,7 +456,14 @@ const ClassDetailPage = () => {
 
       {activeTab === "students" && (
         <div className="rounded-2xl border border-slate-200 bg-white/95 shadow-xl shadow-slate-900/5 overflow-hidden">
-          <div className="px-4 py-3 font-semibold text-slate-800">Danh sách học sinh ({students.length})</div>
+          <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
+            <div className="font-semibold text-slate-800">Danh sách học sinh ({students.length})</div>
+            {hasHistoricalStudents && (
+              <span className="inline-flex items-center rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-900">
+                Dữ liệu lịch sử niên khóa
+              </span>
+            )}
+          </div>
           <div className="overflow-x-auto">
             <table className="min-w-full border-collapse text-sm">
               <thead className="bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
@@ -464,7 +485,18 @@ const ClassDetailPage = () => {
                     <tr key={s.id} className="border-t border-slate-100">
                       <td className="px-4 py-3">{safeText(s.fullName)}</td>
                       <td className="px-4 py-3">{safeText(s.email)}</td>
-                      <td className="px-4 py-3">{toStudyStatus(s.status)}</td>
+                      <td className="px-4 py-3">
+                        {toStudyStatus(s.status)}
+                        {s?.isHistorical ? (() => {
+                          const eventLabel = historyEventLabel(s?.eventType);
+                          if (!eventLabel) return null;
+                          return (
+                            <span className="ml-2 rounded bg-slate-100 px-2 py-0.5 text-xs text-slate-600">
+                              {eventLabel}
+                            </span>
+                          );
+                        })() : null}
+                      </td>
                     </tr>
                   ))
                 )}

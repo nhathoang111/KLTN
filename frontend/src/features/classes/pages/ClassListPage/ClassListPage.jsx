@@ -30,6 +30,27 @@ function uniqueSortedSchoolYears(classList) {
   return [...set].sort((a, b) => b.localeCompare(a, undefined, { numeric: true }));
 }
 
+function isNextSchoolYear(fromYear, toYear) {
+  if (!fromYear || !toYear) return false;
+  const fromParts = String(fromYear).trim().split('-');
+  const toParts = String(toYear).trim().split('-');
+  if (fromParts.length !== 2 || toParts.length !== 2) return false;
+  const fromStart = Number(fromParts[0]);
+  const fromEnd = Number(fromParts[1]);
+  const toStart = Number(toParts[0]);
+  const toEnd = Number(toParts[1]);
+  if ([fromStart, fromEnd, toStart, toEnd].some((n) => Number.isNaN(n))) return false;
+  return toStart === fromStart + 1 && toEnd === fromEnd + 1;
+}
+
+function classStatusLabel(status) {
+  const normalized = (status || '').toString().trim().toUpperCase();
+  if (normalized === 'ACTIVE') return 'Đang học';
+  if (normalized === 'ARCHIVED') return 'Đã lưu trữ';
+  if (!normalized) return 'Không xác định';
+  return status;
+}
+
 const ClassListPage = () => {
   const { user } = useAuth();
   const [classes, setClasses] = useState([]);
@@ -62,12 +83,23 @@ const ClassListPage = () => {
   /** Rỗng = hiện mọi niên khóa; có giá trị = chỉ lớp thuộc niên khóa đó. */
   const [filterSchoolYear, setFilterSchoolYear] = useState('');
   const yearInitRef = React.useRef(false);
+  const latestSchoolYear = useMemo(() => {
+    const ys = uniqueSortedSchoolYears(classes);
+    return ys.length > 0 ? ys[0] : '';
+  }, [classes]);
+  const isViewingOldSchoolYear = Boolean(
+    filterSchoolYear &&
+    latestSchoolYear &&
+    filterSchoolYear !== latestSchoolYear
+  );
 
   const displayedClasses = useMemo(() => {
     if (!classes || !Array.isArray(classes)) return [];
+    // Khi xem niên khóa cũ, luôn hiện cả lớp ARCHIVED để không phải bấm checkbox thủ công.
+    if (isViewingOldSchoolYear) return classes;
     if (showArchived) return classes;
     return classes.filter((c) => (c.status || '').toUpperCase() !== 'ARCHIVED');
-  }, [classes, showArchived]);
+  }, [classes, showArchived, isViewingOldSchoolYear]);
 
   const yearOptions = useMemo(() => uniqueSortedSchoolYears(classes), [classes]);
 
@@ -119,7 +151,12 @@ const ClassListPage = () => {
       const studentCounts = countsRes.data || {};
       allClasses = allClasses.map((cls) => ({
         ...cls,
-        studentCount: studentCounts[String(cls.id)] ?? cls.studentCount ?? 0
+        // Ưu tiên studentCount do API /classes trả về (đã gồm logic lịch sử từ backend).
+        // Chỉ fallback sang endpoint counts nếu field này vắng/null.
+        studentCount:
+          cls.studentCount != null
+            ? cls.studentCount
+            : (studentCounts[String(cls.id)] ?? 0)
       }));
 
       // Filter for admin and teacher users
@@ -445,6 +482,10 @@ const ClassListPage = () => {
       toast.error('Niên khóa phải đúng định dạng YYYY-YYYY (ví dụ 2024-2025).');
       return;
     }
+    if (!isNextSchoolYear(fromYear, toYear)) {
+      toast.error('Niên khóa đích phải là niên khóa kế tiếp (ví dụ 2026-2027 -> 2027-2028).');
+      return;
+    }
     try {
       setRolloverLoading(true);
       const headers = { 'X-User-Role': user?.role?.name || '' };
@@ -536,14 +577,6 @@ const ClassListPage = () => {
         <div className="rounded-2xl bg-white/95 px-4 py-3 shadow-lg shadow-slate-900/5 flex flex-wrap items-center justify-between gap-3">
           <h1 className="text-2xl font-bold text-slate-800">Quản lý lớp học</h1>
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              className="btn btn-secondary"
-              onClick={() => fetchData()}
-              style={{ marginRight: canManageClasses ? 0 : undefined }}
-            >
-              Làm mới
-            </button>
             {canManageClasses && (
               <>
                 <label className="inline-flex cursor-pointer items-center gap-2 text-sm text-slate-600">
@@ -551,8 +584,11 @@ const ClassListPage = () => {
                     type="checkbox"
                     checked={showArchived}
                     onChange={(e) => setShowArchived(e.target.checked)}
+                    disabled={isViewingOldSchoolYear}
                   />
-                  Hiện lớp đã lưu trữ
+                  {isViewingOldSchoolYear
+                    ? 'Đang tự động hiện lớp lưu trữ (niên khóa cũ)'
+                    : 'Hiện lớp đã lưu trữ'}
                 </label>
                 {canArchiveSchoolYear && (
                   <button
@@ -673,7 +709,7 @@ const ClassListPage = () => {
                                 : 'bg-slate-300 text-slate-700'
                           }`}
                         >
-                          {classItem.status?.toUpperCase() === 'ACTIVE' ? 'Đang học' : classItem.status}
+                          {classStatusLabel(classItem.status)}
                         </span>
                       </td>
                       <td className="px-4 py-3">

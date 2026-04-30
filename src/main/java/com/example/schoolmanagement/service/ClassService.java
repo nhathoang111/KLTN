@@ -2,11 +2,13 @@ package com.example.schoolmanagement.service;
 
 import com.example.schoolmanagement.entity.ClassEntity;
 import com.example.schoolmanagement.entity.Enrollment;
+import com.example.schoolmanagement.entity.EnrollmentHistory;
 import com.example.schoolmanagement.entity.User;
 import com.example.schoolmanagement.exception.BadRequestException;
 import com.example.schoolmanagement.util.ClassStatusPolicy;
 import com.example.schoolmanagement.repository.ClassRepository;
 import com.example.schoolmanagement.repository.EnrollmentRepository;
+import com.example.schoolmanagement.repository.EnrollmentHistoryRepository;
 import com.example.schoolmanagement.repository.SchoolRepository;
 import com.example.schoolmanagement.repository.UserRepository;
 import com.example.schoolmanagement.repository.AssignmentRepository;
@@ -28,6 +30,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.*;
+import java.time.LocalDateTime;
 import java.util.stream.Collectors;
 import java.util.regex.Pattern;
 
@@ -50,6 +53,12 @@ public class ClassService {
     
     @Autowired
     private EnrollmentRepository enrollmentRepository;
+
+    @Autowired
+    private EnrollmentHistoryRepository enrollmentHistoryRepository;
+
+    @Autowired
+    private EnrollmentHistoryService enrollmentHistoryService;
     
     @Autowired
     private AssignmentRepository assignmentRepository;
@@ -103,7 +112,7 @@ public class ClassService {
         }
 
         for (ClassEntity classEntity : classes) {
-            long count = enrollmentRepository.countActiveByClassEntityId(classEntity.getId());
+            long count = resolveStudentCountForDisplay(classEntity);
             classEntity.setStudentCount((int) count);
         }
         
@@ -116,7 +125,7 @@ public class ClassService {
         Map<Integer, Integer> map = new HashMap<>();
         for (ClassEntity c : all) {
             if (c.getId() != null) {
-                long count = enrollmentRepository.countActiveByClassEntityId(c.getId());
+                long count = resolveStudentCountForDisplay(c);
                 map.put(c.getId(), (int) count);
             }
         }
@@ -126,7 +135,7 @@ public class ClassService {
     public ClassEntity getClassById(Integer id) {
         ClassEntity entity = classRepository.findById(id)
                 .orElseThrow(() -> new com.example.schoolmanagement.exception.ResourceNotFoundException("Class not found with id: " + id));
-        long count = enrollmentRepository.countActiveByClassEntityId(id);
+        long count = resolveStudentCountForDisplay(entity);
         entity.setStudentCount((int) count);
         return entity;
     }
@@ -135,7 +144,7 @@ public class ClassService {
         List<ClassEntity> list = classRepository.findBySchoolId(schoolId);
         for (ClassEntity c : list) {
             if (c.getId() != null) {
-                long count = enrollmentRepository.countActiveByClassEntityId(c.getId());
+                long count = resolveStudentCountForDisplay(c);
                 c.setStudentCount((int) count);
             }
         }
@@ -200,6 +209,7 @@ public class ClassService {
         if (!enrollments.isEmpty()) {
             enrollmentRepository.deleteAll(enrollments);
         }
+        enrollmentHistoryRepository.deleteByClassEntityId(id);
         List<com.example.schoolmanagement.entity.Assignment> assignments = assignmentRepository.findByClassEntityId(id);
         if (!assignments.isEmpty()) {
             for (com.example.schoolmanagement.entity.Assignment assignment : assignments) {
@@ -259,6 +269,12 @@ public class ClassService {
         List<Enrollment> enrollments = enrollmentRepository.findByClassEntityId(id);
         for (Enrollment e : enrollments) {
             if (e.getStatus() != null && "ACTIVE".equalsIgnoreCase(e.getStatus())) {
+                enrollmentHistoryService.closeHistoryForEnrollment(
+                        e,
+                        "ARCHIVED",
+                        "ARCHIVE_CLASS",
+                        "Lớp được lưu trữ, kết thúc niên khóa."
+                );
                 e.setStatus("INACTIVE");
                 enrollmentRepository.save(e);
             }
@@ -306,6 +322,7 @@ public class ClassService {
         if (fromTrim.equalsIgnoreCase(toTrim)) {
             throw new BadRequestException("Niên khóa nguồn và đích không được trùng nhau.");
         }
+        assertNextSchoolYear(fromTrim, toTrim);
         School school = schoolRepository.findById(schoolId)
                 .orElseThrow(() -> new BadRequestException("Không tìm thấy trường."));
         SchoolYear fromSy = schoolYearRepository.findBySchoolIdAndName(schoolId, fromTrim)
@@ -385,13 +402,19 @@ public class ClassService {
                     .map(e -> e.getStudent() != null ? e.getStudent().getId() : null)
                     .filter(Objects::nonNull)
                     .collect(Collectors.toList());
-
+            int failedForClass = 0;
             for (Integer stId : studentIds) {
                 try {
-                    movedStudents += promoteOneStudent(stId, target.getId(), schoolId);
+                    int movedOne = promoteOneStudent(stId, target.getId(), schoolId);
+                    movedStudents += movedOne;
                 } catch (BadRequestException ex) {
+                    failedForClass++;
                     errors.add("HS " + stId + " → \"" + target.getName() + "\": " + ex.getMessage());
                 }
+            }
+            if (failedForClass > 0) {
+                errors.add("Lớp nguồn \"" + src.getName() + "\" còn " + failedForClass + " học sinh chưa chuyển, chưa lưu trữ lớp này.");
+                continue;
             }
             try {
                 archiveClass(src.getId());
@@ -400,7 +423,6 @@ public class ClassService {
                 errors.add("Lưu trữ lớp nguồn sau chuyển, id=" + src.getId() + ": " + ex.getMessage());
             }
         }
-
         Map<String, Object> out = new LinkedHashMap<>();
         out.put("message", "Đã chuyển niên khóa: khối 12 lưu trữ; khối 10–11 lên lớp trong niên khóa mới.");
         out.put("fromSchoolYear", fromTrim);
@@ -430,6 +452,12 @@ public class ClassService {
             }
             for (Enrollment e : enrollmentRepository.findByStudentId(sid)) {
                 if (e.getStatus() != null && "ACTIVE".equalsIgnoreCase(e.getStatus())) {
+                    enrollmentHistoryService.closeHistoryForEnrollment(
+                            e,
+                            "GRADUATED",
+                            "GRADUATE",
+                            "Học sinh được đánh dấu tốt nghiệp/không chuyển tiếp."
+                    );
                     e.setStatus("INACTIVE");
                     enrollmentRepository.save(e);
                 }
@@ -462,6 +490,47 @@ public class ClassService {
         );
     }
 
+    @Transactional
+    public Map<String, Object> backfillEnrollmentHistory(Integer schoolId) {
+        List<Enrollment> source = schoolId == null
+                ? enrollmentRepository.findAll()
+                : enrollmentRepository.findBySchoolId(schoolId);
+        int created = 0;
+        int skipped = 0;
+        for (Enrollment e : source) {
+            if (e.getId() == null || e.getStudent() == null || e.getClassEntity() == null) {
+                skipped++;
+                continue;
+            }
+            if (enrollmentHistoryRepository.countByEnrollmentId(e.getId()) > 0) {
+                skipped++;
+                continue;
+            }
+            EnrollmentHistory h = new EnrollmentHistory();
+            h.setEnrollment(e);
+            h.setStudent(e.getStudent());
+            h.setClassEntity(e.getClassEntity());
+            h.setSchool(e.getSchool() != null ? e.getSchool() : e.getClassEntity().getSchool());
+            h.setSchoolYear(e.getClassEntity().getSchoolYear());
+            String normalizedStatus = e.getStatus() == null ? "ACTIVE" : e.getStatus().trim().toUpperCase();
+            h.setStatus(normalizedStatus);
+            h.setEventType("BACKFILL_SNAPSHOT");
+            h.setEventNote("Dữ liệu lịch sử được khởi tạo từ enrollment hiện có.");
+            LocalDateTime now = LocalDateTime.now();
+            h.setStartedAt(now);
+            if (!"ACTIVE".equals(normalizedStatus)) {
+                h.setEndedAt(now);
+            }
+            enrollmentHistoryRepository.save(h);
+            created++;
+        }
+        return Map.of(
+                "processed", source.size(),
+                "createdHistoryRows", created,
+                "skippedRows", skipped
+        );
+    }
+
     private int promoteOneStudent(Integer studentId, Integer toClassId, Integer schoolIdOptional) {
         User student = userRepository.findById(studentId)
                 .orElseThrow(() -> new BadRequestException("Không tìm thấy học sinh " + studentId));
@@ -483,12 +552,7 @@ public class ClassService {
         if (alreadyInTarget) {
             return 0;
         }
-        for (Enrollment e : byStudent) {
-            if (e.getStatus() != null && "ACTIVE".equalsIgnoreCase(e.getStatus())) {
-                e.setStatus("INACTIVE");
-                enrollmentRepository.save(e);
-            }
-        }
+        // Kiểm tra sĩ số lớp đích trước khi đóng enrollment cũ để tránh mất trạng thái ACTIVE hiện tại.
         ensureClassHasCapacityForNewEnrollment(target);
         List<Enrollment> classEnrollments = enrollmentRepository.findByClassEntityId(toClassId);
         int maxRoll = classEnrollments.stream()
@@ -504,6 +568,26 @@ public class ClassService {
         en.setRollno(maxRoll + 1);
         enrollmentRepository.save(en);
         enrollmentRepository.flush();
+        enrollmentHistoryService.openHistoryForEnrollment(
+                en,
+                "ACTIVE",
+                "PROMOTE_IN",
+                "Nhận học sinh vào lớp mới sau chuyển niên khóa."
+        );
+        for (Enrollment e : byStudent) {
+            if (e.getStatus() != null && "ACTIVE".equalsIgnoreCase(e.getStatus())) {
+                String sourceClassName = e.getClassEntity() != null ? e.getClassEntity().getName() : "N/A";
+                String targetClassName = target.getName() != null ? target.getName() : String.valueOf(toClassId);
+                enrollmentHistoryService.closeHistoryForEnrollment(
+                        e,
+                        "PROMOTED",
+                        "PROMOTE_OUT",
+                        "Chuyển từ lớp " + sourceClassName + " sang lớp " + targetClassName + "."
+                );
+                e.setStatus("INACTIVE");
+                enrollmentRepository.save(e);
+            }
+        }
         return 1;
     }
 
@@ -537,6 +621,21 @@ public class ClassService {
             throw new BadRequestException("Niên khóa phải đúng định dạng YYYY-YYYY (ví dụ 2024-2025).");
         }
         return value;
+    }
+
+    private void assertNextSchoolYear(String fromSchoolYear, String toSchoolYear) {
+        String[] fromParts = fromSchoolYear.split("-");
+        String[] toParts = toSchoolYear.split("-");
+        int fromStart = Integer.parseInt(fromParts[0]);
+        int fromEnd = Integer.parseInt(fromParts[1]);
+        int toStart = Integer.parseInt(toParts[0]);
+        int toEnd = Integer.parseInt(toParts[1]);
+        boolean isNextYear = (toStart == fromStart + 1) && (toEnd == fromEnd + 1);
+        if (!isNextYear) {
+            throw new BadRequestException(
+                    "Niên khóa đích phải là niên khóa kế tiếp của niên khóa nguồn (ví dụ 2024-2025 -> 2025-2026)."
+            );
+        }
     }
 
     private static Integer toInteger(Object v) {
@@ -631,6 +730,9 @@ public class ClassService {
         if (classOpt.isEmpty()) {
             return Map.of("students", Collections.<User>emptyList());
         }
+        ClassEntity classEntity = classOpt.get();
+        boolean archivedClass = classEntity.getStatus() != null
+                && "ARCHIVED".equalsIgnoreCase(classEntity.getStatus().trim());
         List<Enrollment> enrollments = enrollmentRepository.findByClassEntityIdWithStudents(id);
         if (enrollments.isEmpty()) {
             enrollments = enrollmentRepository.findActiveEnrollmentsByClassId(id);
@@ -647,7 +749,100 @@ public class ClassService {
                 .map(Enrollment::getStudent)
                 .distinct()
                 .collect(Collectors.toList());
-        return Map.of("students", students);
+        if (!students.isEmpty()) {
+            return Map.of("students", students);
+        }
+        if (!archivedClass) {
+            return Map.of("students", Collections.<User>emptyList());
+        }
+
+        List<Map<String, Object>> historicalStudents = getHistoricalStudentsByClass(id);
+        if (!historicalStudents.isEmpty()) {
+            return Map.of("students", historicalStudents);
+        }
+
+        List<User> legacyStudents = getStudentsFromAllEnrollmentsByClass(id);
+        return Map.of("students", legacyStudents);
+    }
+
+    public Map<String, Object> getStudentHistoryByClass(Integer id) {
+        return Map.of("students", getHistoricalStudentsByClass(id));
+    }
+
+    private List<Map<String, Object>> getHistoricalStudentsByClass(Integer classId) {
+        List<EnrollmentHistory> rows = enrollmentHistoryRepository.findByClassIdWithStudentDesc(classId);
+        if (rows.isEmpty()) {
+            return Collections.emptyList();
+        }
+        Map<Integer, Map<String, Object>> latestByStudent = new LinkedHashMap<>();
+        for (EnrollmentHistory h : rows) {
+            if (h.getStudent() == null || h.getStudent().getId() == null) {
+                continue;
+            }
+            Integer studentId = h.getStudent().getId();
+            if (latestByStudent.containsKey(studentId)) {
+                continue;
+            }
+            String roleName = h.getStudent().getRole() != null ? h.getStudent().getRole().getName() : "";
+            if (roleName == null || (!"STUDENT".equalsIgnoreCase(roleName) && !roleName.toUpperCase().startsWith("STUDENT"))) {
+                continue;
+            }
+            Map<String, Object> one = new LinkedHashMap<>();
+            one.put("id", studentId);
+            one.put("fullName", h.getStudent().getFullName());
+            one.put("email", h.getStudent().getEmail());
+            one.put("status", h.getStatus());
+            one.put("eventType", h.getEventType());
+            one.put("isHistorical", true);
+            latestByStudent.put(studentId, one);
+        }
+        return new ArrayList<>(latestByStudent.values());
+    }
+
+    private List<User> getStudentsFromAllEnrollmentsByClass(Integer classId) {
+        List<Enrollment> allEnrollments = enrollmentRepository.findByClassEntityIdWithStudents(classId);
+        if (allEnrollments.isEmpty()) {
+            allEnrollments = enrollmentRepository.findByClassEntityId(classId);
+        }
+        return allEnrollments.stream()
+                .filter(e -> e.getStudent() != null && e.getStudent().getRole() != null)
+                .filter(e -> {
+                    String roleName = e.getStudent().getRole().getName();
+                    if (roleName == null) {
+                        return false;
+                    }
+                    String normalized = roleName.toUpperCase();
+                    return "STUDENT".equals(normalized) || normalized.startsWith("STUDENT");
+                })
+                .map(Enrollment::getStudent)
+                .distinct()
+                .collect(Collectors.toList());
+    }
+
+    private long resolveStudentCountForDisplay(ClassEntity classEntity) {
+        if (classEntity == null || classEntity.getId() == null) {
+            return 0L;
+        }
+        long activeCount = enrollmentRepository.countActiveByClassEntityId(classEntity.getId());
+        String st = classEntity.getStatus() == null ? "" : classEntity.getStatus().trim().toUpperCase();
+        if (!"ARCHIVED".equals(st)) {
+            return activeCount;
+        }
+        if (activeCount > 0) {
+            return activeCount;
+        }
+        long historyCount = enrollmentHistoryRepository.countDistinctStudentsByClassId(classEntity.getId());
+        if (historyCount <= 0) {
+            historyCount = enrollmentHistoryRepository.countDistinctStudentsByClassIdNative(classEntity.getId());
+        }
+        if (historyCount <= 0) {
+            // Fallback cuối cùng dựa theo dữ liệu endpoint lịch sử để đảm bảo list/chi tiết đồng nhất.
+            historyCount = getHistoricalStudentsByClass(classEntity.getId()).size();
+        }
+        if (historyCount > 0) {
+            return historyCount;
+        }
+        return enrollmentRepository.countByClassEntityId(classEntity.getId());
     }
 
     public ClassEntity createClass(Map<String, Object> classData) {
