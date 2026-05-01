@@ -52,28 +52,7 @@ public class DocumentController {
         ));
     }
 
-    @PostMapping("/upload")
-    public ResponseEntity<?> uploadDocument(@RequestParam("file") MultipartFile file,
-                                           @RequestParam("title") String title,
-                                           @RequestParam(required = false) String description,
-                                           @RequestParam(required = false) Integer schoolId,
-                                           @RequestParam(required = false) Integer classId,
-                                           @RequestParam Integer uploadedById) {
-        Document savedDocument = documentService.uploadDocument(file, title, description, schoolId, classId, uploadedById);
-        return ResponseEntity.ok(Map.of(
-                "message", "Document uploaded successfully",
-                "document", savedDocument
-        ));
-    }
-
-    @PutMapping("/{id}")
-    public ResponseEntity<?> updateDocument(@PathVariable Integer id, @RequestBody Map<String, Object> documentData) {
-        Document updatedDocument = documentService.updateDocument(id, documentData);
-        return ResponseEntity.ok(Map.of(
-                "message", "Document updated successfully",
-                "document", updatedDocument
-        ));
-    }
+    
 
     @DeleteMapping("/{id}")
     public ResponseEntity<?> deleteDocument(@PathVariable Integer id) {
