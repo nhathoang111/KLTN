@@ -24,7 +24,7 @@ public class ScheduleTemplateService {
     private static final int MONDAY = 1;
     private static final int SATURDAY = 6;
     private static final int MORNING_FIRST_PERIOD = 1;
-    private static final int MORNING_LAST_PERIOD = 5;
+    private static final int SHL_PERIOD = 4;
     private static final String FIXED_ACTIVITY_CHAOCO = "CHAOCO";
     private static final String FIXED_ACTIVITY_SHL = "SHL";
 
@@ -143,7 +143,7 @@ public class ScheduleTemplateService {
             throw new BadRequestException("Thời khóa biểu mẫu bắt buộc có Chào cờ vào Thứ 2 tiết 1.");
         }
         if (!hasShl) {
-            throw new BadRequestException("Thời khóa biểu mẫu bắt buộc có Sinh hoạt lớp vào Thứ 7 tiết 5.");
+            throw new BadRequestException("Thời khóa biểu mẫu bắt buộc có Sinh hoạt lớp vào Thứ 7 tiết 4.");
         }
 
         scheduleTemplateRepository.deleteByClassEntityIdAndWeekStart(classEntity.getId(), weekStart);
@@ -285,7 +285,7 @@ public class ScheduleTemplateService {
         }
 
         boolean isChaocoSlot = row.getDayOfWeek() == MONDAY && row.getPeriod() == MORNING_FIRST_PERIOD;
-        boolean isShlSlot = row.getDayOfWeek() == SATURDAY && row.getPeriod() == MORNING_LAST_PERIOD;
+        boolean isShlSlot = row.getDayOfWeek() == SATURDAY && row.getPeriod() == SHL_PERIOD;
 
         if (isChaocoSlot) {
             row.setFixedActivityCode(FIXED_ACTIVITY_CHAOCO);
@@ -303,7 +303,7 @@ public class ScheduleTemplateService {
         }
 
         if (FIXED_ACTIVITY_CHAOCO.equals(row.getFixedActivityCode()) || FIXED_ACTIVITY_SHL.equals(row.getFixedActivityCode())) {
-            throw new BadRequestException("Mã tiết cố định chỉ được dùng cho Thứ 2 tiết 1 (Chào cờ) và Thứ 7 tiết 5 (Sinh hoạt lớp).");
+            throw new BadRequestException("Mã tiết cố định chỉ được dùng cho Thứ 2 tiết 1 (Chào cờ) và Thứ 7 tiết 4 (Sinh hoạt lớp).");
         }
     }
 
@@ -320,7 +320,7 @@ public class ScheduleTemplateService {
             if (dow != null && period != null && dow == MONDAY && period == MORNING_FIRST_PERIOD && FIXED_ACTIVITY_CHAOCO.equals(fixedCode)) {
                 hasChaoco = true;
             }
-            if (dow != null && period != null && dow == SATURDAY && period == MORNING_LAST_PERIOD && FIXED_ACTIVITY_SHL.equals(fixedCode)) {
+            if (dow != null && period != null && dow == SATURDAY && period == SHL_PERIOD && FIXED_ACTIVITY_SHL.equals(fixedCode)) {
                 hasShl = true;
             }
         }
@@ -328,7 +328,7 @@ public class ScheduleTemplateService {
             throw new BadRequestException("Mẫu chưa có Chào cờ ở Thứ 2 tiết 1.");
         }
         if (!hasShl) {
-            throw new BadRequestException("Mẫu chưa có Sinh hoạt lớp ở Thứ 7 tiết 5.");
+            throw new BadRequestException("Mẫu chưa có Sinh hoạt lớp ở Thứ 7 tiết 4.");
         }
     }
 

@@ -8,6 +8,7 @@ import com.example.schoolmanagement.entity.User;
 import com.example.schoolmanagement.entity.ClassSection;
 import com.example.schoolmanagement.dto.schedule.ScheduleGenerateResult;
 import com.example.schoolmanagement.dto.schedule.ScheduleGenerateResult.UnmetAssignment;
+import com.example.schoolmanagement.dto.schedule.ScheduleGenerateResult.TemplateSlot;
 import com.example.schoolmanagement.exception.BadRequestException;
 import com.example.schoolmanagement.exception.ResourceNotFoundException;
 import com.example.schoolmanagement.util.ClassStatusPolicy;
@@ -40,28 +41,25 @@ public class ScheduleService {
 
     /**
      * Tiết cố định theo buổi (dayOffset: 0 = Thứ 2 … 5 = Thứ 7 trong mô hình TKB 6 ngày).
-     * Buổi sáng: T2 tiết 1 chào cờ; T7 tiết 5 sinh hoạt lớp.
-     * Buổi chiều: T2 tiết 5 (chiều) = period 10 chào cờ; T7 tiết 5 chiều = period 10 sinh hoạt lớp.
+     * Chỉ giữ 2 tiết cố định buổi sáng:
+     * - Thứ 2 tiết 1: Chào cờ
+     * - Thứ 7 tiết 4: Sinh hoạt lớp
+     * Không tạo thêm bản sao ở buổi chiều.
      */
     private static void collectFixedSlotsForSession(String sessionMode, List<int[]> outDayOffsetAndPeriod) {
         boolean morning = "MORNING".equals(sessionMode) || "BOTH".equals(sessionMode);
-        boolean afternoon = "AFTERNOON".equals(sessionMode) || "BOTH".equals(sessionMode);
         if (morning) {
             outDayOffsetAndPeriod.add(new int[]{0, 1});   // Thứ 2 — chào cờ
-            outDayOffsetAndPeriod.add(new int[]{5, 5});   // Thứ 7 — sinh hoạt lớp
-        }
-        if (afternoon) {
-            outDayOffsetAndPeriod.add(new int[]{0, MAX_PERIOD}); // Thứ 2 tiết 5 chiều — chào cờ
-            outDayOffsetAndPeriod.add(new int[]{5, MAX_PERIOD}); // Thứ 7 tiết 5 chiều — sinh hoạt lớp
+            outDayOffsetAndPeriod.add(new int[]{5, 4});   // Thứ 7 — sinh hoạt lớp
         }
     }
 
     private static boolean isChaocoSlot(int dayOffset, int period) {
-        return dayOffset == 0 && (period == 1 || period == MAX_PERIOD);
+        return dayOffset == 0 && period == 1;
     }
 
     private static boolean isShlSlot(int dayOffset, int period) {
-        return dayOffset == 5 && (period == 5 || period == MAX_PERIOD);
+        return dayOffset == 5 && period == 4;
     }
 
     /** Đánh dấu các ô cố định tuần đầu để không xếp môn khác và kiểm tra trùng GV chủ nhiệm. */
@@ -649,10 +647,62 @@ public class ScheduleService {
             }
         }
 
-        scheduleRepository.saveAll(toSave);
+        // Chỉ sinh dữ liệu cho thời khóa biểu mẫu, không ghi vào bảng schedules.
+        // scheduleRepository.saveAll(toSave);
+        List<TemplateSlot> templateSlots = new ArrayList<>();
+
+        List<String> sortedPatternKeys = new ArrayList<>(weekPattern.keySet());
+        sortedPatternKeys.sort((ka, kb) -> {
+            String[] a = ka.split("-");
+            String[] b = kb.split("-");
+            int d = Integer.compare(Integer.parseInt(a[0]), Integer.parseInt(b[0]));
+            if (d != 0) return d;
+            return Integer.compare(Integer.parseInt(a[1]), Integer.parseInt(b[1]));
+        });
+        for (String patternKey : sortedPatternKeys) {
+            Object[] patternValue = weekPattern.get(patternKey);
+            Subject subject = (Subject) patternValue[0];
+            User teacher = (User) patternValue[1];
+            Integer period = (Integer) patternValue[2];
+            Integer dayOffset = (Integer) patternValue[3];
+            LocalDate date = nextMonday.plusDays(dayOffset);
+            if (date.isBefore(today)) {
+                continue;
+            }
+            TemplateSlot slot = new TemplateSlot();
+            slot.setDayOfWeek(dayOffset + 1);
+            slot.setPeriod(period);
+            slot.setDate(date.toString());
+            slot.setSubjectId(subject != null ? subject.getId() : null);
+            slot.setSubjectName(subject != null ? subject.getName() : null);
+            slot.setTeacherId(teacher != null ? teacher.getId() : null);
+            slot.setTeacherName(teacher != null ? teacher.getFullName() : null);
+            slot.setRoom(classRoom);
+            slot.setFixedActivityCode(null);
+            templateSlots.add(slot);
+        }
+
+        for (Schedule fs : fixedActivities) {
+            if (fs.getDate() == null || fs.getDate().isBefore(nextMonday) || fs.getDate().isAfter(nextMonday.plusDays(5))) {
+                continue;
+            }
+            TemplateSlot slot = new TemplateSlot();
+            slot.setDayOfWeek(fs.getDate().getDayOfWeek().getValue());
+            slot.setPeriod(fs.getPeriod());
+            slot.setDate(fs.getDate().toString());
+            slot.setSubjectId(null);
+            slot.setSubjectName(null);
+            slot.setTeacherId(fs.getTeacher() != null ? fs.getTeacher().getId() : null);
+            slot.setTeacherName(fs.getTeacher() != null ? fs.getTeacher().getFullName() : null);
+            slot.setRoom(fs.getRoom());
+            slot.setFixedActivityCode(fs.getFixedActivityCode());
+            templateSlots.add(slot);
+        }
+
+        out.setTemplateSlots(templateSlots);
         out.setSuccess(true);
-        out.setAssignedPeriods(toSave.size());
-        out.setMessage("Đã tạo thời khóa biểu tự động thành công.");
+        out.setAssignedPeriods(templateSlots.size());
+        out.setMessage("Đã sinh thời khóa biểu mẫu tự động thành công (chưa lưu, vui lòng bấm Lưu TKB mẫu).");
         return out;
     }
 

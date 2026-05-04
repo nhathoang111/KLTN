@@ -2,6 +2,7 @@ package com.example.schoolmanagement.controller;
 
 import com.example.schoolmanagement.dto.schedule.ScheduleTemplateSaveRequest;
 import com.example.schoolmanagement.dto.schedule.GenerateFromTemplateRequest;
+import com.example.schoolmanagement.dto.schedule.ScheduleGenerateResult;
 import com.example.schoolmanagement.entity.Schedule;
 import com.example.schoolmanagement.entity.ScheduleTemplate;
 import com.example.schoolmanagement.exception.BadRequestException;
@@ -106,7 +107,31 @@ public class ScheduleController {
 
     @PostMapping("/generate")
     public ResponseEntity<?> generateSchedules(@RequestBody Map<String, Object> request) {
-        throw new BadRequestException("Chức năng tạo thời khóa biểu tự động đã tắt. Vui lòng sinh từ thời khóa biểu mẫu.");
+        Object classIdObj = request.get("classId");
+        Integer classId = null;
+        if (classIdObj instanceof Number) {
+            classId = ((Number) classIdObj).intValue();
+        }
+        Object schoolIdObj = request.get("schoolId");
+        Integer schoolId = schoolIdObj instanceof Number ? ((Number) schoolIdObj).intValue() : null;
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> subjectAssignments = (List<Map<String, Object>>) request.get("subjectAssignments");
+        Object numberOfWeeksObj = request.get("numberOfWeeks");
+        Integer numberOfWeeks = numberOfWeeksObj instanceof Number
+                ? ((Number) numberOfWeeksObj).intValue() : 1;
+        String session = request.get("session") != null ? String.valueOf(request.get("session")) : "BOTH";
+        if (numberOfWeeks == null || numberOfWeeks < 1) {
+            numberOfWeeks = 1;
+        }
+
+        if (classId == null || subjectAssignments == null || subjectAssignments.isEmpty()) {
+            throw new BadRequestException("classId and subjectAssignments are required");
+        }
+
+        // Sinh TKB gốc đã tắt theo yêu cầu: chỉ sinh dữ liệu cho TKB mẫu.
+        // ScheduleGenerateResult result = scheduleService.generateSchedules(classId, schoolId, subjectAssignments, numberOfWeeks, session);
+        ScheduleGenerateResult result = scheduleService.generateSchedules(classId, schoolId, subjectAssignments, numberOfWeeks, session);
+        return ResponseEntity.ok(result);
     }
 
     @DeleteMapping("/class/{classId}")
