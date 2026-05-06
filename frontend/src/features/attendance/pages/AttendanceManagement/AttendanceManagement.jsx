@@ -20,6 +20,30 @@ function periodTimeRange(period) {
   return `${start} - ${end}`;
 }
 
+function parseHHMM(t) {
+  const [h, m] = t.split(':').map(Number);
+  return h * 60 + m;
+}
+
+// Xác định context thời gian của tiết (chỉ áp dụng khi xem ngày hôm nay)
+function getPeriodStatus(period, selectedDate, nowObj = new Date()) {
+  const todayStr = `${nowObj.getFullYear()}-${String(nowObj.getMonth() + 1).padStart(2, '0')}-${String(nowObj.getDate()).padStart(2, '0')}`;
+  if (selectedDate !== todayStr) {
+    const selDate = new Date(selectedDate);
+    const todayDate = new Date(todayStr);
+    if (selDate < todayDate) return 'past';
+    if (selDate > todayDate) return 'future';
+    return 'other';
+  }
+  const p = Number(period);
+  if (!p || p < 1 || p > PERIOD_TIMES.length) return 'other';
+  const { start, end } = PERIOD_TIMES[p - 1];
+  const nowMin = nowObj.getHours() * 60 + nowObj.getMinutes();
+  if (nowMin < parseHHMM(start)) return 'future';
+  if (nowMin <= parseHHMM(end)) return 'active';
+  return 'past';
+}
+
 // COMPONENT ĐIỀU HƯỚNG THEO ROLE
 export default function AttendanceManagementWrapper() {
   const { user } = useAuth();
@@ -48,6 +72,13 @@ function AttendanceParentView() {
   const [attendance, setAttendance] = useState([]);
   const [loading, setLoading] = useState(false);
   const [classId, setClassId] = useState(null);
+
+  // Đồng hồ cập nhật thời gian thực để chuyển tiết tự động
+  const [clock, setClock] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setClock(Date.now()), 60_000);
+    return () => clearInterval(id);
+  }, []);
 
   // Bước 1: Resolve classId một lần duy nhất khi mount
   useEffect(() => {
@@ -168,25 +199,40 @@ function AttendanceParentView() {
   const combinedRows = schedules.map(s => {
     const sid = String(s.classSectionId || s.classSection?.id);
     const rec = attendance.find(a => String(a.boundClassSectionId) === sid);
-    let status = 'pending'; let statusText = 'Chưa điểm danh';
+    const nowObj = new Date(clock);
+    const periodCtx = getPeriodStatus(s.period, date, nowObj);
+    let status = 'pending';
+    let statusText = 'Chờ cập nhật';
+
     if (rec?.status) {
       const st = String(rec.status).toUpperCase();
-      if (st === 'PRESENT') { status = 'present'; statusText = 'Đã điểm danh'; }
+      if (st === 'PRESENT') { status = 'present'; statusText = 'Có mặt'; }
       if (st === 'ABSENT')  { status = 'absent';  statusText = 'Vắng mặt'; }
       if (st === 'LATE')    { status = 'late';    statusText = 'Đi trễ'; }
+    } else {
+      if (periodCtx === 'future') { status = 'future'; statusText = 'Chưa tới giờ'; }
+      else if (periodCtx === 'active') { status = 'active'; statusText = 'Đang diễn ra'; }
+      else if (periodCtx === 'past') { status = 'unknown'; statusText = 'Chưa rõ (Chờ GV cập nhật)'; }
+      else { status = 'unknown'; statusText = 'Chưa rõ'; }
     }
-    return { schedule: s, status, statusText };
+    return { schedule: s, status, statusText, periodCtx, note: rec?.note };
   });
+
+  const presentCount = combinedRows.filter(r => r.status === 'present' || r.status === 'late').length;
+  const absentCount  = combinedRows.filter(r => r.status === 'absent').length;
+  const unknownCount = combinedRows.filter(r => r.status === 'unknown' || r.status === 'pending').length;
 
   return (
     <div style={{ minHeight: '100vh', background: '#f8fafc', padding: '32px 16px' }}>
-      <div style={{ maxWidth: '900px', margin: '0 auto' }}>
+      <div style={{ maxWidth: '920px', margin: '0 auto' }}>
 
         {/* Header */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px', marginBottom: '24px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px', marginBottom: '20px' }}>
           <div>
             <h2 style={{ fontSize: '1.4rem', fontWeight: '700', color: '#1e293b', margin: 0 }}>📋 Điểm danh theo ngày</h2>
-            <p style={{ color: '#64748b', fontSize: '0.9rem', margin: '4px 0 0' }}>Theo dõi sự chuyên cần của con bạn</p>
+            <p style={{ color: '#64748b', fontSize: '0.88rem', margin: '4px 0 0' }}>
+              {localStorage.getItem('activeStudentName') ? `Con: ${localStorage.getItem('activeStudentName')}` : 'Theo dõi sự chuyên cần của con bạn'}
+            </p>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <label style={{ fontWeight: '600', fontSize: '0.88rem', color: '#475569' }}>Chọn ngày:</label>
@@ -199,57 +245,128 @@ function AttendanceParentView() {
           </div>
         </div>
 
-        {/* Bảng */}
+        {/* Summary bar — chỉ hiện khi có dữ liệu */}
+        {!loading && combinedRows.length > 0 && (
+          <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginBottom: '16px' }}>
+            {[
+              { icon: '📚', label: 'Tổng tiết', value: combinedRows.length, bg: '#fff', border: '#e2e8f0', color: '#1e293b', labelColor: '#64748b' },
+              { icon: '✅', label: 'Có mặt', value: presentCount, bg: '#f0fdf4', border: '#bbf7d0', color: '#15803d', labelColor: '#15803d' },
+              { icon: '❌', label: 'Vắng mặt', value: absentCount, bg: '#fef2f2', border: '#fecaca', color: '#dc2626', labelColor: '#dc2626' },
+              unknownCount > 0 && { icon: '❓', label: 'Chưa rõ', value: unknownCount, bg: '#f8fafc', border: '#e2e8f0', color: '#64748b', labelColor: '#64748b' },
+            ].filter(Boolean).map(({ icon, label, value, bg, border, color, labelColor }) => (
+              <div key={label} style={{ background: bg, borderRadius: '14px', padding: '14px 20px', display: 'flex', alignItems: 'center', gap: '10px', border: `1px solid ${border}`, flex: '1', minWidth: '110px' }}>
+                <span style={{ fontSize: '1.25rem' }}>{icon}</span>
+                <div>
+                  <p style={{ margin: 0, fontSize: '0.72rem', color: labelColor, fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{label}</p>
+                  <p style={{ margin: 0, fontSize: '1.4rem', fontWeight: '800', color, lineHeight: 1.1 }}>{value}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Bảng điểm danh */}
         <div style={{ background: '#fff', borderRadius: '20px', border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 2px 12px rgba(0,0,0,0.03)' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
             <thead>
               <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
-                <th style={{ padding: '14px 20px', textAlign: 'left', fontWeight: '600', color: '#64748b', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Tiết học</th>
-                <th style={{ padding: '14px 20px', textAlign: 'left', fontWeight: '600', color: '#64748b', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Môn học</th>
-                <th style={{ padding: '14px 20px', textAlign: 'left', fontWeight: '600', color: '#64748b', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Giáo viên</th>
-                <th style={{ padding: '14px 20px', textAlign: 'center', fontWeight: '600', color: '#64748b', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Trạng thái</th>
+                <th style={{ padding: '14px 20px', textAlign: 'left', fontWeight: '600', color: '#64748b', fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Tiết học</th>
+                <th style={{ padding: '14px 20px', textAlign: 'left', fontWeight: '600', color: '#64748b', fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Môn học</th>
+                <th style={{ padding: '14px 20px', textAlign: 'left', fontWeight: '600', color: '#64748b', fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Giáo viên</th>
+                <th style={{ padding: '14px 20px', textAlign: 'center', fontWeight: '600', color: '#64748b', fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Trạng thái</th>
+                <th style={{ padding: '14px 20px', textAlign: 'left', fontWeight: '600', color: '#64748b', fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Ghi chú</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={4} style={{ padding: '40px', textAlign: 'center', color: '#94a3b8' }}>
+                <tr><td colSpan={5} style={{ padding: '40px', textAlign: 'center', color: '#94a3b8' }}>
                   <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '10px' }}>
                     <div style={{ width: '20px', height: '20px', borderRadius: '50%', border: '2px solid #e0e7ff', borderTopColor: '#6366f1', animation: 'spin 0.8s linear infinite' }} />
                     Đang tải dữ liệu...
                   </div>
                 </td></tr>
               ) : combinedRows.length === 0 ? (
-                <tr><td colSpan={4} style={{ padding: '40px', textAlign: 'center', color: '#94a3b8' }}>
-                  Không có môn học nào trong thời khóa biểu ngày đã chọn.
+                <tr><td colSpan={5} style={{ padding: '48px', textAlign: 'center' }}>
+                  <div style={{ fontSize: '2rem', marginBottom: '8px' }}>📅</div>
+                  <p style={{ color: '#64748b', margin: 0, fontWeight: '500' }}>Không có tiết học nào trong ngày đã chọn</p>
+                  <p style={{ color: '#94a3b8', margin: '4px 0 0', fontSize: '0.85rem' }}>Có thể là ngày nghỉ hoặc chưa có thời khóa biểu</p>
                 </td></tr>
               ) : combinedRows.map((row, idx) => {
                 const subj = scheduleSubjectDisplayName(row.schedule, '—');
                 const tchr = row.schedule.teacher?.fullName || row.schedule.teacher?.full_name || '—';
-                const badgeStyle = {
-                  padding: '5px 14px', borderRadius: '20px', fontSize: '0.78rem', fontWeight: '700', display: 'inline-block',
-                  ...(row.status === 'present' ? { background: '#dcfce7', color: '#15803d' }
-                    : row.status === 'absent'  ? { background: '#fee2e2', color: '#dc2626' }
-                    : row.status === 'late'    ? { background: '#ffedd5', color: '#ea580c' }
-                    : { background: '#f1f5f9', color: '#64748b' }),
-                };
+                const isActive = row.periodCtx === 'active';
+
+                // Badge config theo status + periodCtx
+                const badge =
+                  row.status === 'present' ? { bg: '#dcfce7', color: '#15803d', icon: '✓', text: row.statusText }
+                  : row.status === 'absent' ? { bg: '#fee2e2', color: '#dc2626', icon: '✗', text: row.statusText }
+                  : row.status === 'late'   ? { bg: '#ffedd5', color: '#ea580c', icon: '⚠', text: row.statusText }
+                  : row.status === 'future' ? { bg: '#f1f5f9', color: '#64748b', icon: '⏳', text: row.statusText }
+                  : row.status === 'active' ? { bg: '#fefce8', color: '#b45309', icon: '📖', text: row.statusText }
+                  : { bg: '#f3f4f6', color: '#475569', icon: '❓', text: row.statusText };
+
                 return (
-                  <tr key={row.schedule.id || idx} style={{ borderTop: idx > 0 ? '1px solid #f1f5f9' : 'none' }}>
+                  <tr
+                    key={row.schedule.id || idx}
+                    style={{
+                      borderTop: idx > 0 ? '1px solid #f1f5f9' : 'none',
+                      background: isActive ? 'linear-gradient(90deg, #fefce8 0%, #fffbeb 40%, #fff 100%)' : undefined,
+                      transition: 'background 0.2s',
+                    }}
+                  >
                     <td style={{ padding: '16px 20px', fontWeight: '500', color: '#1e293b' }}>
-                      Tiết {row.schedule.period}
-                      <span style={{ fontSize: '0.78rem', color: '#94a3b8', marginLeft: '6px' }}>
-                        ({periodTimeRange(row.schedule.period)})
-                      </span>
+                      {isActive && (
+                        <span style={{
+                          display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%',
+                          background: '#f59e0b', marginRight: '8px', verticalAlign: 'middle',
+                          boxShadow: '0 0 0 3px #fef3c7', animation: 'pulse 1.5s infinite',
+                        }} />
+                      )}
+                      <span style={{ fontWeight: isActive ? '700' : '500' }}>Tiết {row.schedule.period}</span>
+                      <span style={{ fontSize: '0.75rem', color: '#94a3b8', marginLeft: '6px' }}>({periodTimeRange(row.schedule.period)})</span>
+                      {isActive && (
+                        <span style={{ marginLeft: '8px', fontSize: '0.68rem', background: '#f59e0b', color: '#fff', padding: '2px 8px', borderRadius: '999px', fontWeight: '700', verticalAlign: 'middle', letterSpacing: '0.03em' }}>ĐANG HỌC</span>
+                      )}
                     </td>
                     <td style={{ padding: '16px 20px', fontWeight: '600', color: '#1e293b' }}>{subj}</td>
                     <td style={{ padding: '16px 20px', color: '#475569' }}>{tchr}</td>
                     <td style={{ padding: '16px 20px', textAlign: 'center' }}>
-                      <span style={badgeStyle}>{row.statusText}</span>
+                      <span style={{
+                        padding: '5px 14px', borderRadius: '20px', fontSize: '0.78rem', fontWeight: '700',
+                        display: 'inline-flex', alignItems: 'center', gap: '5px',
+                        background: badge.bg, color: badge.color,
+                      }}>
+                        <span>{badge.icon}</span>{badge.text}
+                      </span>
+                    </td>
+                    <td style={{ padding: '16px 20px', color: '#475569', fontSize: '0.85rem' }}>
+                      {row.note ? (
+                        <span style={{ display: 'inline-block', background: '#f8fafc', padding: '4px 10px', borderRadius: '6px', border: '1px solid #e2e8f0', fontStyle: 'italic' }}>
+                          {row.note}
+                        </span>
+                      ) : <span style={{ color: '#cbd5e1' }}>—</span>}
                     </td>
                   </tr>
                 );
               })}
             </tbody>
           </table>
+        </div>
+
+        {/* Chú thích trạng thái */}
+        <div style={{ marginTop: '16px', display: 'flex', gap: '16px', flexWrap: 'wrap', fontSize: '0.78rem', color: '#94a3b8' }}>
+          {[
+            { icon: '✓', color: '#15803d', bg: '#dcfce7', label: 'Có mặt' },
+            { icon: '✗', color: '#dc2626', bg: '#fee2e2', label: 'Vắng mặt' },
+            { icon: '⏳', color: '#64748b', bg: '#f1f5f9', label: 'Chưa tới giờ' },
+            { icon: '📖', color: '#b45309', bg: '#fefce8', label: 'Đang diễn ra' },
+            { icon: '❓', color: '#475569', bg: '#f3f4f6', label: 'Chưa rõ (Chờ GV cập nhật)' },
+          ].map(({ icon, color, bg, label }) => (
+            <span key={label} style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+              <span style={{ background: bg, color, borderRadius: '6px', padding: '1px 6px', fontWeight: '700', fontSize: '0.75rem' }}>{icon}</span>
+              {label}
+            </span>
+          ))}
         </div>
 
       </div>

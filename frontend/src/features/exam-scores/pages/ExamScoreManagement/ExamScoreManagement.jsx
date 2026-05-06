@@ -2013,6 +2013,15 @@ const ExamScoreManagement = () => {
                 </tbody>
               </table>
             </div>
+            {isParent && (
+              <div className="border-t border-slate-200 bg-slate-50 px-4 py-3 flex flex-wrap items-center gap-5 text-[13px] text-slate-600">
+                <span className="font-semibold text-slate-700">Ghi chú điểm:</span>
+                <span className="flex items-center gap-2"><span className="px-2 py-0.5 rounded text-red-700 bg-red-100 font-bold">&lt; 5.0</span> Cần chú ý (Yếu)</span>
+                <span className="flex items-center gap-2"><span className="px-2 py-0.5 rounded text-rose-700 bg-rose-100 font-bold">5.0 - 6.4</span> Trung bình</span>
+                <span className="flex items-center gap-2"><span className="px-2 py-0.5 rounded text-amber-700 bg-amber-100 font-bold">6.5 - 7.9</span> Khá</span>
+                <span className="flex items-center gap-2"><span className="px-2 py-0.5 rounded text-emerald-700 bg-emerald-100 font-bold">≥ 8.0</span> Tốt (Giỏi)</span>
+              </div>
+            )}
           </>
         )}
       </div>

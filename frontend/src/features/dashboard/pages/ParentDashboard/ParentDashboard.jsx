@@ -53,19 +53,29 @@ function hueFromString(s) {
   return hues[h % hues.length];
 }
 
+function parseBackendDate(dateInput) {
+  if (!dateInput) return 0;
+  if (Array.isArray(dateInput)) {
+    const [y, m, d, h = 0, min = 0, s = 0] = dateInput;
+    return new Date(y, m - 1, d, h, min, s).getTime();
+  }
+  const parsed = new Date(dateInput).getTime();
+  return Number.isNaN(parsed) ? 0 : parsed;
+}
+
 function formatRelativeVi(dateInput) {
-  if (!dateInput) return '';
-  const d = new Date(dateInput);
-  if (Number.isNaN(d.getTime())) return '';
+  const dTime = parseBackendDate(dateInput);
+  if (!dTime) return '';
+  const d = new Date(dTime);
   const now = new Date();
   const dayMs = 86400000;
-  const diffDays = Math.floor((now.setHours(0, 0, 0, 0) - new Date(d).setHours(0, 0, 0, 0)) / dayMs);
+  const diffDays = Math.floor((now.setHours(0, 0, 0, 0) - new Date(dTime).setHours(0, 0, 0, 0)) / dayMs);
   const t = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
   if (diffDays === 0) return `Hôm nay • ${t}`;
   if (diffDays === 1) return `Hôm qua • ${t}`;
   if (diffDays === 2) return `Hôm kia • ${t}`;
   if (diffDays > 0 && diffDays < 7) return `${diffDays} ngày trước • ${t}`;
-  return `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth() + 1).toString().padStart(2, '0')} • ${t}`;
+  return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')} • ${t}`;
 }
 
 function daysUntilDue(due) {
@@ -75,6 +85,16 @@ function daysUntilDue(due) {
   const start = new Date();
   start.setHours(0, 0, 0, 0); end.setHours(0, 0, 0, 0);
   return Math.round((end - start) / 86400000);
+}
+
+// Tính toán độ mới của thông báo (FE logic)
+function getAnnouncementRecency(dateInput) {
+  const dTime = parseBackendDate(dateInput);
+  if (!dTime) return 'old';
+  const diffDays = Math.floor((Date.now() - dTime) / 86400000);
+  if (diffDays <= 3) return 'new';
+  if (diffDays <= 7) return 'recent';
+  return 'old';
 }
 
 function buildMonthlyProgressFromScores(examScores) {
@@ -133,6 +153,8 @@ const ParentDashboard = () => {
   const [todaySchedules, setTodaySchedules] = useState([]);
   const [todayAttendance, setTodayAttendance] = useState([]);
   const [assignments, setAssignments] = useState([]);
+  const [submissions, setSubmissions] = useState([]);
+  const [assignmentTab, setAssignmentTab] = useState('pending');
   const [announcements, setAnnouncements] = useState([]);
   const [examScores, setExamScores] = useState([]);
 
@@ -307,17 +329,41 @@ const ParentDashboard = () => {
 
         // 4. Assignments & Announcements (cần cId)
         if (cId) {
-          const [assignmentsRes, mySubRes, annRes, classRes] = await Promise.all([
-            api.get(`/assignments/class/${cId}`).catch(() => ({ data: { assignments: [] } })),
-            api.get(`/assignments/student/${selectedChildId}/submissions`).catch(() => ({ data: { submissions: [] } })),
+          const [assignmentsRes, annRes, classRes] = await Promise.all([
+            api.get(`/assignments`).catch(() => ({ data: { assignments: [] } })),
             schoolId ? api.get(`/announcements?schoolId=${schoolId}`).catch(() => ({ data: { announcements: [] } })) : Promise.resolve({ data: { announcements: [] } }),
             api.get(`/classes/${cId}`).catch(() => ({ data: { class: null } })),
           ]);
 
-          const allAssignments = assignmentsRes.data?.assignments || [];
-          const mySubs = mySubRes.data?.submissions || [];
-          const submittedAssignmentIds = new Set(mySubs.map((s) => s.assignment?.id ?? s.assignment_id).filter(Boolean));
-          setAssignments(allAssignments.filter((a) => !submittedAssignmentIds.has(a.id)));
+          // Lấy toàn bộ bài tập và tự lọc FE theo lớp của con
+          const allAssignmentsRaw = assignmentsRes.data?.assignments || [];
+          const allAssignments = allAssignmentsRaw.filter(a => {
+            const ac = a.classEntity?.id ?? a.class_id;
+            return String(ac) === String(cId);
+          });
+
+          // Lấy dữ liệu tình trạng nộp bài (Hỗ trợ cơ chế dự phòng nếu BE thiếu API)
+          let mySubs = [];
+          try {
+            const mySubRes = await api.get(`/assignments/student/${selectedChildId}/submissions`);
+            mySubs = mySubRes.data?.submissions || [];
+          } catch (e) {
+            // Dự phòng: Quét qua từng bài tập để lấy bài nộp nếu API tổng bị thiếu
+            if (allAssignments.length > 0) {
+              const subPromises = allAssignments.map(a => 
+                api.get(`/assignments/${a.id}/submissions`).catch(() => ({ data: { submissions: [] } }))
+              );
+              const subResults = await Promise.all(subPromises);
+              subResults.forEach(res => {
+                const subs = res.data?.submissions || [];
+                const mySub = subs.find(s => String(s.student?.id || s.student_id) === String(selectedChildId));
+                if (mySub) mySubs.push(mySub);
+              });
+            }
+          }
+
+          setSubmissions(mySubs);
+          setAssignments(allAssignments);
 
           const allAnn = annRes.data?.announcements || [];
           setAnnouncements(allAnn.filter((a) => {
@@ -341,7 +387,7 @@ const ParentDashboard = () => {
   const handleSelectChild = (child) => {
     localStorage.setItem('activeStudentId', child.id);
     localStorage.setItem('activeStudentName', child.fullName);
-    setSelectedChildId(child.id.toString());
+    // Cần reload để sidebar (dùng localStorage trong useMemo) cập nhật lại menu
     window.location.href = '/dashboard';
   };
 
@@ -437,6 +483,18 @@ const ParentDashboard = () => {
   else if (avgScoreNum >= 5.0) { classification = 'Trung bình'; classColor = '#ea580c'; classBg = '#ffedd5'; }
   else if (avgScoreNum > 0) { classification = 'Yếu'; classColor = '#dc2626'; classBg = '#fee2e2'; }
 
+  // Phân loại bài tập 3 nhóm dựa trên submissions từ API
+  const today0 = new Date(); today0.setHours(0, 0, 0, 0);
+  const submittedIds = new Set(submissions.map(s => s.assignment?.id ?? s.assignment_id).filter(Boolean));
+  const assignmentsNew = assignments.filter(a => !submittedIds.has(a.id) && (!a.dueDate || new Date(a.dueDate) >= today0));
+  const assignmentsOverdue = assignments.filter(a => !submittedIds.has(a.id) && a.dueDate && new Date(a.dueDate) < today0);
+  const assignmentsSubmitted = assignments.filter(a => submittedIds.has(a.id));
+
+  // Cảnh báo học tập từ data thật
+  const hasWeakSubject = examScores.some(e => Number(e.score) < 5.0);
+  const hasAbsent = scheduleRowsWithAttendance.some(r => r.status === 'absent');
+  const hasOverdueAssign = assignmentsOverdue.length > 0;
+
   if (loading) {
     return <div className="parent-dashboard-container">Đang tải danh sách con em...</div>;
   }
@@ -503,10 +561,9 @@ const ParentDashboard = () => {
               <CheckCircle2 size={24} strokeWidth={2} aria-hidden />
             </div>
             <div className="pd-stat-info">
-              <p className="pd-stat-label">Đã điểm danh</p>
-              <p className="pd-stat-value">{lessonsToday > 0 ? `${attendedCount}/${lessonsToday}` : '—'}</p>
-              <p className="pd-stat-hint">
-              </p>
+              <p className="pd-stat-label">Điểm danh hôm nay</p>
+              <p className="pd-stat-value">{lessonsToday > 0 ? `${attendedCount} / ${lessonsToday}` : '—'}</p>
+              <p className="pd-stat-hint">{lessonsToday > 0 ? (attendedCount === lessonsToday ? '✓ Đầy đủ các tiết' : `Còn ${lessonsToday - attendedCount} tiết chưa điểm danh`) : 'Chưa có dữ liệu'}</p>
             </div>
           </div>
           <div className="pd-stat-card">
@@ -522,6 +579,40 @@ const ParentDashboard = () => {
               </div>
             </div>
           </div>
+        </div>
+
+        {/* Cảnh báo học tập */}
+        {(hasWeakSubject || hasAbsent || hasOverdueAssign) && (
+          <div className="pd-alerts-bar">
+            {hasWeakSubject && (
+              <div className="pd-alert pd-alert--danger">
+                <span className="pd-alert-icon">⚠</span>
+                <span>Có môn điểm dưới 5.0 — cần chú ý bổ sung kiến thức</span>
+              </div>
+            )}
+            {hasAbsent && (
+              <div className="pd-alert pd-alert--warn">
+                <span className="pd-alert-icon">📋</span>
+                <span>Con vắng mặt hôm nay — vui lòng liên hệ giáo viên để giải trình</span>
+              </div>
+            )}
+            {hasOverdueAssign && (
+              <div className="pd-alert pd-alert--warn">
+                <span className="pd-alert-icon">📌</span>
+                <span>Có {assignmentsOverdue.length} bài tập đã quá hạn chưa nộp</span>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Nút hành động nhanh (CTA) */}
+        <div className="pd-cta-bar">
+          <button className="pd-cta-btn pd-cta-btn--primary" onClick={() => alert('Tính năng liên hệ giáo viên sắp ra mắt.')}>
+            📞 Liên hệ giáo viên
+          </button>
+          <button className="pd-cta-btn" onClick={() => navigate('/exam-scores')}>
+            📊 Xem chi tiết học tập
+          </button>
         </div>
 
         {/* Layout Chính Lưới 2 cột (sử dụng class CSS mới pd-grid-2col) */}
@@ -622,44 +713,66 @@ const ParentDashboard = () => {
           {/* == Cột Phải == */}
           <div className="sd2-col">
 
-            {/* Bài tập cần nộp */}
+            {/* Bài tập — 3 tab */}
             <section className="sd2-card">
               <div className="sd2-card-head">
                 <div className="pd-title-action">
-                  <h2 className="sd2-card-title">Bài tập cần nộp</h2>
+                  <h2 className="sd2-card-title">Bài tập</h2>
                   <button type="button" className="sd2-link-btn" onClick={() => navigate('/assignments')}>Xem tất cả</button>
                 </div>
               </div>
-              <ul className="sd2-list">
-                {assignments.length === 0 ? (
-                  <li className="sd2-empty sd2-empty--block" style={{ backgroundColor: '#f0fdf4', border: '1px dashed #bbf7d0', color: '#166534', padding: '20px' }}>
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
-                      <ClipboardList size={24} style={{ color: '#10b981' }} />
-                      <span style={{ fontWeight: '600' }}>Không có bài tập cần nộp</span>
-                      <span style={{ fontSize: '0.85rem' }}>Con bạn đã hoàn thành đầy đủ bài tập.</span>
-                    </div>
-                  </li>
-                ) : (
-                  assignments.slice(0, 3).map((a, i) => {
+              <div className="pd-tab-bar">
+                <button
+                  className={`pd-tab ${assignmentTab === 'pending' ? 'pd-tab--active' : ''}`}
+                  onClick={() => setAssignmentTab('pending')}
+                >
+                  Chưa nộp {assignmentsNew.length > 0 && <span className="pd-tab-badge">{assignmentsNew.length}</span>}
+                </button>
+                <button
+                  className={`pd-tab ${assignmentTab === 'overdue' ? 'pd-tab--active pd-tab--danger' : ''}`}
+                  onClick={() => setAssignmentTab('overdue')}
+                >
+                  Quá hạn {assignmentsOverdue.length > 0 && <span className="pd-tab-badge pd-tab-badge--danger">{assignmentsOverdue.length}</span>}
+                </button>
+                <button
+                  className={`pd-tab ${assignmentTab === 'submitted' ? 'pd-tab--active pd-tab--ok' : ''}`}
+                  onClick={() => setAssignmentTab('submitted')}
+                >
+                  Đã nộp {assignmentsSubmitted.length > 0 && <span className="pd-tab-badge pd-tab-badge--ok">{assignmentsSubmitted.length}</span>}
+                </button>
+              </div>
+              <ul className="sd2-list" style={{ maxHeight: '320px', overflowY: 'auto', paddingRight: '4px' }}>
+                {(() => {
+                  const tabList = assignmentTab === 'pending' ? assignmentsNew
+                    : assignmentTab === 'overdue' ? assignmentsOverdue
+                    : assignmentsSubmitted;
+                  if (loadingDetails) return <li className="sd2-empty">Đang tải...</li>;
+                  if (tabList.length === 0) return (
+                    <li className="sd2-empty sd2-empty--block">
+                      {assignmentTab === 'submitted' ? 'Chưa có bài nào được nộp.' : 'Không có bài tập nào.'}
+                    </li>
+                  );
+                  return tabList.map((a, i) => {
                     const dLeft = daysUntilDue(a.dueDate || a.due_date);
-                    const overdue = dLeft != null && dLeft < 0;
-                    const soon = dLeft != null && dLeft >= 0 && dLeft <= 7;
                     return (
                       <li key={a.id} className="sd2-list-item">
                         <span className={`sd2-sq-icon ${i % 2 === 0 ? 'sd2-sq-icon--violet' : 'sd2-sq-icon--sky'}`}>
                           {i % 2 === 0 ? <ClipboardList size={18} /> : <PencilLine size={18} />}
                         </span>
-                        <div className="sd2-list-body">
+                        <div className="sd2-list-body"> 
                           <span className="sd2-list-title">{a.title}</span>
-                          {overdue ? <span className="sd2-pill sd2-pill--danger">Quá hạn</span>
-                            : soon && dLeft != null ? <span className="sd2-pill sd2-pill--info">Còn {dLeft} ngày</span>
-                              : dLeft != null ? <span className="sd2-pill sd2-pill--muted">Còn {dLeft} ngày</span>
-                                : <span className="sd2-pill sd2-pill--muted">Chưa có hạn</span>}
+                          {assignmentTab === 'submitted'
+                            ? <span className="sd2-pill sd2-pill--ok">Đã nộp</span>
+                            : assignmentTab === 'overdue'
+                              ? <span className="sd2-pill sd2-pill--danger">Quá hạn {dLeft !== null && dLeft < 0 ? `${Math.abs(dLeft)} ngày` : ''}</span>
+                              : dLeft !== null
+                                ? <span className={`sd2-pill ${dLeft <= 3 ? 'sd2-pill--danger' : dLeft <= 7 ? 'sd2-pill--info' : 'sd2-pill--muted'}`}>{dLeft === 0 ? 'Hạn hôm nay' : `Còn ${dLeft} ngày`}</span>
+                                : <span className="sd2-pill sd2-pill--muted">Chưa có hạn nộp</span>}
                         </div>
                       </li>
                     );
-                  })
-                )}
+                  });
+                })()}
               </ul>
             </section>
 
@@ -667,31 +780,76 @@ const ParentDashboard = () => {
             <section className="sd2-card" style={{ marginTop: '24px' }}>
               <div className="sd2-card-head">
                 <div className="pd-title-action">
-                  <h2 className="sd2-card-title">Thông báo từ giáo viên</h2>
+                  <h2 className="sd2-card-title">Thông báo & Bảng tin</h2>
                   <button type="button" className="sd2-link-btn" onClick={() => navigate('/announcements')}>Xem tất cả</button>
                 </div>
               </div>
               {announcements.length === 0 ? (
-                <p className="sd2-empty sd2-empty--block">Không có thông báo mới.</p>
+                <p className="sd2-empty sd2-empty--block">Chưa có thông báo nào.</p>
               ) : (
-                <ul className="sd2-list">
-                  {announcements.slice(0, 4).map((a) => {
-                    const hue = hueFromString(a.author?.fullName || '');
-                    return (
-                      <li key={a.id} className="sd2-msg-item">
-                        <div className="sd2-msg-avatar" style={{ backgroundColor: `hsl(${hue} 80% 88%)`, color: `hsl(${hue} 70% 30%)` }}>
-                          {initials(a.author?.fullName)}
-                        </div>
-                        <div className="sd2-msg-body">
-                          <div className="sd2-msg-line">
-                            <span className="sd2-msg-title">{a.author?.fullName || 'Hệ thống'}</span>
-                            <span className="sd2-msg-time">{formatRelativeVi(a.createdAt || a.created_at)}</span>
+                <ul className="sd2-list" style={{ padding: 0, listStyle: 'none' }}>
+                  {[...announcements]
+                    .sort((a, b) => parseBackendDate(b.createdAt || b.created_at) - parseBackendDate(a.createdAt || a.created_at))
+                    .slice(0, 4)
+                    .map((a) => {
+                      const senderName = a.author?.fullName || a.createdBy?.fullName || 'Nhà trường';
+                      const hue = hueFromString(senderName);
+                      const recency = getAnnouncementRecency(a.createdAt || a.created_at);
+                      
+                      // Phân loại context (Toàn trường / Lớp học)
+                      const isSchoolWide = (a.classEntity?.id ?? a.class_id) == null;
+                      const scopeLabel = isSchoolWide ? 'Toàn trường' : 'Lớp học';
+                      const scopeBg = isSchoolWide ? '#e0e7ff' : '#dcfce7';
+                      const scopeColor = isSchoolWide ? '#4338ca' : '#047857';
+
+                      return (
+                        <li key={a.id} style={{ 
+                          background: recency === 'new' ? '#fffbfa' : '#ffffff', 
+                          border: '1px solid',
+                          borderColor: recency === 'new' ? '#fecaca' : '#e2e8f0',
+                          borderLeft: recency === 'new' ? '4px solid #ef4444' : '4px solid #cbd5e1',
+                          borderRadius: '12px',
+                          padding: '16px',
+                          marginBottom: '16px',
+                          display: 'flex',
+                          gap: '16px',
+                          boxShadow: '0 2px 4px rgba(0,0,0,0.02)'
+                        }}>
+                          <div style={{ 
+                            backgroundColor: `hsl(${hue} 80% 88%)`, color: `hsl(${hue} 70% 30%)`,
+                            width: '46px', height: '46px', borderRadius: '12px',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            fontWeight: 'bold', fontSize: '1.1rem', flexShrink: 0
+                          }}>
+                            {initials(senderName)}
                           </div>
-                          <p className="sd2-msg-desc">{a.title} • {a.content}</p>
-                        </div>
-                      </li>
-                    );
-                  })}
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px', flexWrap: 'wrap', gap: '8px' }}>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                <span style={{ fontWeight: '800', color: '#0f172a', fontSize: '0.98rem' }}>{senderName}</span>
+                                <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
+                                  <span style={{ background: scopeBg, color: scopeColor, padding: '3px 8px', borderRadius: '6px', fontSize: '0.65rem', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+                                  {scopeLabel}
+                                </span>
+                                {recency === 'new' && (
+                                    <span style={{ background: '#ef4444', color: 'white', padding: '3px 8px', borderRadius: '6px', fontSize: '0.65rem', fontWeight: '700', letterSpacing: '0.03em' }}>MỚI</span>
+                                )}
+                                </div>
+                              </div>
+                              <span style={{ fontSize: '0.75rem', color: '#64748b', whiteSpace: 'nowrap', fontWeight: '500', background: '#f1f5f9', padding: '4px 8px', borderRadius: '6px' }}>
+                                {formatRelativeVi(a.createdAt || a.created_at)}
+                              </span>
+                            </div>
+                            <h3 style={{ fontWeight: '700', color: '#1e293b', fontSize: '0.95rem', margin: '0 0 6px 0', lineHeight: '1.4' }}>{a.title}</h3>
+                            {a.content && (
+                              <p style={{ fontSize: '0.85rem', color: '#475569', margin: 0, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', lineHeight: '1.5' }}>
+                                {a.content}
+                              </p>
+                            )}
+                          </div>
+                        </li>
+                      );
+                    })}
                 </ul>
               )}
             </section>

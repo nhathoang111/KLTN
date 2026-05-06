@@ -1078,8 +1078,18 @@ const ScheduleListPage = () => {
                             style={{
                               background: palette.bg,
                               borderLeft: `4px solid ${palette.accent}`,
+                              position: 'relative',
+                              ...(isParent && isTodayColumn(dayOfWeek) && rowNow ? { border: '2px solid #ef4444', boxShadow: '0 0 0 3px rgba(239,68,68,0.15)' } : {})
                             }}
                           >
+                            {(isParent && isTodayColumn(dayOfWeek) && rowNow) && (
+                              <div style={{
+                                position: 'absolute', top: '-8px', right: '-8px',
+                                background: '#ef4444', color: 'white', padding: '2px 8px',
+                                borderRadius: '12px', fontSize: '0.65rem', fontWeight: 'bold', zIndex: 10,
+                                boxShadow: '0 2px 6px rgba(239,68,68,0.4)'
+                              }}>ĐANG HỌC</div>
+                            )}
                             <div className="tt-lesson-card__time">{formatTimeRange(row.startMin, row.endMin)}</div>
                             <div className="tt-lesson-card__title" style={{ color: palette.title }}>
                               {scheduleSubjectDisplayName(schedule)}
@@ -1114,7 +1124,10 @@ const ScheduleListPage = () => {
                             className={`tt-lesson-card tt-lesson-card--empty${canManage ? ' tt-lesson-card--empty--manage' : ''}`}
                             title={emptyTitle}
                             aria-label={emptyTitle}
-                          />
+                            style={isParent ? { display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f8fafc', border: '1px dashed #e2e8f0' } : {}}
+                          >
+                            {isParent && <span style={{ color: '#94a3b8', fontSize: '0.8rem', fontWeight: '500' }}>Nghỉ / Trống</span>}
+                          </div>
                         )}
                       </div>
                     );
@@ -1181,8 +1194,18 @@ const ScheduleListPage = () => {
                             style={{
                               background: palette.bg,
                               borderLeft: `4px solid ${palette.accent}`,
+                              position: 'relative',
+                              ...(isParent && isTodayColumn(dayOfWeek) && rowNow ? { border: '2px solid #ef4444', boxShadow: '0 0 0 3px rgba(239,68,68,0.15)' } : {})
                             }}
                           >
+                            {(isParent && isTodayColumn(dayOfWeek) && rowNow) && (
+                              <div style={{
+                                position: 'absolute', top: '-8px', right: '-8px',
+                                background: '#ef4444', color: 'white', padding: '2px 8px',
+                                borderRadius: '12px', fontSize: '0.65rem', fontWeight: 'bold', zIndex: 10,
+                                boxShadow: '0 2px 6px rgba(239,68,68,0.4)'
+                              }}>ĐANG HỌC</div>
+                            )}
                             <div className="tt-lesson-card__time">{formatTimeRange(row.startMin, row.endMin)}</div>
                             <div className="tt-lesson-card__title" style={{ color: palette.title }}>
                               {scheduleSubjectDisplayName(schedule)}
@@ -1217,7 +1240,10 @@ const ScheduleListPage = () => {
                             className={`tt-lesson-card tt-lesson-card--empty${canManage ? ' tt-lesson-card--empty--manage' : ''}`}
                             title={emptyTitle}
                             aria-label={emptyTitle}
-                          />
+                            style={isParent ? { display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f8fafc', border: '1px dashed #e2e8f0' } : {}}
+                          >
+                            {isParent && <span style={{ color: '#94a3b8', fontSize: '0.8rem', fontWeight: '500' }}>Nghỉ / Trống</span>}
+                          </div>
                         )}
                       </div>
                     );
