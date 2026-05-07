@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import FullCalendar from '@fullcalendar/react';
 import dayGridPlugin from '@fullcalendar/daygrid';
 import timeGridPlugin from '@fullcalendar/timegrid';
@@ -16,6 +16,7 @@ import { colorsForSubject } from '../ScheduleListPage/subjectColors';
 import './ScheduleFullCalendarPage.css';
 import { buildTeacherVisibleClasses } from '../../../../shared/lib/teacherScope';
 import { useNavigate } from 'react-router-dom';
+import { toast } from 'react-toastify';
 
 const lessonRows = [...TIMELINE_MORNING, ...TIMELINE_AFTERNOON].filter(
   (row) => row.type === 'lesson' && typeof row.period === 'number'
@@ -35,6 +36,18 @@ const toIsoDateTime = (dateInput, minutesFromStartOfDay) => {
   return date.toISOString();
 };
 
+const getClassOnlyDisplayName = (cls) => {
+  const className = String(cls?.name || '').trim();
+  const schoolYearName = String(cls?.schoolYear?.name || cls?.school_year_name || '').trim();
+  if (!className) return 'N/A';
+  if (!schoolYearName) return className;
+
+  // Nếu backend trả dạng "10A1 (2024-2025)" thì bỏ phần niên khóa trong ngoặc.
+  const escaped = schoolYearName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const suffixRegex = new RegExp(`\\s*\\(${escaped}\\)\\s*$`, 'i');
+  return className.replace(suffixRegex, '').trim() || className;
+};
+
 const ScheduleFullCalendarPage = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -43,6 +56,7 @@ const ScheduleFullCalendarPage = () => {
   const [subjects, setSubjects] = useState([]);
   const [teachers, setTeachers] = useState([]);
   const [selectedClassId, setSelectedClassId] = useState('');
+  const [selectedSchoolYear, setSelectedSchoolYear] = useState('');
   const [schedules, setSchedules] = useState([]);
   const [currentView, setCurrentView] = useState('timeGridWeek');
   const [showAddModal, setShowAddModal] = useState(false);
@@ -68,6 +82,11 @@ const ScheduleFullCalendarPage = () => {
     semesterStart: '',
     semesterEnd: '',
   });
+  const [confirmModal, setConfirmModal] = useState({
+    open: false,
+    message: '',
+  });
+  const confirmResolverRef = useRef(null);
 
   const userRole = user?.role?.name?.toUpperCase();
   const isStudent = userRole === 'STUDENT';
@@ -75,6 +94,49 @@ const ScheduleFullCalendarPage = () => {
   const isParent = userRole === 'PARENT';
   const isAdmin = userRole === 'ADMIN' || userRole === 'SUPER_ADMIN';
   const isViewOnly = isStudent || isTeacher || isParent;
+
+  const schoolYearOptions = useMemo(() => {
+    const map = new Map();
+    (classes || []).forEach((cls) => {
+      const id = cls?.schoolYear?.id ?? cls?.school_year_id ?? cls?.schoolYearId ?? null;
+      const name = cls?.schoolYear?.name || cls?.school_year_name || '';
+      if (id == null || !name) return;
+      if (!map.has(String(id))) {
+        map.set(String(id), name);
+      }
+    });
+    return Array.from(map.entries())
+      .map(([id, name]) => ({ id, name }))
+      .sort((a, b) => b.name.localeCompare(a.name, 'vi'));
+  }, [classes]);
+
+  const visibleClasses = useMemo(() => {
+    if (!selectedSchoolYear) return classes || [];
+    return (classes || []).filter(
+      (cls) => String(cls?.schoolYear?.id ?? cls?.school_year_id ?? cls?.schoolYearId ?? '') === selectedSchoolYear
+    );
+  }, [classes, selectedSchoolYear]);
+
+  const openConfirmModal = (message) =>
+    new Promise((resolve) => {
+      confirmResolverRef.current = resolve;
+      setConfirmModal({
+        open: true,
+        message,
+      });
+    });
+
+  const closeConfirmModal = (accepted) => {
+    const resolver = confirmResolverRef.current;
+    confirmResolverRef.current = null;
+    setConfirmModal({
+      open: false,
+      message: '',
+    });
+    if (resolver) {
+      resolver(accepted);
+    }
+  };
 
   useEffect(() => {
     fetchBootstrapData();
@@ -161,6 +223,31 @@ const ScheduleFullCalendarPage = () => {
     }
   };
 
+  useEffect(() => {
+    if (!classes.length) {
+      setSelectedSchoolYear('');
+      return;
+    }
+    if (isStudent || isTeacher || isParent) return;
+
+    const existing = schoolYearOptions.some((x) => x.id === selectedSchoolYear);
+    if (!selectedSchoolYear || !existing) {
+      setSelectedSchoolYear(schoolYearOptions[0]?.id || '');
+    }
+  }, [classes, isStudent, isTeacher, isParent, schoolYearOptions, selectedSchoolYear]);
+
+  useEffect(() => {
+    if (isStudent || isTeacher || isParent) return;
+    if (!visibleClasses.length) {
+      setSelectedClassId('');
+      return;
+    }
+    const exists = visibleClasses.some((cls) => String(cls.id) === String(selectedClassId));
+    if (!exists) {
+      setSelectedClassId(String(visibleClasses[0].id));
+    }
+  }, [visibleClasses, selectedClassId, isStudent, isTeacher, isParent]);
+
   const fetchSchedules = async () => {
     try {
       const activeStudentId = localStorage.getItem('activeStudentId');
@@ -192,18 +279,19 @@ const ScheduleFullCalendarPage = () => {
 
   const handleDeleteAllByClass = async () => {
     if (!selectedClassId) {
-      window.alert('Vui lòng chọn lớp trước khi xóa toàn bộ thời khóa biểu.');
+      toast.warn('Vui lòng chọn lớp trước khi xóa toàn bộ thời khóa biểu.');
       return;
     }
-    if (!window.confirm('Bạn có chắc muốn xóa toàn bộ thời khóa biểu của lớp đang chọn?')) {
+    const confirmed = await openConfirmModal('Bạn có chắc muốn xóa toàn bộ thời khóa biểu của lớp đang chọn?');
+    if (!confirmed) {
       return;
     }
     try {
       await api.delete(`/schedules/class/${selectedClassId}`);
-      window.alert('Đã xóa toàn bộ thời khóa biểu của lớp.');
+      toast.success('Đã xóa toàn bộ thời khóa biểu của lớp.');
       fetchSchedules();
     } catch (error) {
-      window.alert(error?.response?.data?.error || 'Xóa thời khóa biểu thất bại.');
+      toast.error(error?.response?.data?.error || 'Xóa thời khóa biểu thất bại.');
     }
   };
 
@@ -259,7 +347,7 @@ const ScheduleFullCalendarPage = () => {
   const handleAddSchedule = async (e) => {
     e.preventDefault();
     if (!formData.classId || !formData.date || !formData.period) {
-      window.alert('Vui lòng chọn lớp, ngày và tiết.');
+      toast.warn('Vui lòng chọn lớp, ngày và tiết.');
       return;
     }
     try {
@@ -272,7 +360,7 @@ const ScheduleFullCalendarPage = () => {
         period: Number(formData.period),
         room: formData.room || null,
       });
-      window.alert('Đã thêm lịch học bù thành công.');
+      toast.success('Đã thêm lịch học bù thành công.');
       setShowAddModal(false);
       if (String(selectedClassId) !== String(formData.classId)) {
         setSelectedClassId(String(formData.classId));
@@ -280,7 +368,7 @@ const ScheduleFullCalendarPage = () => {
         fetchSchedules();
       }
     } catch (error) {
-      window.alert(error?.response?.data?.error || 'Thêm lịch học bù thất bại.');
+      toast.error(error?.response?.data?.error || 'Thêm lịch học bù thất bại.');
     } finally {
       setSubmitting(false);
     }
@@ -300,34 +388,47 @@ const ScheduleFullCalendarPage = () => {
 
   const handleGenerateFromTemplate = async () => {
     if (!selectedClassId) {
-      window.alert('Vui lòng chọn lớp.');
+      toast.error('Vui lòng chọn lớp.');
       return;
     }
     if (!templateWeekStart || !generateFromTemplateData.semesterStart || !generateFromTemplateData.semesterEnd) {
-      window.alert('Vui lòng nhập đầy đủ tuần mẫu, ngày bắt đầu và ngày kết thúc học kỳ.');
+      toast.error('Vui lòng nhập đầy đủ tuần mẫu, ngày bắt đầu và ngày kết thúc học kỳ.');
       return;
     }
-    if (!window.confirm('Hệ thống sẽ xóa toàn bộ thời khóa biểu hiện có của lớp trong khoảng học kỳ trước khi sinh lại. Tiếp tục?')) {
+    const confirmed = await openConfirmModal(
+      'Hệ thống sẽ xóa toàn bộ thời khóa biểu hiện có của lớp trong khoảng học kỳ trước khi sinh lại. Tiếp tục?'
+    );
+    if (!confirmed) {
       return;
     }
     try {
       setGeneratingFromTemplate(true);
+      const normalizedTemplateWeekStart = normalizeToMonday(templateWeekStart);
+      const templateRes = await api
+        .get(`/schedules/template/class/${selectedClassId}?weekStart=${normalizedTemplateWeekStart}`)
+        .catch(() => ({ data: { templates: [] } }));
+      const templates = templateRes?.data?.templates || [];
+      if (templates.length === 0) {
+        toast.error('Lớp này chưa có thời khóa biểu mẫu. Vui lòng thiết lập và lưu TKB mẫu trước khi sinh học kỳ.');
+        return;
+      }
+
       const payload = {
         classId: Number(selectedClassId),
-        weekStartTemplate: normalizeToMonday(templateWeekStart),
+        weekStartTemplate: normalizedTemplateWeekStart,
         semesterStart: generateFromTemplateData.semesterStart,
         semesterEnd: generateFromTemplateData.semesterEnd,
       };
       const res = await api.post('/schedules/generate-from-template', payload);
       const data = res.data || {};
-      window.alert(
+      toast.success(
         `${data.message || 'Đã sinh thời khóa biểu từ mẫu.'}\n` +
         `Đã xóa: ${data.deletedCount ?? 0} | Đã tạo: ${data.createdCount ?? 0} | Bỏ qua (quá khứ): ${data.skippedPastDateCount ?? 0}`
       );
       setShowGenerateFromTemplateModal(false);
       fetchSchedules();
     } catch (error) {
-      window.alert(error?.response?.data?.error || 'Sinh thời khóa biểu từ mẫu thất bại.');
+      toast.error(error?.response?.data?.error || 'Sinh thời khóa biểu từ mẫu thất bại.');
     } finally {
       setGeneratingFromTemplate(false);
     }
@@ -388,6 +489,23 @@ const ScheduleFullCalendarPage = () => {
 
       {!isStudent && (
         <div className="schedule-fullcalendar-filters">
+          {!isTeacher && !isParent && (
+            <label htmlFor="school-year-select-fullcalendar">Niên khóa:</label>
+          )}
+          {!isTeacher && !isParent && (
+            <select
+              id="school-year-select-fullcalendar"
+              value={selectedSchoolYear}
+              onChange={(e) => setSelectedSchoolYear(e.target.value)}
+            >
+              <option value="">-- Tất cả niên khóa --</option>
+              {schoolYearOptions.map((sy) => (
+                <option key={sy.id} value={sy.id}>
+                  {sy.name}
+                </option>
+              ))}
+            </select>
+          )}
           <label htmlFor="class-select-fullcalendar">Chọn lớp:</label>
           <select
             id="class-select-fullcalendar"
@@ -396,9 +514,9 @@ const ScheduleFullCalendarPage = () => {
             disabled={isStudent}
           >
             <option value="">-- Chọn lớp --</option>
-            {classes.map((cls) => (
+            {visibleClasses.map((cls) => (
               <option key={cls.id} value={cls.id}>
-                {cls.name}
+                {getClassOnlyDisplayName(cls)}
               </option>
             ))}
           </select>
@@ -497,7 +615,7 @@ const ScheduleFullCalendarPage = () => {
                 >
                   <option value="">-- Chọn lớp --</option>
                   {classes.map((cls) => (
-                    <option key={cls.id} value={cls.id}>{cls.name}</option>
+                    <option key={cls.id} value={cls.id}>{getClassOnlyDisplayName(cls)}</option>
                   ))}
                 </select>
               </div>
@@ -612,6 +730,30 @@ const ScheduleFullCalendarPage = () => {
                 type="button"
                 className="inline-flex items-center justify-center gap-2 rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
                 onClick={() => setShowGenerateFromTemplateModal(false)}
+              >
+                Hủy
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {confirmModal.open && (
+        <div className="modal-overlay" onClick={() => closeConfirmModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '520px' }}>
+            <h2>Xác nhận thao tác</h2>
+            <p style={{ marginBottom: 16 }}>{confirmModal.message}</p>
+            <div className="form-actions">
+              <button
+                type="button"
+                className="inline-flex items-center justify-center gap-2 rounded-full bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-md shadow-indigo-500/30 hover:bg-indigo-500"
+                onClick={() => closeConfirmModal(true)}
+              >
+                Tiếp tục
+              </button>
+              <button
+                type="button"
+                className="inline-flex items-center justify-center gap-2 rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                onClick={() => closeConfirmModal(false)}
               >
                 Hủy
               </button>

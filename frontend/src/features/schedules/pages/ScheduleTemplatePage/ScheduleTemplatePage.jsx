@@ -6,6 +6,7 @@ import interactionPlugin from '@fullcalendar/interaction';
 import viLocale from '@fullcalendar/core/locales/vi';
 import api from '../../../../shared/lib/api';
 import { useAuth } from '../../../auth/context/AuthContext';
+import { toast } from 'react-toastify';
 import { scheduleSubjectDisplayName } from '../../../../shared/lib/scheduleLabels';
 import { formatTimeRange, TIMELINE_AFTERNOON, TIMELINE_MORNING } from '../ScheduleListPage/schoolScheduleTimeline';
 import { colorsForSubject } from '../ScheduleListPage/subjectColors';
@@ -18,6 +19,10 @@ const periodTimeMap = lessonRows.reduce((acc, row) => {
 }, {});
 const PERIODS = Array.from({ length: 10 }, (_, i) => i + 1);
 const DAYS = [1, 2, 3, 4, 5, 6];
+const FIXED_ACTIVITY_LABELS = {
+  CHAOCO: 'Chào cờ',
+  SHL: 'Sinh hoạt lớp',
+};
 
 const fmtDate = (d) => {
   const x = new Date(d);
@@ -56,6 +61,66 @@ const isConsecutive = (arr) => {
   }
   return true;
 };
+const computeGenerateStartMonday = () => {
+  const today = new Date();
+  const day = today.getDay();
+  const currentMonday = new Date(today);
+  const diff = day === 0 ? -6 : 1 - day;
+  currentMonday.setDate(today.getDate() + diff);
+  currentMonday.setHours(0, 0, 0, 0);
+  if (day === 1) return fmtDate(currentMonday);
+  const nextMonday = new Date(currentMonday);
+  nextMonday.setDate(currentMonday.getDate() + 7);
+  return fmtDate(nextMonday);
+};
+const buildTemplateMapFromSchedules = (scheduleList, mondayStr) => {
+  const start = new Date(mondayStr);
+  start.setHours(0, 0, 0, 0);
+  const end = new Date(start);
+  end.setDate(end.getDate() + 5);
+  const next = {};
+  (scheduleList || []).forEach((s) => {
+    if (!s?.date || !s?.period) return;
+    const date = String(s.date).slice(0, 10);
+    const d = new Date(date);
+    d.setHours(0, 0, 0, 0);
+    if (d < start || d > end) return;
+    const dayOfWeek = toDayOfWeek(date);
+    const period = Number(s.period);
+    if (dayOfWeek < 1 || dayOfWeek > 6 || period < 1 || period > 10) return;
+    next[`${dayOfWeek}-${period}`] = {
+      dayOfWeek,
+      period,
+      date,
+      subjectId: s.subject?.id ?? s.subject_id ?? null,
+      teacherId: s.teacher?.id ?? s.teacher_id ?? null,
+      teacherName: s.teacher?.fullName || '',
+      room: s.room || '',
+      fixedActivityCode: s.fixedActivityCode || s.fixed_activity_code || null,
+    };
+  });
+  return next;
+};
+const buildTemplateMapFromTemplateSlots = (slotList) => {
+  const next = {};
+  (slotList || []).forEach((s) => {
+    const dayOfWeek = Number(s.dayOfWeek);
+    const period = Number(s.period);
+    const date = String(s.date || '').slice(0, 10);
+    if (!dayOfWeek || !period || !date) return;
+    next[`${dayOfWeek}-${period}`] = {
+      dayOfWeek,
+      period,
+      date,
+      subjectId: s.subjectId ?? null,
+      teacherId: s.teacherId ?? null,
+      teacherName: s.teacherName || '',
+      room: s.room || '',
+      fixedActivityCode: s.fixedActivityCode || null,
+    };
+  });
+  return next;
+};
 
 const ScheduleTemplatePage = () => {
   const { user } = useAuth();
@@ -70,6 +135,16 @@ const ScheduleTemplatePage = () => {
   const [templateMap, setTemplateMap] = useState({});
   const [loading, setLoading] = useState(true);
   const [calendarView, setCalendarView] = useState('timeGridWeek');
+  const [showGenerateModal, setShowGenerateModal] = useState(false);
+  const [generateData, setGenerateData] = useState({
+    classId: '',
+    subjectAssignments: [],
+    numberOfWeeks: 1,
+    session: 'BOTH',
+  });
+  const [generateClassSections, setGenerateClassSections] = useState([]);
+  const [loadingGenerateClassSections, setLoadingGenerateClassSections] = useState(false);
+  const [prefillTemplateFromGeneratedSchedules, setPrefillTemplateFromGeneratedSchedules] = useState(false);
 
   const [showPopup, setShowPopup] = useState(false);
   const [popup, setPopup] = useState({
@@ -84,6 +159,8 @@ const ScheduleTemplatePage = () => {
     () => classes.find((c) => String(c.id) === String(selectedClassId)) || null,
     [classes, selectedClassId]
   );
+  const userRole = user?.role?.name?.toUpperCase();
+  const canManage = userRole === 'ADMIN' || userRole === 'SUPER_ADMIN';
 
   useEffect(() => {
     const run = async () => {
@@ -113,7 +190,7 @@ const ScheduleTemplatePage = () => {
         if (newest.length) setSelectedClassId(String(newest[0].id));
       } catch (e) {
         console.error(e);
-        alert('Không tải được dữ liệu lớp/môn.');
+        toast.error('Không tải được dữ liệu lớp/môn.');
       } finally {
         setLoading(false);
       }
@@ -131,7 +208,8 @@ const ScheduleTemplatePage = () => {
           api.get(`/schedules/class/${selectedClassId}`),
           api.get(`/schedules/template/class/${selectedClassId}?weekStart=${monday}`).catch(() => ({ data: { templates: [] } })),
         ]);
-        setClassSchedules(schRes.data?.schedules || []);
+        const schedulesForClass = schRes.data?.schedules || [];
+        setClassSchedules(schedulesForClass);
         try {
           const csRes = await api.get(`/class-sections/class/${selectedClassId}`);
           setClassSections(csRes.data?.classSections || []);
@@ -149,18 +227,25 @@ const ScheduleTemplatePage = () => {
               date: String(t.date).slice(0, 10),
               subjectId: t.subject?.id ?? t.subject_id ?? null,
               teacherId: t.teacher?.id ?? t.teacher_id ?? null,
+              teacherName: t.teacher?.fullName || '',
               room: t.room || '',
+              fixedActivityCode: t.fixedActivityCode || t.fixed_activity_code || null,
             };
           }
         });
-        setTemplateMap(map);
+        const hasTemplate = Object.keys(map).length > 0;
+        if (!hasTemplate && prefillTemplateFromGeneratedSchedules) {
+          setTemplateMap(buildTemplateMapFromSchedules(schedulesForClass, monday));
+        } else {
+          setTemplateMap(map);
+        }
       } catch (e) {
         console.error(e);
-        alert('Không tải được dữ liệu lịch lớp/mẫu.');
+        toast.error('Không tải được dữ liệu lịch lớp/mẫu.');
       }
     };
     run();
-  }, [selectedClassId, weekStart]);
+  }, [selectedClassId, weekStart, prefillTemplateFromGeneratedSchedules]);
 
   useEffect(() => {
     const classId = selectedClassId ? Number(selectedClassId) : null;
@@ -214,6 +299,34 @@ const ScheduleTemplatePage = () => {
     }
   }, [popup.teacherId, teachersForPopupSubject]);
 
+  useEffect(() => {
+    const classId = generateData.classId ? Number(generateData.classId) : null;
+    if (!classId) {
+      setGenerateClassSections([]);
+      return;
+    }
+
+    let cancelled = false;
+    const run = async () => {
+      try {
+        setLoadingGenerateClassSections(true);
+        const res = await api.get(`/class-sections/class/${classId}`);
+        if (cancelled) return;
+        setGenerateClassSections(res.data?.classSections || []);
+      } catch (_) {
+        if (cancelled) return;
+        setGenerateClassSections([]);
+      } finally {
+        if (!cancelled) setLoadingGenerateClassSections(false);
+      }
+    };
+
+    run();
+    return () => {
+      cancelled = true;
+    };
+  }, [generateData.classId]);
+
   const classScheduleMap = useMemo(() => {
     const start = new Date(weekStart);
     const end = new Date(weekStart);
@@ -237,6 +350,7 @@ const ScheduleTemplatePage = () => {
       const pt = periodTimeMap[period];
       if (!pt) return;
       const date = String(s.date).slice(0, 10);
+      const dayOfWeek = toDayOfWeek(date);
       out.push({
         id: `base-${s.id || `${date}-${period}`}`,
         title: `Hiện tại: ${scheduleSubjectDisplayName(s, 'Tiết học')}`,
@@ -252,8 +366,15 @@ const ScheduleTemplatePage = () => {
       const period = Number(t.period);
       const pt = periodTimeMap[period];
       if (!pt) return;
+      // Ưu tiên hiển thị TKB chính: nếu ô đã có lịch chính thì ẩn event mẫu để tránh chồng event.
+      if (classScheduleMap[`${t.dayOfWeek}-${period}`]) {
+        return;
+      }
       const subject = subjects.find((x) => Number(x.id) === Number(t.subjectId));
-      const title = subject?.name || 'Mẫu';
+      const fixedLabel = t.fixedActivityCode
+        ? FIXED_ACTIVITY_LABELS[String(t.fixedActivityCode).toUpperCase()]
+        : '';
+      const title = subject?.name || fixedLabel || 'Mẫu';
       const palette = colorsForSubject(subject?.id, title);
       out.push({
         id: `tpl-${t.dayOfWeek}-${t.period}`,
@@ -264,7 +385,7 @@ const ScheduleTemplatePage = () => {
         borderColor: palette.accent,
         textColor: palette.title,
         extendedProps: {
-          teacherName:
+          teacherName: t.teacherName ||
             (classSections.find(
               (cs) =>
                 Number(cs?.teacher?.id ?? cs?.teacher_id) === Number(t.teacherId) &&
@@ -280,7 +401,7 @@ const ScheduleTemplatePage = () => {
     if (!selectedClassId) return;
     const slots = Object.values(templateMap).sort((a, b) => (a.dayOfWeek - b.dayOfWeek) || (a.period - b.period));
     if (!slots.length) {
-      alert('Chưa có tiết mẫu để lưu.');
+      toast.warn('Chưa có tiết mẫu để lưu.');
       return;
     }
     try {
@@ -294,13 +415,158 @@ const ScheduleTemplatePage = () => {
           subjectId: s.subjectId || null,
           teacherId: s.teacherId || null,
           room: s.room || null,
+          fixedActivityCode: s.fixedActivityCode || null,
         })),
       });
-      alert('Đã lưu thời khóa biểu mẫu thành công.');
+      setPrefillTemplateFromGeneratedSchedules(false);
+      toast.success('Đã lưu thời khóa biểu mẫu thành công.');
     } catch (e) {
       console.error(e);
-      alert('Lưu mẫu thất bại: ' + (e.response?.data?.error || e.message));
+      toast.error('Lưu mẫu thất bại: ' + (e.response?.data?.error || e.message));
     }
+  };
+
+  const handleGenerate = async () => {
+    try {
+      const normalizedAssignments = (generateData.subjectAssignments || [])
+        .map((a) => ({
+          subjectId: String(a?.subjectId || '').trim(),
+          teacherId: String(a?.teacherId || '').trim(),
+          periodsPerWeek: String(a?.periodsPerWeek || '').trim(),
+        }))
+        .filter((a) => a.subjectId || a.teacherId || a.periodsPerWeek);
+
+      if (!generateData.classId || normalizedAssignments.length === 0) {
+        toast.warn('Vui lòng chọn lớp và thêm ít nhất một môn học.');
+        return;
+      }
+
+      const invalidRowIndex = normalizedAssignments.findIndex(
+        (a) => !a.subjectId || !a.teacherId || !a.periodsPerWeek
+      );
+      if (invalidRowIndex >= 0) {
+        toast.warn(`Dòng ${invalidRowIndex + 1} chưa đủ thông tin (môn, giáo viên, tiết/tuần).`);
+        return;
+      }
+
+      const schoolId = user?.school?.id;
+      const payload = {
+        classId: parseInt(generateData.classId, 10),
+        ...(schoolId != null && schoolId !== '' ? { schoolId: Number(schoolId) } : {}),
+        subjectAssignments: normalizedAssignments.map((a) => ({
+          subjectId: parseInt(a.subjectId, 10),
+          teacherId: parseInt(a.teacherId, 10),
+          periodsPerWeek: parseInt(a.periodsPerWeek, 10),
+        })),
+        numberOfWeeks: parseInt(generateData.numberOfWeeks, 10) || 1,
+        session: generateData.session || 'BOTH',
+      };
+
+      const response = await api.post('/schedules/generate', payload);
+      const data = response.data || {};
+      const numberOfWeeksCreated = parseInt(generateData.numberOfWeeks, 10) || 1;
+      if (data.success) {
+        const generatedMonday = computeGenerateStartMonday();
+        const generatedClassId = String(generateData.classId);
+        const slots = Array.isArray(data.templateSlots) ? data.templateSlots : [];
+        setShowGenerateModal(false);
+        setGenerateData({
+          classId: generatedClassId || selectedClassId || '',
+          subjectAssignments: [],
+          numberOfWeeks: 1,
+          session: 'BOTH',
+        });
+        setSelectedClassId(generatedClassId);
+        setWeekStart(generatedMonday);
+        setTemplateMap(buildTemplateMapFromTemplateSlots(slots));
+        setPrefillTemplateFromGeneratedSchedules(false);
+        toast.success(
+          `${data.message || 'Thành công.'}\n\n` +
+            `Tiết yêu cầu (tổng/tuần): ${data.requestedPeriods ?? '-'} — Đã tạo: ${data.assignedPeriods ?? '-'}\n` +
+            `Sức chứa tuần đầu: ${data.weeklyCapacity ?? '-'}\n\n` +
+            `Đã tạo cho ${numberOfWeeksCreated} tuần (dữ liệu mẫu hiển thị ở tuần bắt đầu sinh).`
+        );
+      } else {
+        const unmet = Array.isArray(data.unmetAssignments) ? data.unmetAssignments : [];
+        const unmetText =
+          unmet.length > 0
+            ? '\n\nChưa đủ tiết:\n' +
+              unmet
+                .map(
+                  (u) =>
+                    `- Dòng ${u.lineIndex + 1}: ${u.subjectName ?? u.subjectId} / ${u.teacherName ?? u.teacherId} — cần ${u.requiredPeriods}, được ${u.assignedPeriods}`
+                )
+                .join('\n')
+            : '';
+        toast.error((data.message || 'Tạo TKB tự động không hoàn tất.') + unmetText);
+      }
+    } catch (error) {
+      console.error('Error generating schedules:', error);
+      toast.error('Lỗi khi tạo thời khóa biểu: ' + (error.response?.data?.error || error.message));
+    }
+  };
+
+  const addSubjectAssignment = () => {
+    setGenerateData((prev) => ({
+      ...prev,
+      subjectAssignments: [
+        ...prev.subjectAssignments,
+        { subjectId: '', teacherId: '', periodsPerWeek: '' },
+      ],
+    }));
+  };
+
+  const removeSubjectAssignment = (index) => {
+    setGenerateData((prev) => ({
+      ...prev,
+      subjectAssignments: prev.subjectAssignments.filter((_, i) => i !== index),
+    }));
+  };
+
+  const updateSubjectAssignment = (index, field, value) => {
+    setGenerateData((prev) => {
+      const updated = [...prev.subjectAssignments];
+      if (field === 'subjectId') {
+        updated[index] = { ...updated[index], subjectId: value, teacherId: '' };
+      } else {
+        updated[index] = { ...updated[index], [field]: value };
+      }
+      return { ...prev, subjectAssignments: updated };
+    });
+  };
+
+  const getSubjectsForAssignmentRow = (rowIndex) => {
+    const assignments = generateData.subjectAssignments;
+    const takenElsewhere = new Set(
+      assignments
+        .map((a, i) => (i !== rowIndex && a.subjectId ? String(a.subjectId) : null))
+        .filter(Boolean)
+    );
+    const currentId = assignments[rowIndex]?.subjectId ? String(assignments[rowIndex].subjectId) : '';
+    return subjects.filter(
+      (s) =>
+        !takenElsewhere.has(String(s.id)) || (currentId !== '' && String(s.id) === currentId)
+    );
+  };
+
+  const getTeachersForGenerateSubject = (subjectIdRaw) => {
+    const subjectId = subjectIdRaw ? Number(subjectIdRaw) : null;
+    if (!subjectId) return [];
+    const seen = new Set();
+    const out = [];
+    (generateClassSections || []).forEach((cs) => {
+      const sid = cs?.subject?.id ?? cs?.subject_id;
+      const teacher = cs?.teacher;
+      const tid = teacher?.id;
+      const st = (cs?.status || '').toUpperCase();
+      if (Number(sid) !== subjectId) return;
+      if (!tid) return;
+      if (st && st !== 'ACTIVE') return;
+      if (seen.has(tid)) return;
+      seen.add(tid);
+      out.push({ id: tid, fullName: teacher.fullName || `GV #${tid}` });
+    });
+    return out;
   };
 
   const openPopup = (dateStr) => {
@@ -318,19 +584,19 @@ const ScheduleTemplatePage = () => {
 
   const submitPopup = () => {
     if (!popup.subjectId) {
-      alert('Vui lòng chọn môn.');
+      toast.warn('Vui lòng chọn môn.');
       return;
     }
     if (!popup.teacherId) {
-      alert('Vui lòng chọn giáo viên.');
+      toast.warn('Vui lòng chọn giáo viên.');
       return;
     }
     if (!popup.periods.length) {
-      alert('Vui lòng chọn ít nhất 1 tiết.');
+      toast.warn('Vui lòng chọn ít nhất 1 tiết.');
       return;
     }
     if (!isConsecutive(popup.periods)) {
-      alert('Các tiết phải liên tục nhau.');
+      toast.warn('Các tiết phải liên tục nhau.');
       return;
     }
 
@@ -346,7 +612,7 @@ const ScheduleTemplatePage = () => {
       return Number(old.subjectId) !== subjectId;
     }).length;
     if (existingSameSubjectCount + incomingNewCount > 5) {
-      alert('Không quá 5 tiết cho cùng 1 môn trong 1 ngày.');
+      toast.warn('Không quá 5 tiết cho cùng 1 môn trong 1 ngày.');
       return;
     }
 
@@ -360,7 +626,9 @@ const ScheduleTemplatePage = () => {
           date,
           subjectId,
           teacherId: Number(popup.teacherId),
+          teacherName: teachersForPopupSubject.find((x) => String(x.id) === String(popup.teacherId))?.fullName || '',
           room: popup.room || '',
+          fixedActivityCode: null,
         };
       });
       return next;
@@ -440,6 +708,20 @@ const ScheduleTemplatePage = () => {
           >
             Lưu TKB mẫu
           </button>
+          {canManage && (
+            <button
+              className="inline-flex items-center gap-2 rounded-full bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-md shadow-emerald-500/30 hover:bg-emerald-500"
+              onClick={() => {
+                setGenerateData((prev) => ({
+                  ...prev,
+                  classId: selectedClassId || prev.classId,
+                }));
+                setShowGenerateModal(true);
+              }}
+            >
+              Sinh thời khóa biểu tự động
+            </button>
+          )}
         </div>
 
         <div className="schedule-template-hint">
@@ -588,6 +870,141 @@ const ScheduleTemplatePage = () => {
               <button
                 className="inline-flex items-center justify-center gap-2 rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
                 onClick={() => setShowPopup(false)}
+              >
+                Hủy
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showGenerateModal && (
+        <div className="template-popup-overlay" onClick={() => setShowGenerateModal(false)}>
+          <div
+            className="template-popup template-popup--generate"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3>Sinh thời khóa biểu tự động</h3>
+
+            <div className="template-generate-form-group">
+              <label>Lớp *</label>
+              <select
+                value={generateData.classId}
+                onChange={(e) => setGenerateData((prev) => ({ ...prev, classId: e.target.value }))}
+              >
+                <option value="">-- Chọn lớp --</option>
+                {classes.map((cls) => (
+                  <option key={cls.id} value={cls.id}>
+                    {cls.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="template-generate-form-group">
+              <label>Số tuần *</label>
+              <input
+                type="number"
+                value={generateData.numberOfWeeks}
+                onChange={(e) =>
+                  setGenerateData((prev) => ({ ...prev, numberOfWeeks: e.target.value }))
+                }
+                min="1"
+                max="20"
+                placeholder="Nhập số tuần (1-20)"
+              />
+              <small>Thời khóa biểu sẽ được tạo từ tuần hiện tại cho số tuần đã chọn.</small>
+            </div>
+
+            <div className="template-generate-form-group">
+              <label>Buổi tạo lịch *</label>
+              <select
+                value={generateData.session}
+                onChange={(e) => setGenerateData((prev) => ({ ...prev, session: e.target.value }))}
+              >
+                <option value="BOTH">Cả ngày (sáng + chiều)</option>
+                <option value="MORNING">Chỉ buổi sáng</option>
+                <option value="AFTERNOON">Chỉ buổi chiều</option>
+              </select>
+              <small>Nếu chọn sáng thì không tạo tiết chiều, và ngược lại.</small>
+            </div>
+
+            <div className="template-generate-form-group">
+              <label>Phân bổ môn học</label>
+              {generateData.subjectAssignments.map((assignment, index) => {
+                const eligibleTeachers = getTeachersForGenerateSubject(assignment.subjectId);
+                return (
+                  <div key={index} className="template-generate-assignment-row">
+                    <select
+                      value={assignment.subjectId}
+                      onChange={(e) => updateSubjectAssignment(index, 'subjectId', e.target.value)}
+                    >
+                      <option value="">-- Môn học --</option>
+                      {getSubjectsForAssignmentRow(index).map((subject) => (
+                        <option key={subject.id} value={subject.id}>
+                          {subject.name}
+                        </option>
+                      ))}
+                    </select>
+                    <select
+                      value={assignment.teacherId}
+                      onChange={(e) => updateSubjectAssignment(index, 'teacherId', e.target.value)}
+                      disabled={!generateData.classId || !assignment.subjectId || loadingGenerateClassSections}
+                    >
+                      <option value="">
+                        {!generateData.classId
+                          ? '-- Chọn lớp trước --'
+                          : !assignment.subjectId
+                            ? '-- Chọn môn trước --'
+                            : loadingGenerateClassSections
+                              ? '-- Đang tải giáo viên --'
+                              : '-- Giáo viên --'}
+                      </option>
+                      {eligibleTeachers.map((teacher) => (
+                        <option key={teacher.id} value={teacher.id}>
+                          {teacher.fullName}
+                        </option>
+                      ))}
+                    </select>
+                    <input
+                      type="number"
+                      value={assignment.periodsPerWeek}
+                      onChange={(e) =>
+                        updateSubjectAssignment(index, 'periodsPerWeek', e.target.value)
+                      }
+                      placeholder="Tiết/tuần"
+                      min="1"
+                      max="10"
+                    />
+                    <button
+                      type="button"
+                      className="template-generate-remove"
+                      onClick={() => removeSubjectAssignment(index)}
+                    >
+                      Xóa
+                    </button>
+                  </div>
+                );
+              })}
+              <button
+                type="button"
+                className="template-generate-add"
+                onClick={addSubjectAssignment}
+              >
+                + Thêm môn
+              </button>
+            </div>
+
+            <div className="popup-actions">
+              <button
+                className="inline-flex items-center justify-center gap-2 rounded-full bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-md shadow-emerald-500/30 hover:bg-emerald-500"
+                onClick={handleGenerate}
+              >
+                Tạo tự động
+              </button>
+              <button
+                className="inline-flex items-center justify-center gap-2 rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                onClick={() => setShowGenerateModal(false)}
               >
                 Hủy
               </button>
