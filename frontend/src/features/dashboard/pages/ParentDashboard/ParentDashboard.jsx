@@ -22,7 +22,7 @@ const PERIOD_TIMES = [
   { start: '13:50', end: '14:35' }, { start: '14:40', end: '15:25' },
   { start: '15:30', end: '16:15' }, { start: '16:20', end: '17:05' },
 ];
-
+///
 function periodTimeRange(period) {
   const p = Number(period);
   if (!p || p < 1 || p > PERIOD_TIMES.length) return '—';
