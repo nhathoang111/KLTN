@@ -7,6 +7,7 @@ import com.example.schoolmanagement.repository.UserRepository;
 import com.example.schoolmanagement.repository.RoleRepository;
 import com.example.schoolmanagement.repository.ClassRepository;
 import com.example.schoolmanagement.repository.DefaultSubjectRepository;
+import com.example.schoolmanagement.util.EmailFormat;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -177,6 +178,21 @@ public class SchoolService {
     }
 
     public School createSchool(School school) {
+        String name = school.getName() != null ? school.getName().trim() : null;
+        if (name == null || name.isEmpty()) {
+            throw new BadRequestException("Tên trường là bắt buộc");
+        }
+        school.setName(name);
+
+        String email = school.getEmail() != null ? school.getEmail().trim() : null;
+        if (email == null || email.isEmpty()) {
+            throw new BadRequestException("Email là bắt buộc");
+        }
+        if (!EmailFormat.isValid(email)) {
+            throw new BadRequestException("Email không hợp lệ");
+        }
+        school.setEmail(email);
+
         if (school.getCode() != null && !school.getCode().trim().isEmpty()) {
             String normalizedCode = school.getCode().trim();
             school.setCode(normalizedCode);
@@ -191,12 +207,8 @@ public class SchoolService {
                 throw new BadRequestException("Số điện thoại đã tồn tại");
             }
         }
-        if (school.getEmail() != null && !school.getEmail().trim().isEmpty()) {
-            String normalizedEmail = school.getEmail().trim();
-            school.setEmail(normalizedEmail);
-            if (existsByEmail(normalizedEmail)) {
-                throw new BadRequestException("Email đã tồn tại");
-            }
+        if (existsByEmail(email)) {
+            throw new BadRequestException("Email đã tồn tại");
         }
         if (school.getAddress() != null && !school.getAddress().trim().isEmpty()) {
             school.setAddress(school.getAddress().trim());
