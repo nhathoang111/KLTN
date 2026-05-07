@@ -1,3 +1,7 @@
+// Document Management Page - Quản lý tài liệu học tập
+// Updated: 2026-05-07 - Cải tiến tìm kiếm, thêm filter theo loại file
+// Previous: 2026-04-14 - Fix bug upload file size không hiển thị đúng
+
 import React, { useState, useEffect } from 'react';
 import api from '../../../../shared/lib/api';
 import './DocumentListPage.css';

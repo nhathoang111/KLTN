@@ -1,4 +1,8 @@
 /* Document List Page Styles */
+/* Version: 3.0.1 - Updated: 2026-05-07 */
+/* Redesigned document table layout, improved modal styling, added animations */
+/* Previous version: 3.0.0 - 2026-04-14 - Initial responsive table implementation */
+
 @import '../../../../styles/CommonPageStyles.css';
 
 .document-list-page {
