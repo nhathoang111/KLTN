@@ -116,6 +116,8 @@ public class ScheduleController {
         Integer schoolId = schoolIdObj instanceof Number ? ((Number) schoolIdObj).intValue() : null;
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> subjectAssignments = (List<Map<String, Object>>) request.get("subjectAssignments");
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> existingTemplateSlots = (List<Map<String, Object>>) request.get("existingTemplateSlots");
         Object numberOfWeeksObj = request.get("numberOfWeeks");
         Integer numberOfWeeks = numberOfWeeksObj instanceof Number
                 ? ((Number) numberOfWeeksObj).intValue() : 1;
@@ -130,7 +132,8 @@ public class ScheduleController {
 
         // Sinh TKB gốc đã tắt theo yêu cầu: chỉ sinh dữ liệu cho TKB mẫu.
         // ScheduleGenerateResult result = scheduleService.generateSchedules(classId, schoolId, subjectAssignments, numberOfWeeks, session);
-        ScheduleGenerateResult result = scheduleService.generateSchedules(classId, schoolId, subjectAssignments, numberOfWeeks, session);
+        ScheduleGenerateResult result = scheduleService.generateSchedules(
+                classId, schoolId, subjectAssignments, numberOfWeeks, session, existingTemplateSlots);
         return ResponseEntity.ok(result);
     }
 

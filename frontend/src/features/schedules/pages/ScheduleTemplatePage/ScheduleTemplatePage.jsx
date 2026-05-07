@@ -121,6 +121,18 @@ const buildTemplateMapFromTemplateSlots = (slotList) => {
   });
   return next;
 };
+const isValidTemplateSlot = (slot) => {
+  if (!slot) return false;
+  const dayOfWeek = Number(slot.dayOfWeek);
+  const period = Number(slot.period);
+  const date = String(slot.date || '').trim();
+  if (!(dayOfWeek >= 1 && dayOfWeek <= 6)) return false;
+  if (!(period >= 1 && period <= 10)) return false;
+  if (!date) return false;
+  const fixedCode = String(slot.fixedActivityCode || '').trim().toUpperCase();
+  if (fixedCode) return true;
+  return Number(slot.subjectId) > 0 && Number(slot.teacherId) > 0;
+};
 
 const ScheduleTemplatePage = () => {
   const { user } = useAuth();
@@ -145,6 +157,7 @@ const ScheduleTemplatePage = () => {
   const [generateClassSections, setGenerateClassSections] = useState([]);
   const [loadingGenerateClassSections, setLoadingGenerateClassSections] = useState(false);
   const [prefillTemplateFromGeneratedSchedules, setPrefillTemplateFromGeneratedSchedules] = useState(false);
+  const [previewGeneratedTemplate, setPreviewGeneratedTemplate] = useState(false);
 
   const [showPopup, setShowPopup] = useState(false);
   const [popup, setPopup] = useState({
@@ -234,10 +247,17 @@ const ScheduleTemplatePage = () => {
           }
         });
         const hasTemplate = Object.keys(map).length > 0;
-        if (!hasTemplate && prefillTemplateFromGeneratedSchedules) {
+        if (hasTemplate) {
+          // Có dữ liệu mẫu thật từ backend thì luôn ưu tiên hiển thị dữ liệu này.
+          setTemplateMap(map);
+          setPreviewGeneratedTemplate(false);
+        } else if (previewGeneratedTemplate) {
+          // Đang preview mẫu vừa sinh (chưa lưu), giữ nguyên templateMap hiện tại.
+          // Tránh bị overwrite thành rỗng khi effect chạy lại sau setState.
+        } else if (prefillTemplateFromGeneratedSchedules) {
           setTemplateMap(buildTemplateMapFromSchedules(schedulesForClass, monday));
         } else {
-          setTemplateMap(map);
+          setTemplateMap({});
         }
       } catch (e) {
         console.error(e);
@@ -245,7 +265,7 @@ const ScheduleTemplatePage = () => {
       }
     };
     run();
-  }, [selectedClassId, weekStart, prefillTemplateFromGeneratedSchedules]);
+  }, [selectedClassId, weekStart, prefillTemplateFromGeneratedSchedules, previewGeneratedTemplate]);
 
   useEffect(() => {
     const classId = selectedClassId ? Number(selectedClassId) : null;
@@ -345,29 +365,31 @@ const ScheduleTemplatePage = () => {
 
   const events = useMemo(() => {
     const out = [];
-    Object.values(classScheduleMap).forEach((s) => {
-      const period = Number(s.period);
-      const pt = periodTimeMap[period];
-      if (!pt) return;
-      const date = String(s.date).slice(0, 10);
-      const dayOfWeek = toDayOfWeek(date);
-      out.push({
-        id: `base-${s.id || `${date}-${period}`}`,
-        title: `Hiện tại: ${scheduleSubjectDisplayName(s, 'Tiết học')}`,
-        start: toIso(date, pt.startMin),
-        end: toIso(date, pt.endMin),
-        display: 'block',
-        backgroundColor: '#f1f5f9',
-        borderColor: '#cbd5e1',
-        textColor: '#475569',
+    const hasTemplateToCompare = previewGeneratedTemplate || Object.keys(templateMap).length > 0;
+    if (hasTemplateToCompare) {
+      Object.values(classScheduleMap).forEach((s) => {
+        const period = Number(s.period);
+        const pt = periodTimeMap[period];
+        if (!pt) return;
+        const date = String(s.date).slice(0, 10);
+        out.push({
+          id: `base-${s.id || `${date}-${period}`}`,
+          title: `Hiện tại: ${scheduleSubjectDisplayName(s, 'Tiết học')}`,
+          start: toIso(date, pt.startMin),
+          end: toIso(date, pt.endMin),
+          display: 'block',
+          backgroundColor: '#f1f5f9',
+          borderColor: '#cbd5e1',
+          textColor: '#475569',
+        });
       });
-    });
+    }
     Object.values(templateMap).forEach((t) => {
       const period = Number(t.period);
       const pt = periodTimeMap[period];
       if (!pt) return;
-      // Ưu tiên hiển thị TKB chính: nếu ô đã có lịch chính thì ẩn event mẫu để tránh chồng event.
-      if (classScheduleMap[`${t.dayOfWeek}-${period}`]) {
+      // Mặc định ưu tiên TKB chính, nhưng nếu vừa sinh mẫu thì ưu tiên preview mẫu để người dùng thấy kết quả ngay.
+      if (!previewGeneratedTemplate && classScheduleMap[`${t.dayOfWeek}-${period}`]) {
         return;
       }
       const subject = subjects.find((x) => Number(x.id) === Number(t.subjectId));
@@ -395,11 +417,13 @@ const ScheduleTemplatePage = () => {
       });
     });
     return out;
-  }, [classScheduleMap, templateMap, subjects, classSections]);
+  }, [classScheduleMap, templateMap, subjects, classSections, previewGeneratedTemplate]);
 
   const saveTemplate = async () => {
     if (!selectedClassId) return;
-    const slots = Object.values(templateMap).sort((a, b) => (a.dayOfWeek - b.dayOfWeek) || (a.period - b.period));
+    const slots = Object.values(templateMap)
+      .filter(isValidTemplateSlot)
+      .sort((a, b) => (a.dayOfWeek - b.dayOfWeek) || (a.period - b.period));
     if (!slots.length) {
       toast.warn('Chưa có tiết mẫu để lưu.');
       return;
@@ -419,10 +443,30 @@ const ScheduleTemplatePage = () => {
         })),
       });
       setPrefillTemplateFromGeneratedSchedules(false);
+      setPreviewGeneratedTemplate(false);
       toast.success('Đã lưu thời khóa biểu mẫu thành công.');
     } catch (e) {
       console.error(e);
       toast.error('Lưu mẫu thất bại: ' + (e.response?.data?.error || e.message));
+    }
+  };
+
+  const deleteTemplate = async () => {
+    if (!selectedClassId) {
+      toast.warn('Vui lòng chọn lớp trước khi xóa mẫu.');
+      return;
+    }
+    try {
+      const monday = normalizeToMonday(weekStart);
+      const res = await api.delete(`/schedules/template/class/${selectedClassId}?weekStart=${monday}`);
+      const count = res?.data?.count ?? 0;
+      setTemplateMap({});
+      setPrefillTemplateFromGeneratedSchedules(false);
+      setPreviewGeneratedTemplate(false);
+      toast.success(`Đã xóa thời khóa biểu mẫu (${count} tiết). Không ảnh hưởng thời khóa biểu chính.`);
+    } catch (e) {
+      console.error(e);
+      toast.error('Xóa mẫu thất bại: ' + (e.response?.data?.error || e.message));
     }
   };
 
@@ -458,6 +502,13 @@ const ScheduleTemplatePage = () => {
           teacherId: parseInt(a.teacherId, 10),
           periodsPerWeek: parseInt(a.periodsPerWeek, 10),
         })),
+        existingTemplateSlots: Object.values(templateMap).filter(isValidTemplateSlot).map((s) => ({
+          dayOfWeek: s.dayOfWeek,
+          period: s.period,
+          date: s.date,
+          teacherId: s.teacherId || null,
+          fixedActivityCode: s.fixedActivityCode || null,
+        })),
         numberOfWeeks: parseInt(generateData.numberOfWeeks, 10) || 1,
         session: generateData.session || 'BOTH',
       };
@@ -478,8 +529,12 @@ const ScheduleTemplatePage = () => {
         });
         setSelectedClassId(generatedClassId);
         setWeekStart(generatedMonday);
-        setTemplateMap(buildTemplateMapFromTemplateSlots(slots));
+        setTemplateMap((prev) => ({
+          ...prev,
+          ...buildTemplateMapFromTemplateSlots(slots),
+        }));
         setPrefillTemplateFromGeneratedSchedules(false);
+        setPreviewGeneratedTemplate(true);
         toast.success(
           `${data.message || 'Thành công.'}\n\n` +
             `Tiết yêu cầu (tổng/tuần): ${data.requestedPeriods ?? '-'} — Đã tạo: ${data.assignedPeriods ?? '-'}\n` +
@@ -708,6 +763,12 @@ const ScheduleTemplatePage = () => {
           >
             Lưu TKB mẫu
           </button>
+          <button
+            className="inline-flex items-center gap-2 rounded-full border border-rose-300 bg-white px-4 py-2 text-sm font-semibold text-rose-700 hover:bg-rose-50"
+            onClick={deleteTemplate}
+          >
+            Xóa TKB mẫu
+          </button>
           {canManage && (
             <button
               className="inline-flex items-center gap-2 rounded-full bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-md shadow-emerald-500/30 hover:bg-emerald-500"
@@ -731,8 +792,10 @@ const ScheduleTemplatePage = () => {
 
       <div className="schedule-template-calendar-card">
         <FullCalendar
+          key={`template-calendar-${weekStart}`}
           plugins={[timeGridPlugin, dayGridPlugin, interactionPlugin]}
           initialView="timeGridWeek"
+          initialDate={weekStart}
           locale={viLocale}
           firstDay={1}
           hiddenDays={[0]}
@@ -747,7 +810,8 @@ const ScheduleTemplatePage = () => {
           datesSet={(arg) => {
             setCalendarView(arg.view.type);
             if (arg.view.type === 'timeGridWeek') {
-              setWeekStart(normalizeToMonday(fmtDate(arg.start)));
+              const nextWeekStart = normalizeToMonday(fmtDate(arg.start));
+              setWeekStart((prev) => (prev === nextWeekStart ? prev : nextWeekStart));
             }
           }}
           events={events}
