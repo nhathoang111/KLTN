@@ -23,49 +23,56 @@ const SchoolFormModal = ({
 
   const {
     provinces,
-    districts,
     wards,
     loadingLocations,
     provinceSuggestions,
-    districtSuggestions,
     wardSuggestions,
     showProvinceSuggestions,
-    showDistrictSuggestions,
     showWardSuggestions,
     provinceInputRef,
-    districtInputRef,
     wardInputRef,
     provinceSuggestionsRef,
-    districtSuggestionsRef,
     wardSuggestionsRef,
     handleProvinceChange,
     handleSelectProvince,
-    handleDistrictChange,
-    handleSelectDistrict,
     handleWardChange,
     handleSelectWard,
+    handleProvinceFocus,
+    handleWardFocus,
   } = locations;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/50 px-4 py-8">
-      <div className="relative w-full sm:w-[1000px] max-h-[90vh] overflow-hidden rounded-3xl bg-white shadow-2xl flex flex-col">
-        <div className="flex items-center justify-between bg-gradient-to-r from-indigo-500 via-purple-500 to-fuchsia-500 px-8 py-5 text-white">
-          <h2 className="text-[22px] font-semibold tracking-wide">
-            {editingSchool ? 'Sửa trường học' : 'Thêm trường học'}
-          </h2>
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4"
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-label={editingSchool ? 'Sửa trường học' : 'Thêm trường học'}
+    >
+      <div
+        className="w-full max-w-5xl overflow-hidden rounded-3xl bg-white shadow-2xl shadow-slate-900/20"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="relative border-b border-slate-200 bg-white px-6 py-4">
+          <div className="text-center">
+            <h2 className="text-2xl font-bold leading-tight text-slate-900">
+              {editingSchool ? 'Sửa trường học' : 'Thêm trường học'}
+            </h2>
+            <p className="mt-1 text-sm text-slate-500">
+              Nhập thông tin trường học để lưu vào hệ thống.
+            </p>
+          </div>
           <button
             type="button"
-            className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-2xl font-bold text-white shadow-sm transition hover:bg-white/20 hover:text-white/90"
+            className="absolute right-4 top-4 inline-flex h-9 w-9 items-center justify-center rounded-full text-slate-600 hover:bg-slate-100"
             onClick={onClose}
+            aria-label="Đóng"
           >
             ×
           </button>
         </div>
 
-        <form
-          onSubmit={onSubmit}
-          className="px-8 pb-6 pt-6 overflow-y-auto"
-        >
+        <form onSubmit={onSubmit} className="max-h-[75vh] overflow-auto px-6 py-5">
           {warning && (
             <div className="mb-6 flex items-center gap-3 rounded-xl border-l-4 border-amber-500 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-800">
               <svg
@@ -221,20 +228,18 @@ const SchoolFormModal = ({
                 type="text"
                 value={formData.province}
                 onChange={handleProvinceChange}
-                placeholder="Nhập tỉnh/thành phố..."
-                autoComplete="off"
+                onFocus={handleProvinceFocus}
                 disabled={loadingLocations}
+                autoComplete="off"
                 className={inputClass}
+                placeholder={
+                  loadingLocations ? 'Đang tải dữ liệu...' : 'Nhập để tìm tỉnh/thành phố'
+                }
               />
-              {loadingLocations && (
-                <span className="mt-1 block text-xs text-slate-500">
-                  Đang tải dữ liệu...
-                </span>
-              )}
               {showProvinceSuggestions && provinceSuggestions.length > 0 && (
                 <div
                   ref={provinceSuggestionsRef}
-                  className="absolute left-0 right-0 top-full z-[10000] mt-1 max-h-52 overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-lg"
+                  className="absolute left-0 right-0 top-full z-10000 mt-1 max-h-52 overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-lg"
                 >
                   {provinceSuggestions.map((province, index) => (
                     <div
@@ -249,41 +254,6 @@ const SchoolFormModal = ({
               )}
             </div>
 
-            <div className="relative">
-              <label className={labelClass}>Quận/Huyện</label>
-              <input
-                ref={districtInputRef}
-                type="text"
-                value={formData.district}
-                onChange={handleDistrictChange}
-                placeholder="Nhập quận/huyện..."
-                autoComplete="off"
-                disabled={!formData.province}
-                className={inputClass}
-              />
-              {!formData.province && (
-                <span className="mt-1 block text-xs text-slate-400">
-                  Vui lòng chọn tỉnh/thành phố trước
-                </span>
-              )}
-              {showDistrictSuggestions && districtSuggestions.length > 0 && (
-                <div
-                  ref={districtSuggestionsRef}
-                  className="absolute left-0 right-0 top-full z-[10000] mt-1 max-h-52 overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-lg"
-                >
-                  {districtSuggestions.map((district, index) => (
-                    <div
-                      key={district.code || index}
-                      onClick={() => handleSelectDistrict(district)}
-                      className="cursor-pointer px-4 py-3 text-sm text-slate-700 transition hover:bg-slate-50"
-                    >
-                      {district.name}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
             {/* Hàng 4 */}
             <div className="relative">
               <label className={labelClass}>Phường/Xã</label>
@@ -292,20 +262,22 @@ const SchoolFormModal = ({
                 type="text"
                 value={formData.ward}
                 onChange={handleWardChange}
-                placeholder="Nhập phường/xã..."
+                onFocus={handleWardFocus}
+                disabled={!formData.province || wards.length === 0}
                 autoComplete="off"
-                disabled={!formData.district}
                 className={inputClass}
+                placeholder={
+                  !formData.province
+                    ? 'Chọn tỉnh/thành phố trước'
+                    : wards.length === 0
+                      ? 'Không có dữ liệu phường/xã'
+                      : 'Nhập để tìm phường/xã'
+                }
               />
-              {!formData.district && (
-                <span className="mt-1 block text-xs text-slate-400">
-                  Vui lòng chọn quận/huyện trước
-                </span>
-              )}
               {showWardSuggestions && wardSuggestions.length > 0 && (
                 <div
                   ref={wardSuggestionsRef}
-                  className="absolute left-0 right-0 top-full z-[10000] mt-1 max-h-52 overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-lg"
+                  className="absolute left-0 right-0 top-full z-10000 mt-1 max-h-52 overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-lg"
                 >
                   {wardSuggestions.map((ward, index) => (
                     <div
@@ -320,17 +292,7 @@ const SchoolFormModal = ({
               )}
             </div>
 
-            <div>
-              <label className={labelClass}>Số điện thoại</label>
-              <input
-                type="tel"
-                value={formData.phone}
-                onChange={(e) =>
-                  setFormData({ ...formData, phone: e.target.value })
-                }
-                className={inputClass}
-              />
-            </div>
+            
 
             {/* Hàng 5 */}
             <div>
@@ -342,6 +304,18 @@ const SchoolFormModal = ({
                   setFormData({ ...formData, address: e.target.value })
                 }
                 placeholder="Số nhà, tên đường..."
+                className={inputClass}
+              />
+            </div>
+
+            <div>
+              <label className={labelClass}>Số điện thoại</label>
+              <input
+                type="tel"
+                value={formData.phone}
+                onChange={(e) =>
+                  setFormData({ ...formData, phone: e.target.value })
+                }
                 className={inputClass}
               />
             </div>
@@ -360,17 +334,17 @@ const SchoolFormModal = ({
             </div>
           </div>
 
-          <div className="mt-8 flex items-center justify-end gap-3 border-t border-slate-100 pt-5">
+          <div className="mt-8 flex items-center justify-end gap-2 border-t border-slate-100 pt-5">
             <button
               type="button"
-              className="inline-flex h-11 items-center justify-center rounded-xl border border-slate-200 bg-white px-5 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50"
+              className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
               onClick={onClose}
             >
               Hủy
             </button>
             <button
               type="submit"
-              className="inline-flex h-11 items-center justify-center rounded-xl bg-gradient-to-r from-indigo-500 to-purple-500 px-6 text-sm font-semibold text-white shadow-sm transition hover:from-indigo-600 hover:to-purple-600"
+              className="rounded-full bg-indigo-600 px-5 py-2 text-sm font-semibold text-white shadow-md shadow-indigo-500/30 hover:bg-indigo-500"
             >
               {editingSchool ? 'Cập nhật' : 'Tạo mới'}
             </button>

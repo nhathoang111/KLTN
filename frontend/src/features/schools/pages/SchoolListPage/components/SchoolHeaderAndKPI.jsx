@@ -24,9 +24,10 @@ const SchoolHeaderAndKPI = ({
         </div>
         <button
           type="button"
-          className="btn btn-primary"
+          className="inline-flex items-center gap-2 rounded-full bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-md shadow-indigo-500/30 hover:bg-indigo-500"
           onClick={onAddSchool}
         >
+          <span className="text-lg leading-none">＋</span>
           Thêm trường học
         </button>
       </div>

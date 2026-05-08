@@ -1,5 +1,24 @@
 import { useEffect, useState, useRef } from 'react';
 
+const API_BASE_NEW = 'https://provinces.open-api.vn/api/v2';
+
+const normalizeLocationItem = (item) => ({
+  code: item?.code || item?.codex || item?.id || '',
+  name: item?.name || '',
+});
+
+const parseLocationList = (items) =>
+  (Array.isArray(items) ? items : [])
+    .map(normalizeLocationItem)
+    .filter((item) => item.name);
+
+const normalizeSearchText = (text) =>
+  String(text || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
+
 // Hook quản lý dữ liệu địa chỉ Việt Nam và autocomplete cho form trường học
 const useVietnamLocations = (formData, setFormData) => {
   const [provinces, setProvinces] = useState([]);
@@ -19,58 +38,31 @@ const useVietnamLocations = (formData, setFormData) => {
   const wardSuggestionsRef = useRef(null);
   const [loadingLocations, setLoadingLocations] = useState(false);
 
+  const fetchFromEndpoints = async (paths = []) => {
+    for (const path of paths) {
+      try {
+        const response = await fetch(path);
+        if (!response.ok) continue;
+        const json = await response.json();
+        return json;
+      } catch (error) {
+        console.warn('Address endpoint fetch failed:', path, error);
+      }
+    }
+    return null;
+  };
+
   // Fetch dữ liệu địa chỉ Việt Nam từ API công khai
   const fetchVietnamLocations = async () => {
     setLoadingLocations(true);
 
     try {
-      // Sử dụng API công khai từ provinces.open-api.vn
-      const response = await fetch('https://provinces.open-api.vn/api/?depth=1');
-      if (response.ok) {
-        const data = await response.json();
-
-        if (Array.isArray(data) && data.length > 0) {
-          const provincesList = data
-            .filter((item) => item && item.name)
-            .map((item) => ({
-              code: item.code || item.codex || '',
-              name: item.name || '',
-            }))
-            .filter((item) => item.name);
-
-          if (provincesList.length > 0) {
-            setProvinces(provincesList);
-            setLoadingLocations(false);
-            return;
-          }
-        }
-      }
-
-      // Fallback: Thử GitHub API
-      const githubResponse = await fetch(
-        'https://raw.githubusercontent.com/kenzouno1/DiaGioiHanhChinhVN/master/data.json',
-      );
-      if (githubResponse.ok) {
-        const githubData = await githubResponse.json();
-        const dataArray = Array.isArray(githubData)
-          ? githubData
-          : githubData.data || [];
-
-        if (dataArray && dataArray.length > 0) {
-          const provincesList = dataArray
-            .filter((item) => item && item.name)
-            .map((item) => ({
-              code: item.code || item.id || '',
-              name: item.name || '',
-            }))
-            .filter((item) => item.name);
-
-          if (provincesList.length > 0) {
-            setProvinces(provincesList);
-            setLoadingLocations(false);
-            return;
-          }
-        }
+      // Chỉ dùng API v2 (dữ liệu hành chính mới sau sáp nhập).
+      const data = await fetchFromEndpoints([`${API_BASE_NEW}/?depth=1`]);
+      const provincesList = parseLocationList(data);
+      if (provincesList.length > 0) {
+        setProvinces(provincesList);
+        return;
       }
 
       setProvinces([]);
@@ -86,7 +78,7 @@ const useVietnamLocations = (formData, setFormData) => {
   const fetchDistrictsByProvince = async (provinceCodeOrName) => {
     if (!provinceCodeOrName) {
       setDistricts([]);
-      return;
+      return [];
     }
 
     try {
@@ -97,28 +89,32 @@ const useVietnamLocations = (formData, setFormData) => {
           provinceCode = foundProvince.code;
         } else {
           setDistricts([]);
-          return;
+          return [];
         }
       }
 
-      const apiUrl = `https://provinces.open-api.vn/api/p/${provinceCode}?depth=2`;
-      const response = await fetch(apiUrl);
+      const data = await fetchFromEndpoints([
+        `${API_BASE_NEW}/p/${provinceCode}?depth=3`,
+        `${API_BASE_NEW}/p/${provinceCode}?depth=2`,
+      ]);
+      const districtsList = parseLocationList(
+        data?.districts || data?.children || [],
+      );
+      if (districtsList.length > 0) {
+        setDistricts(districtsList);
+        const mergedWards = (data?.districts || data?.children || []).flatMap(
+          (district) => parseLocationList(district?.wards || district?.children || []),
+        );
+        setWards(mergedWards);
+        return districtsList;
+      }
 
-      if (response.ok) {
-        const data = await response.json();
-
-        if (data.districts && Array.isArray(data.districts)) {
-          const districtsList = data.districts
-            .filter((d) => d && d.name)
-            .map((district) => ({
-              code: district.code || district.codex || '',
-              name: district.name || '',
-            }))
-            .filter((d) => d.name);
-
-          setDistricts(districtsList);
-          return;
-        }
+      // Một số nguồn dữ liệu mới có thể trả trực tiếp phường/xã theo tỉnh (không còn cấp quận/huyện).
+      const provinceWards = parseLocationList(data?.wards || []);
+      if (provinceWards.length > 0) {
+        setDistricts([]);
+        setWards(provinceWards);
+        return [];
       }
 
       if (provinces.length > 0) {
@@ -127,30 +123,37 @@ const useVietnamLocations = (formData, setFormData) => {
         );
 
         if (foundProvince) {
-          const retryUrl = `https://provinces.open-api.vn/api/p/${foundProvince.code}?depth=2`;
-          const retryResponse = await fetch(retryUrl);
-          if (retryResponse.ok) {
-            const retryData = await retryResponse.json();
-            if (retryData.districts && Array.isArray(retryData.districts)) {
-              const districtsList = retryData.districts
-                .filter((d) => d && d.name)
-                .map((district) => ({
-                  code: district.code || district.codex || '',
-                  name: district.name || '',
-                }))
-                .filter((d) => d.name);
+          const retryData = await fetchFromEndpoints([
+            `${API_BASE_NEW}/p/${foundProvince.code}?depth=3`,
+            `${API_BASE_NEW}/p/${foundProvince.code}?depth=2`,
+          ]);
+          const retryDistricts = parseLocationList(
+            retryData?.districts || retryData?.children || [],
+          );
+          if (retryDistricts.length > 0) {
+            setDistricts(retryDistricts);
+            const mergedWards = (retryData?.districts || retryData?.children || []).flatMap(
+              (district) => parseLocationList(district?.wards || district?.children || []),
+            );
+            setWards(mergedWards);
+            return retryDistricts;
+          }
 
-              setDistricts(districtsList);
-              return;
-            }
+          const retryProvinceWards = parseLocationList(retryData?.wards || []);
+          if (retryProvinceWards.length > 0) {
+            setDistricts([]);
+            setWards(retryProvinceWards);
+            return [];
           }
         }
       }
 
       setDistricts([]);
+      return [];
     } catch (error) {
       console.error('Error fetching districts:', error);
       setDistricts([]);
+      return [];
     }
   };
 
@@ -158,7 +161,7 @@ const useVietnamLocations = (formData, setFormData) => {
   const fetchWardsByDistrict = async (districtCodeOrName) => {
     if (!districtCodeOrName) {
       setWards([]);
-      return;
+      return [];
     }
 
     try {
@@ -169,28 +172,19 @@ const useVietnamLocations = (formData, setFormData) => {
           districtCode = foundDistrict.code;
         } else {
           setWards([]);
-          return;
+          return [];
         }
       }
 
-      const apiUrl = `https://provinces.open-api.vn/api/d/${districtCode}?depth=2`;
-      const response = await fetch(apiUrl);
-
-      if (response.ok) {
-        const data = await response.json();
-
-        if (data.wards && Array.isArray(data.wards)) {
-          const wardsList = data.wards
-            .filter((w) => w && w.name)
-            .map((ward) => ({
-              code: ward.code || ward.codex || '',
-              name: ward.name || '',
-            }))
-            .filter((w) => w.name);
-
-          setWards(wardsList);
-          return;
-        }
+      const data = await fetchFromEndpoints([
+        `${API_BASE_NEW}/d/${districtCode}?depth=2`,
+      ]);
+      const wardsList = parseLocationList(
+        data?.wards || data?.children || [],
+      );
+      if (wardsList.length > 0) {
+        setWards(wardsList);
+        return wardsList;
       }
 
       if (districts.length > 0) {
@@ -199,62 +193,64 @@ const useVietnamLocations = (formData, setFormData) => {
         );
 
         if (foundDistrict) {
-          const retryUrl = `https://provinces.open-api.vn/api/d/${foundDistrict.code}?depth=2`;
-          const retryResponse = await fetch(retryUrl);
-          if (retryResponse.ok) {
-            const retryData = await retryResponse.json();
-            if (retryData.wards && Array.isArray(retryData.wards)) {
-              const wardsList = retryData.wards
-                .filter((w) => w && w.name)
-                .map((ward) => ({
-                  code: ward.code || ward.codex || '',
-                  name: ward.name || '',
-                }))
-                .filter((w) => w.name);
-
-              setWards(wardsList);
-              return;
-            }
+          const retryData = await fetchFromEndpoints([
+            `${API_BASE_NEW}/d/${foundDistrict.code}?depth=2`,
+          ]);
+          const retryWards = parseLocationList(
+            retryData?.wards || retryData?.children || [],
+          );
+          if (retryWards.length > 0) {
+            setWards(retryWards);
+            return retryWards;
           }
         }
       }
 
       setWards([]);
+      return [];
     } catch (error) {
       console.error('Error fetching wards:', error);
       setWards([]);
+      return [];
     }
   };
 
-  const handleProvinceChange = (e) => {
-    const value = e.target.value;
-    setFormData({ ...formData, province: value, district: '', ward: '' });
+  const handleProvinceChange = async (e) => {
+    const value = e.target.value || '';
+    const normalizedValue = normalizeSearchText(value);
+    const selectedProvince = (provinces || []).find(
+      (province) =>
+        String(province.code) === String(normalizedValue) ||
+        normalizeSearchText(province.name) === normalizedValue,
+    );
+
+    setFormData({
+      ...formData,
+      province: selectedProvince?.name || value,
+      district: '',
+      ward: '',
+    });
     setDistricts([]);
     setWards([]);
-
-    if (!provinces || provinces.length === 0) {
-      setProvinceSuggestions([]);
-      setShowProvinceSuggestions(false);
-      return;
-    }
-
     if (value.length > 0) {
-      const filtered = provinces
-        .filter(
-          (province) =>
-            province &&
-            province.name &&
-            province.name.toLowerCase().includes(value.toLowerCase()),
+      const filtered = (provinces || [])
+        .filter((province) =>
+          normalizeSearchText(province?.name).includes(normalizedValue),
         )
-        .slice(0, 15);
       setProvinceSuggestions(filtered);
       setShowProvinceSuggestions(filtered.length > 0);
     } else {
-      const allProvinces = provinces
-        .filter((province) => province && province.name)
-        .slice(0, 15);
+      const allProvinces = (provinces || []).slice(0, 15);
       setProvinceSuggestions(allProvinces);
       setShowProvinceSuggestions(allProvinces.length > 0);
+    }
+    setDistrictSuggestions([]);
+    setShowDistrictSuggestions(false);
+    setWardSuggestions([]);
+    setShowWardSuggestions(false);
+
+    if (selectedProvince?.code) {
+      await fetchDistrictsByProvince(selectedProvince.code);
     }
   };
 
@@ -281,36 +277,25 @@ const useVietnamLocations = (formData, setFormData) => {
     }
   };
 
-  const handleDistrictChange = (e) => {
+  const handleDistrictChange = async (e) => {
     const value = e.target.value;
-    setFormData({ ...formData, district: value, ward: '' });
+    const selectedDistrict = (districts || []).find(
+      (district) => String(district.code) === String(value),
+    );
+
+    setFormData({
+      ...formData,
+      district: selectedDistrict?.name || '',
+      ward: '',
+    });
     setWards([]);
+    setDistrictSuggestions([]);
+    setShowDistrictSuggestions(false);
     setWardSuggestions([]);
     setShowWardSuggestions(false);
 
-    if (!districts || districts.length === 0) {
-      setDistrictSuggestions([]);
-      setShowDistrictSuggestions(false);
-      return;
-    }
-
-    if (value.length > 0) {
-      const filtered = districts
-        .filter(
-          (district) =>
-            district &&
-            district.name &&
-            district.name.toLowerCase().includes(value.toLowerCase()),
-        )
-        .slice(0, 15);
-      setDistrictSuggestions(filtered);
-      setShowDistrictSuggestions(filtered.length > 0);
-    } else {
-      const allDistricts = districts
-        .filter((district) => district && district.name)
-        .slice(0, 15);
-      setDistrictSuggestions(allDistricts);
-      setShowDistrictSuggestions(allDistricts.length > 0);
+    if (selectedDistrict?.code) {
+      await fetchWardsByDistrict(selectedDistrict.code);
     }
   };
 
@@ -335,30 +320,23 @@ const useVietnamLocations = (formData, setFormData) => {
   };
 
   const handleWardChange = (e) => {
-    const value = e.target.value;
-    setFormData({ ...formData, ward: value });
-
-    if (!wards || wards.length === 0) {
-      setWardSuggestions([]);
-      setShowWardSuggestions(false);
-      return;
-    }
-
-    if (value.length > 0) {
-      const filtered = wards
-        .filter(
-          (ward) =>
-            ward &&
-            ward.name &&
-            ward.name.toLowerCase().includes(value.toLowerCase()),
+    const value = e.target.value || '';
+    const normalizedValue = normalizeSearchText(value);
+    const selectedWard = (wards || []).find(
+      (ward) =>
+        String(ward.code) === String(normalizedValue) ||
+        normalizeSearchText(ward.name) === normalizedValue,
+    );
+    setFormData({ ...formData, ward: selectedWard?.name || value });
+    if (normalizedValue.length > 0) {
+      const filtered = (wards || [])
+        .filter((ward) =>
+          normalizeSearchText(ward?.name).includes(normalizedValue),
         )
-        .slice(0, 15);
       setWardSuggestions(filtered);
       setShowWardSuggestions(filtered.length > 0);
     } else {
-      const allWards = wards
-        .filter((ward) => ward && ward.name)
-        .slice(0, 15);
+      const allWards = (wards || []).slice(0, 15);
       setWardSuggestions(allWards);
       setShowWardSuggestions(allWards.length > 0);
     }
@@ -368,6 +346,45 @@ const useVietnamLocations = (formData, setFormData) => {
     setFormData({ ...formData, ward: ward.name });
     setWardSuggestions([]);
     setShowWardSuggestions(false);
+  };
+
+  const handleProvinceFocus = () => {
+    const allProvinces = (provinces || []).slice(0, 15);
+    setProvinceSuggestions(allProvinces);
+    setShowProvinceSuggestions(allProvinces.length > 0);
+  };
+
+  const handleDistrictFocus = async () => {
+    if (!formData.province) {
+      setDistrictSuggestions([]);
+      setShowDistrictSuggestions(false);
+      return;
+    }
+
+    let sourceDistricts = districts || [];
+    if (sourceDistricts.length === 0 && formData.province) {
+      sourceDistricts = await fetchDistrictsByProvince(formData.province);
+    }
+    const allDistricts = sourceDistricts.slice(0, 15);
+    setDistrictSuggestions(allDistricts);
+    setShowDistrictSuggestions(allDistricts.length > 0);
+  };
+
+  const handleWardFocus = async () => {
+    if (!formData.province) {
+      setWardSuggestions([]);
+      setShowWardSuggestions(false);
+      return;
+    }
+
+    let sourceWards = wards || [];
+    if (sourceWards.length === 0 && formData.province) {
+      await fetchDistrictsByProvince(formData.province);
+      sourceWards = wards || [];
+    }
+    const allWards = sourceWards.slice(0, 15);
+    setWardSuggestions(allWards);
+    setShowWardSuggestions(allWards.length > 0);
   };
 
   // Đóng suggestions khi click bên ngoài
@@ -441,6 +458,9 @@ const useVietnamLocations = (formData, setFormData) => {
     handleSelectDistrict,
     handleWardChange,
     handleSelectWard,
+    handleProvinceFocus,
+    handleDistrictFocus,
+    handleWardFocus,
   };
 };
 

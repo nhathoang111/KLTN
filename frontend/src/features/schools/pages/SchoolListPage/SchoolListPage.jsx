@@ -69,6 +69,9 @@ const SchoolListPage = () => {
     handleSelectDistrict,
     handleWardChange,
     handleSelectWard,
+    handleProvinceFocus,
+    handleDistrictFocus,
+    handleWardFocus,
   } = useVietnamLocations(formData, setFormData);
 
   useEffect(() => {
@@ -594,6 +597,9 @@ const SchoolListPage = () => {
           handleSelectDistrict,
           handleWardChange,
           handleSelectWard,
+          handleProvinceFocus,
+          handleDistrictFocus,
+          handleWardFocus,
         }}
         handleLogoChange={handleLogoChange}
       />
