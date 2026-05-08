@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 
 const AnnouncementFormModal = ({
   showModal,
@@ -16,6 +16,14 @@ const AnnouncementFormModal = ({
   onSchoolChange,
 }) => {
   if (!showModal) return null;
+
+  const [scope, setScope] = useState('SCHOOL'); // 'SCHOOL' | 'CLASS'
+
+  useEffect(() => {
+    // Sync scope from current formData when opening/editing
+    setScope(formData.classId ? 'CLASS' : 'SCHOOL');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editingAnnouncement, showModal]);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4" onClick={handleCloseModal}>
@@ -74,14 +82,48 @@ const AnnouncementFormModal = ({
             )}
           </div>
           <div>
-            <label className="mb-1 block text-sm font-semibold text-slate-700">Lớp</label>
+            <label className="mb-1 block text-sm font-semibold text-slate-700">Thông báo gửi cho:</label>
+            <div className="mb-2 flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setScope('SCHOOL');
+                  setFormData({ ...formData, classId: '' });
+                }}
+                className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${
+                  scope === 'SCHOOL'
+                    ? 'border-indigo-200 bg-indigo-50 text-indigo-700'
+                    : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                }`}
+              >
+                Toàn trường
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setScope('CLASS');
+                }}
+                className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${
+                  scope === 'CLASS'
+                    ? 'border-indigo-200 bg-indigo-50 text-indigo-700'
+                    : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                }`}
+              >
+                Theo lớp
+              </button>
+              <span className="text-xs text-slate-500">
+                {scope === 'CLASS'
+                  ? 'Chọn một lớp bên dưới để gửi theo lớp.'
+                  : 'Gửi cho toàn trường (không theo lớp).'}
+              </span>
+            </div>
             <select
               value={formData.classId}
               onChange={(e) => setFormData({ ...formData, classId: e.target.value })}
-              disabled={!formData.schoolId}
+              disabled={!formData.schoolId || scope !== 'CLASS'}
               className="block h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 disabled:cursor-not-allowed disabled:bg-slate-100"
             >
-              <option value="">Chọn lớp (tùy chọn)</option>
+              <option value="">{scope === 'CLASS' ? 'Chọn lớp' : 'Toàn trường'}</option>
               {classes
                 .filter((classItem) => formData.schoolId && classItem.school?.id === parseInt(formData.schoolId))
                 .map((classItem) => (
