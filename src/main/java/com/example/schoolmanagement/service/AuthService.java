@@ -3,6 +3,7 @@ package com.example.schoolmanagement.service;
 import com.example.schoolmanagement.entity.User;
 import com.example.schoolmanagement.exception.BadRequestException;
 import com.example.schoolmanagement.exception.ResourceNotFoundException;
+import com.example.schoolmanagement.security.JwtService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -18,6 +19,9 @@ public class AuthService {
 
     @Autowired
     private PasswordEncoder passwordEncoder;
+
+    @Autowired
+    private JwtService jwtService;
 
     /**
      * Validates credentials, checks school lock, returns response payload for login.
@@ -105,6 +109,11 @@ public class AuthService {
             ));
         }
         response.put("user", userInfo);
+        response.put("token", jwtService.generateToken(
+                user.getId(),
+                roleType,
+                user.getSchool() != null ? user.getSchool().getId() : null
+        ));
         return response;
     }
 
