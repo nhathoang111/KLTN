@@ -81,7 +81,6 @@ const StudentProfilePage = () => {
   const [classInfo, setClassInfo] = useState(null);
   const [examScores, setExamScores] = useState([]);
   const [todaySchedules, setTodaySchedules] = useState([]);
-  const [semesterUi, setSemesterUi] = useState('2');
   const [parents, setParents] = useState([]);
   const [attendanceBySection, setAttendanceBySection] = useState({});
 
@@ -248,13 +247,9 @@ const StudentProfilePage = () => {
   const schoolName = displayUser?.school?.name || user?.school?.name || 'Trường';
 
   const schoolYearFromBe = displayUser?.class?.schoolYear || classInfo?.schoolYear;
-  const now = new Date();
-  const syStart = now.getMonth() >= 7 ? now.getFullYear() : now.getFullYear() - 1;
-  const schoolYearLine = schoolYearFromBe || `${syStart} - ${syStart + 1}`;
-  const schoolYearIsMock = !schoolYearFromBe;
+  const schoolYearLine = schoolYearFromBe || 'Chưa cập nhật';
   const homeroomTeacherName = classInfo?.homeroomTeacher?.fullName ?? null;
   const rollnoDisplay = displayUser?.rollno != null ? String(displayUser.rollno) : '—';
-  const semesterLabel = semesterUi === '1' ? 'Học kỳ 1' : 'Học kỳ 2';
   const isStudyingActive =
     !displayUser?.status || String(displayUser.status).toUpperCase() === 'ACTIVE';
 
@@ -321,34 +316,9 @@ const StudentProfilePage = () => {
           </div>
           <div className="sd2-hero-text">
             <h1 className="sd2-hero-name">{fullName}</h1>
-            <p
-              className="sd2-hero-sub--single sd2-hero-sub--with-sem"
-              title={
-                schoolYearIsMock
-                  ? 'Năm học: BE không trả schoolYear trên lớp — suy theo năm học hiện tại'
-                  : undefined
-              }
-            >
+            <p className="sd2-hero-sub--single">
               <span className="sd2-hero-sub-text">
                 {className !== '—' ? `Lớp ${className} - ${schoolYearLine}` : 'Chưa xếp lớp'}
-              </span>
-              <span className="sd2-hero-sub-sep" aria-hidden>
-                ·
-              </span>
-              <span className="sd2-hero-sem-inline" title="Học kỳ chỉ UI — chưa lọc dữ liệu theo BE">
-                <label htmlFor="spp-semester" className="sd2-hero-sem-label">
-                  Học kỳ
-                </label>
-                <select
-                  id="spp-semester"
-                  className="sd2-hero-sem-select"
-                  value={semesterUi}
-                  onChange={(e) => setSemesterUi(e.target.value)}
-                  aria-label="Học kỳ (chỉ giao diện)"
-                >
-                  <option value="1">Học kỳ 1</option>
-                  <option value="2">Học kỳ 2</option>
-                </select>
               </span>
             </p>
             <span className="sd2-status-badge">
@@ -434,14 +404,6 @@ const StudentProfilePage = () => {
               <Briefcase className="sd2-pi-row-ic sd2-pi-row-ic--orange" size={18} strokeWidth={2} aria-hidden />
               <span className="sd2-pi-row-label">Trường</span>
               <span className="sd2-pi-row-val">{schoolName}</span>
-            </div>
-            <div className="sd2-pi-row" title="Học kỳ chỉ UI">
-              <CheckSquare className="sd2-pi-row-ic" size={18} strokeWidth={2} aria-hidden />
-              <span className="sd2-pi-row-label">Học kỳ</span>
-              <span className="sd2-pi-row-val">
-                {semesterLabel}
-                <span className="sd2-pi-mock-mark"> (UI)</span>
-              </span>
             </div>
             <div className="sd2-pi-row">
               <IdCard className="sd2-pi-row-ic sd2-pi-row-ic--orange" size={18} strokeWidth={2} aria-hidden />

@@ -1605,7 +1605,7 @@ const ExamScoreManagement = () => {
 
   return (
     <div className="min-h-screen bg-slate-100 px-4 py-6">
-      <div className={`mx-auto space-y-4 ${isAdmin || !isStudent ? 'max-w-[96rem]' : 'max-w-6xl'}`}>
+      <div className={`mx-auto space-y-4 ${isAdmin || !isStudent ? 'max-w-384' : 'max-w-6xl'}`}>
       <div className="rounded-2xl bg-white/95 px-4 py-3 shadow-lg shadow-slate-900/5 flex flex-wrap items-center justify-between gap-3">
         {!isAdmin && !isParent && (
           <h2 className="text-2xl font-bold text-slate-800">
@@ -2031,7 +2031,9 @@ const ExamScoreManagement = () => {
 
       {/* Modal nhập điểm theo lớp */}
       {showClassModal && !isStudent && !isAdmin && (
-        <div className="common-modal-overlay" onClick={() => {
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4"
+          onClick={() => {
           setShowClassModal(false);
           setSelectedClassForScore('');
           setSelectedSubjectForScore('');
@@ -2039,11 +2041,22 @@ const ExamScoreManagement = () => {
           setClassScoreData({});
           setIsEditMode(false);
           setTeacherModalSemester('1');
-        }}>
-          <div className="common-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '90%', width: '1200px', maxHeight: '90vh', overflow: 'auto' }}>
-            <div className="common-modal-header">
-              <h3>{isEditMode ? 'Sửa điểm theo lớp' : 'Nhập điểm theo lớp'}</h3>
-              <button className="common-close-btn" onClick={() => {
+        }}
+          role="dialog"
+          aria-modal="true"
+          aria-label={isEditMode ? 'Sửa điểm theo lớp' : 'Nhập điểm theo lớp'}
+        >
+          <div
+            className="w-full max-w-[1200px] overflow-hidden rounded-3xl bg-white shadow-2xl shadow-slate-900/20"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="relative bg-white px-6 py-4 border-b border-gray-300">
+              <div className="text-center">
+                <h3 className="text-2xl font-bold leading-tight text-slate-900">{isEditMode ? 'Sửa điểm theo lớp' : 'Nhập điểm theo lớp'}</h3>
+              </div>
+              <button
+                className="absolute right-4 top-4 inline-flex h-9 w-9 items-center justify-center rounded-full text-slate-600 hover:bg-slate-100"
+                onClick={() => {
                 setShowClassModal(false);
                 setSelectedClassForScore('');
                 setSelectedSubjectForScore('');
@@ -2051,9 +2064,14 @@ const ExamScoreManagement = () => {
                 setClassScoreData({});
                 setIsEditMode(false);
                 setTeacherModalSemester('1');
-              }}>✕</button>
+              }}
+                type="button"
+                aria-label="Đóng"
+              >
+                ✕
+              </button>
             </div>
-            <form onSubmit={handleClassScoreSubmit} className="common-modal-form">
+            <form onSubmit={handleClassScoreSubmit} className="max-h-[75vh] overflow-auto px-6 pt-6 pb-5">
               <div style={{ display: 'flex', gap: '20px', marginBottom: '20px', flexWrap: 'wrap' }}>
                 <div className="common-form-group" style={{ flex: 1, minWidth: '180px' }}>
                   <label>Lớp *</label>
@@ -2344,10 +2362,10 @@ const ExamScoreManagement = () => {
                 </div>
               )}
 
-              <div className="common-modal-actions" style={{ marginTop: '20px' }}>
+              <div className="flex gap-4 justify-end mt-5 pt-4 border-t border-slate-200">
                 <button
                   type="button"
-                  className="btn btn-secondary"
+                  className="inline-flex items-center rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
                   onClick={() => {
                     setShowClassModal(false);
                     setSelectedClassForScore('');
@@ -2362,7 +2380,7 @@ const ExamScoreManagement = () => {
                 </button>
                 <button
                   type="submit"
-                  className="btn btn-primary"
+                  className="inline-flex items-center rounded-full bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-md shadow-indigo-500/30 hover:bg-indigo-500 disabled:opacity-60 disabled:cursor-not-allowed"
                   disabled={(() => {
                     // Nếu không có lớp hoặc môn học được chọn → disable
                     if (!selectedClassForScore || !selectedSubjectForScore) return true;
@@ -2398,34 +2416,40 @@ const ExamScoreManagement = () => {
       {/* Modal AI phân tích theo học sinh (Teacher) */}
       {aiStudentModal && (
         <div
-          className="common-modal-overlay"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4"
           onClick={() => {
             if (aiStudentLoading) return;
             setAiStudentModal(null);
             setAiStudentError('');
             setAiStudentResult(null);
           }}
+          role="dialog"
+          aria-modal="true"
+          aria-label="AI phân tích học sinh"
         >
           <div
-            className="common-modal"
+            className="w-full max-w-[720px] overflow-hidden rounded-3xl bg-white shadow-2xl shadow-slate-900/20"
             onClick={(e) => e.stopPropagation()}
-            style={{ maxWidth: '720px', width: '92%' }}
           >
-            <div className="common-modal-header">
-              <h3>AI phân tích học sinh</h3>
+            <div className="relative bg-white px-6 py-4 border-b border-gray-300">
+              <div className="text-center">
+                <h3 className="text-2xl font-bold leading-tight text-slate-900">AI phân tích học sinh</h3>
+              </div>
               <button
-                className="common-close-btn"
+                className="absolute right-4 top-4 inline-flex h-9 w-9 items-center justify-center rounded-full text-slate-600 hover:bg-slate-100"
                 onClick={() => {
                   if (aiStudentLoading) return;
                   setAiStudentModal(null);
                   setAiStudentError('');
                   setAiStudentResult(null);
                 }}
+                type="button"
+                aria-label="Đóng"
               >
                 ✕
               </button>
             </div>
-            <div style={{ padding: '1rem' }}>
+            <div className="max-h-[75vh] overflow-auto px-6 pt-6 pb-5">
               <div style={{ marginBottom: '0.75rem', fontSize: '0.95rem' }}>
                 <strong>{aiStudentModal.fullName || `Học sinh #${aiStudentModal.studentId}`}</strong>
                 {aiStudentModal.email ? (

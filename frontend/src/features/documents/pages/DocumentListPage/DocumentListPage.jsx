@@ -172,7 +172,7 @@ const DocumentListPage = () => {
       <div className="rounded-2xl bg-white/95 px-4 py-3 shadow-lg shadow-slate-900/5 flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-bold text-slate-800">Document Management</h1>
         <button
-          className="btn btn-primary"
+          className="inline-flex items-center rounded-full bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-md shadow-indigo-500/30 hover:bg-indigo-500"
           onClick={() => setShowModal(true)}
         >
           Add Document
@@ -211,7 +211,7 @@ const DocumentListPage = () => {
                 <td className="px-4 py-3">
                   <div className="flex items-center justify-center gap-2">
                     <button
-                      className="rounded-full bg-sky-100 px-3 py-1.5 text-xs font-semibold text-sky-700 hover:bg-sky-200"
+                      className="flex h-8 w-8 items-center justify-center rounded-full bg-sky-100 text-sky-700 hover:bg-sky-200 transition-colors"
                       onClick={() => handleEdit(document)}
                       aria-label="Sửa tài liệu"
                       title="Sửa"
@@ -219,7 +219,7 @@ const DocumentListPage = () => {
                       <Pencil size={14} />
                     </button>
                     <button
-                      className="rounded-full bg-rose-100 px-3 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-200"
+                      className="flex h-8 w-8 items-center justify-center rounded-full bg-rose-100 text-rose-600 hover:bg-rose-200 transition-colors"
                       onClick={() => handleDelete(document.id)}
                       aria-label="Xóa tài liệu"
                       title="Xóa"
@@ -237,13 +237,31 @@ const DocumentListPage = () => {
       </div>
 
       {showModal && (
-        <div className="common-modal-overlay">
-          <div className="common-modal">
-            <div className="common-modal-header">
-              <h2>{editingDocument ? 'Edit Document' : 'Add Document'}</h2>
-              <button className="common-close-btn" onClick={handleCloseModal}>×</button>
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4"
+          onClick={handleCloseModal}
+          role="dialog"
+          aria-modal="true"
+          aria-label={editingDocument ? 'Edit Document' : 'Add Document'}
+        >
+          <div
+            className="w-full max-w-4xl overflow-hidden rounded-3xl bg-white shadow-2xl shadow-slate-900/20"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="relative bg-white px-6 py-4 border-b border-gray-300">
+              <div className="text-center">
+                <h2 className="text-2xl font-bold leading-tight text-slate-900">{editingDocument ? 'Edit Document' : 'Add Document'}</h2>
+              </div>
+              <button
+                className="absolute right-4 top-4 inline-flex h-9 w-9 items-center justify-center rounded-full text-slate-600 hover:bg-slate-100"
+                onClick={handleCloseModal}
+                type="button"
+                aria-label="Đóng"
+              >
+                ✕
+              </button>
             </div>
-            <form onSubmit={handleSubmit} className="common-modal-form modal-form">
+            <form onSubmit={handleSubmit} className="max-h-[75vh] overflow-auto px-6 pt-6 pb-5 modal-form">
               <div className="common-form-group form-group">
                 <label>Title *</label>
                 <input
@@ -352,10 +370,14 @@ const DocumentListPage = () => {
                 </select>
               </div>
               <div className="common-modal-actions modal-actions">
-                <button type="button" className="btn btn-secondary" onClick={handleCloseModal}>
+                <button
+                  type="button"
+                  className="inline-flex items-center rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                  onClick={handleCloseModal}
+                >
                   Cancel
                 </button>
-                <button type="submit" className="btn btn-primary">
+                <button type="submit" className="inline-flex items-center rounded-full bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-md shadow-indigo-500/30 hover:bg-indigo-500">
                   {editingDocument ? 'Update' : 'Create'}
                 </button>
               </div>

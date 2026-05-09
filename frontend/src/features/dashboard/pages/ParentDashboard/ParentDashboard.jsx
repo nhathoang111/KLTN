@@ -161,7 +161,6 @@ const ParentDashboard = () => {
   const [aiLoading, setAiLoading] = useState(false);
   const [aiAnalysis, setAiAnalysis] = useState(null);
   const [aiError, setAiError] = useState('');
-  const [semesterUi, setSemesterUi] = useState('2');
 
   const schoolId = user?.school?.id;
 
@@ -518,8 +517,6 @@ const ParentDashboard = () => {
               <p className="sd2-hero-sub">
                 Lớp {className}
                 <span className="sd2-dot">•</span>
-                Học kỳ {semesterUi}
-                <span className="sd2-dot">•</span>
                 Năm học {academicYearLabel}
               </p>
               <div className="sd2-hero-tags">
@@ -607,7 +604,7 @@ const ParentDashboard = () => {
 
         {/* Nút hành động nhanh (CTA) */}
         <div className="pd-cta-bar">
-          <button className="pd-cta-btn pd-cta-btn--primary" onClick={() => alert('Tính năng liên hệ giáo viên sắp ra mắt.')}>
+          <button className="pd-cta-btn pd-cta-btn--primary" onClick={() => navigate('/announcements')}>
             📞 Liên hệ giáo viên
           </button>
           <button className="pd-cta-btn" onClick={() => navigate('/exam-scores')}>

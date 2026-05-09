@@ -157,7 +157,6 @@ const StudentDashboard = () => {
   const [aiLoading, setAiLoading] = useState(false);
   const [aiAnalysis, setAiAnalysis] = useState(null);
   const [aiError, setAiError] = useState('');
-  const [semesterUi, setSemesterUi] = useState('2'); // chỉ UI, chưa có BE lọc theo học kỳ
   const [attendanceBySection, setAttendanceBySection] = useState({});
 
   const studentId = user?.id;
@@ -482,14 +481,14 @@ const StudentDashboard = () => {
             <Calendar size={16} strokeWidth={2} aria-hidden />
             {headerDate}
           </time>
-          <button type="button" className="sd2-icon-btn" aria-label="Thông báo" title="Thông báo (chưa có API đếm)">
+          <button type="button" className="sd2-icon-btn" aria-label="Thông báo">
             <Bell size={20} strokeWidth={2} />
             {announcements.length > 0 ? <span className="sd2-badge">{Math.min(announcements.length, 9)}</span> : null}
           </button>
         </div>
       </header>
 
-      {/* Hồ sơ — dữ liệu thật từ BE, học kỳ là bộ lọc UI */}
+      {/* Hồ sơ — dữ liệu từ BE */}
       <section className="sd2-hero" aria-label="Hồ sơ học sinh">
         <div className="sd2-hero-inner">
           <div className="sd2-avatar" aria-hidden>
@@ -503,10 +502,6 @@ const StudentDashboard = () => {
             <h1 className="sd2-hero-name">{fullName}</h1>
             <p className="sd2-hero-sub">
               {className !== '—' ? `Lớp ${className}` : 'Chưa xếp lớp'}
-              <span className="sd2-dot">•</span>
-              <span className="sd2-mock-tag" title="Chưa có API học kỳ/năm học — hiển thị mẫu">
-                Học kỳ {semesterUi}
-              </span>
               <span className="sd2-dot">•</span>
               <span>Năm học {academicYearLabel}</span>
             </p>
@@ -599,7 +594,6 @@ const StudentDashboard = () => {
                     type="button"
                     className="sd2-icon-btn sd2-icon-btn--sm"
                     aria-label="Tuần trước — mở thời khóa biểu"
-                    title="Chưa có API tuần; mở trang Thời khóa biểu"
                     onClick={() => navigate('/schedules')}
                   >
                     <ChevronLeft size={18} />
@@ -608,7 +602,6 @@ const StudentDashboard = () => {
                     type="button"
                     className="sd2-icon-btn sd2-icon-btn--sm"
                     aria-label="Tuần sau — mở thời khóa biểu"
-                    title="Chưa có API tuần; mở trang Thời khóa biểu"
                     onClick={() => navigate('/schedules')}
                   >
                     <ChevronRight size={18} />
@@ -710,7 +703,6 @@ const StudentDashboard = () => {
                 type="button"
                 className="sd2-icon-btn sd2-icon-btn--sm"
                 aria-label="Tuần trước — mở thời khóa biểu"
-                title="Chưa có API tuần; mở trang Thời khóa biểu"
                 onClick={() => navigate('/schedules')}
               >
                 <ChevronLeft size={18} />
@@ -719,7 +711,6 @@ const StudentDashboard = () => {
                 type="button"
                 className="sd2-icon-btn sd2-icon-btn--sm"
                 aria-label="Tuần sau — mở thời khóa biểu"
-                title="Chưa có API tuần; mở trang Thời khóa biểu"
                 onClick={() => navigate('/schedules')}
               >
                 <ChevronRight size={18} />
@@ -837,7 +828,7 @@ const StudentDashboard = () => {
                       <div className="sd2-announce-main">
                         <div className="sd2-announce-top">
                           <span className="sd2-announce-name">{author}</span>
-                          <span className="sd2-dot-live" title="Chưa đọc — chưa có API trạng thái đọc" />
+                          <span className="sd2-dot-live" />
                         </div>
                         <span className="sd2-announce-subj">
                           {a.classEntity?.name || a.class?.name || 'Thông báo chung'}

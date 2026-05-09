@@ -313,6 +313,16 @@ const AssignmentListPage = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
+      const effectiveSchoolId =
+        formData.schoolId ||
+        user?.school?.id?.toString() ||
+        editingAssignment?.school?.id?.toString() ||
+        '';
+      const effectiveCreatedById =
+        formData.createdById ||
+        user?.id?.toString() ||
+        editingAssignment?.createdBy?.id?.toString() ||
+        '';
       const parsedMaxScore = parseFloat(formData.maxScore);
       if (Number.isNaN(parsedMaxScore) || parsedMaxScore < 0 || parsedMaxScore > 10) {
         alert('Điểm tối đa phải nằm trong khoảng từ 0 đến 10');
@@ -333,8 +343,8 @@ const AssignmentListPage = () => {
         formDataToSend.append('maxScore', parsedMaxScore.toString());
         formDataToSend.append('dueDate', formData.dueDate || '');
         formDataToSend.append('status', formData.status);
-        if (formData.schoolId) {
-          formDataToSend.append('schoolId', formData.schoolId);
+        if (effectiveSchoolId) {
+          formDataToSend.append('schoolId', effectiveSchoolId);
         }
         if (formData.classId) {
           formDataToSend.append('classId', formData.classId);
@@ -342,7 +352,9 @@ const AssignmentListPage = () => {
         if (formData.subjectId) {
           formDataToSend.append('subjectId', formData.subjectId);
         }
-        formDataToSend.append('createdById', formData.createdById);
+        if (effectiveCreatedById) {
+          formDataToSend.append('createdById', effectiveCreatedById);
+        }
 
         // For FormData, axios will automatically set Content-Type with boundary
         await api.post('/assignments/upload', formDataToSend);
@@ -351,10 +363,10 @@ const AssignmentListPage = () => {
         const submitData = {
           ...formData,
           maxScore: parsedMaxScore,
-          schoolId: parseInt(formData.schoolId),
+          schoolId: parseInt(effectiveSchoolId),
           classId: parseInt(formData.classId),
           subjectId: parseInt(formData.subjectId),
-          createdById: parseInt(formData.createdById)
+          createdById: parseInt(effectiveCreatedById)
         };
 
         if (editingAssignment) {
@@ -615,13 +627,7 @@ const AssignmentListPage = () => {
   };
 
   const isStudent = user?.role?.name?.toUpperCase() === 'STUDENT';
-  const isTeacherOrAdmin = user?.role?.name?.toUpperCase() === 'TEACHER' || user?.role?.name?.toUpperCase() === 'ADMIN';
   const teachingActionClasses = useMemo(() => classes.filter(isTeachingActiveClass), [classes]);
-
-  const getSchoolName = (schoolId) => {
-    const school = schools.find(s => s.id === schoolId);
-    return school ? school.name : 'N/A';
-  };
 
   const getClassName = (classId) => {
     const classItem = classes.find(c => c.id === classId);
@@ -631,19 +637,6 @@ const AssignmentListPage = () => {
   const getSubjectName = (subjectId) => {
     const subject = subjects.find(s => s.id === subjectId);
     return subject ? subject.name : 'N/A';
-  };
-
-  const getTeacherName = (teacherId, assignment = null) => {
-    // First try to get from assignment.createdBy if available
-    if (assignment?.createdBy?.fullName) {
-      return assignment.createdBy.fullName;
-    }
-    // Fallback to teachers array
-    if (teacherId) {
-      const teacher = teachers.find(t => t.id === teacherId);
-      return teacher ? teacher.fullName : 'N/A';
-    }
-    return 'N/A';
   };
 
   const formatDate = (dateString) => {
@@ -656,6 +649,14 @@ const AssignmentListPage = () => {
     now.setSeconds(0, 0);
     const timezoneOffsetMs = now.getTimezoneOffset() * 60 * 1000;
     return new Date(now.getTime() - timezoneOffsetMs).toISOString().slice(0, 16);
+  };
+
+  const getStatusBadgeClass = (status) => {
+    const normalized = String(status || '').toUpperCase();
+    if (normalized === 'ACTIVE') return 'status-badge active';
+    if (normalized === 'INACTIVE') return 'status-badge inactive';
+    if (normalized === 'CLOSED') return 'status-badge closed';
+    return 'status-badge';
   };
 
   if (loading) {
@@ -678,7 +679,7 @@ const AssignmentListPage = () => {
         <h1 className="text-2xl font-bold text-slate-800">{isStudent ? 'Bài tập' : 'Quản lý bài tập'}</h1>
         {!isStudent && (
           <button
-            className="btn btn-primary"
+            className="inline-flex items-center rounded-full bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-md shadow-indigo-500/30 hover:bg-indigo-500"
             onClick={() => {
               const userRole = user?.role?.name?.toUpperCase();
               const defaultSchoolId = ((userRole === 'ADMIN' || userRole === 'TEACHER') && user?.school?.id)
@@ -712,8 +713,9 @@ const AssignmentListPage = () => {
               <th className="px-4 py-3 text-left">Tiêu đề</th>
               <th className="px-4 py-3 text-left">Lớp</th>
               <th className="px-4 py-3 text-left">Môn học</th>
+              <th className="px-4 py-3 text-left">File bài tập</th>
               <th className="px-4 py-3 text-left">Thời gian nộp bài</th>
-              <th className="px-4 py-3 text-left">Điểm tối đa</th>
+              {!isStudent && <th className="px-4 py-3 text-left">Điểm tối đa</th>}
               <th className="px-4 py-3 text-left">Trạng thái</th>
               <th className="px-4 py-3 text-center">Thao tác</th>
             </tr>
@@ -724,14 +726,23 @@ const AssignmentListPage = () => {
                 <td className="px-4 py-3">{assignment.title}</td>
                 <td className="px-4 py-3">{getClassName(assignment.classEntity?.id)}</td>
                 <td className="px-4 py-3">{getSubjectName(assignment.subject?.id)}</td>
-                <td className="px-4 py-3">{assignment.dueDate ? new Date(assignment.dueDate).toLocaleString('vi-VN') : 'N/A'}</td>
-                <td className="px-4 py-3">{assignment.maxScore}</td>
                 <td className="px-4 py-3">
-                  <span className={`inline-flex min-w-[84px] justify-center rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wide ${
-                    assignment.status?.toUpperCase() === 'ACTIVE'
-                      ? 'bg-sky-500 text-white'
-                      : 'bg-slate-300 text-slate-700'
-                  }`}>
+                  {assignment.attachmentName ? (
+                    <button
+                      type="button"
+                      className="inline-flex items-center rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                      onClick={() => handleDownloadFile(assignment.id, assignment.attachmentName)}
+                    >
+                      Tải file
+                    </button>
+                  ) : (
+                    <span className="assignment-empty-text">Không có</span>
+                  )}
+                </td>
+                <td className="px-4 py-3">{assignment.dueDate ? new Date(assignment.dueDate).toLocaleString('vi-VN') : 'N/A'}</td>
+                {!isStudent && <td className="px-4 py-3">{assignment.maxScore}</td>}
+                <td className="px-4 py-3">
+                  <span className={getStatusBadgeClass(assignment.status)}>
                     {assignment.status}
                   </span>
                 </td>
@@ -741,19 +752,11 @@ const AssignmentListPage = () => {
                       assignment.status === 'ACTIVE' ? (
                         studentSubmissions[assignment.id] ? (
                           <>
-                            <span
-                              className="status-badge active"
-                              style={{
-                                padding: '4px 8px',
-                                borderRadius: '4px',
-                                fontSize: '0.85em',
-                                marginRight: '0.5rem'
-                              }}
-                            >
+                            <span className="status-badge active">
                               Đã nộp bài
                             </span>
                             <button
-                              className="rounded-full bg-sky-100 px-3 py-1.5 text-xs font-semibold text-sky-700 hover:bg-sky-200"
+                              className="inline-flex items-center rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
                               onClick={() => handleSubmitAssignment(assignment)}
                             >
                               Sửa
@@ -761,36 +764,27 @@ const AssignmentListPage = () => {
                           </>
                         ) : (
                           <button
-                            className="rounded-full bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-500"
+                            className="inline-flex items-center rounded-full bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-500"
                             onClick={() => handleSubmitAssignment(assignment)}
                           >
                             Nộp bài
                           </button>
                         )
                       ) : (
-                        <span
-                          className="status-badge inactive"
-                          style={{
-                            padding: '4px 8px',
-                            borderRadius: '4px',
-                            fontSize: '0.85em',
-                            backgroundColor: '#f3f4f6',
-                            color: '#6b7280'
-                          }}
-                        >
+                        <span className="status-badge inactive">
                           {assignment.status === 'INACTIVE' ? 'Không hoạt động' : 'Đã đóng'}
                         </span>
                       )
                     ) : (
                       <>
                         <button
-                          className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                          className="inline-flex items-center rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
                           onClick={() => handleViewSubmissions(assignment.id)}
                         >
                           Xem nộp bài
                         </button>
                         <button
-                          className="rounded-full bg-sky-100 px-3 py-1.5 text-xs font-semibold text-sky-700 hover:bg-sky-200"
+                          className="flex h-8 w-8 items-center justify-center rounded-full bg-sky-100 text-sky-700 hover:bg-sky-200 transition-colors"
                           onClick={() => handleEdit(assignment)}
                           aria-label="Sửa bài tập"
                           title="Sửa"
@@ -798,7 +792,7 @@ const AssignmentListPage = () => {
                           <Pencil size={14} />
                         </button>
                         <button
-                          className="rounded-full bg-rose-100 px-3 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-200"
+                          className="flex h-8 w-8 items-center justify-center rounded-full bg-rose-100 text-rose-600 hover:bg-rose-200 transition-colors"
                           onClick={() => handleDelete(assignment.id)}
                           aria-label="Xóa bài tập"
                           title="Xóa"
@@ -819,19 +813,48 @@ const AssignmentListPage = () => {
 
       {/* Submit Assignment Modal */}
       {submittingAssignment && (
-        <div className="common-modal-overlay" onClick={handleCloseSubmissionModal}>
-          <div className="common-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="common-modal-header">
-              <h2>{editingSubmission ? 'Sửa bài nộp' : 'Nộp bài tập'}</h2>
-              <button className="common-close-btn" onClick={handleCloseSubmissionModal}>×</button>
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4"
+          onClick={handleCloseSubmissionModal}
+          role="dialog"
+          aria-modal="true"
+          aria-label={editingSubmission ? 'Sửa bài nộp' : 'Nộp bài tập'}
+        >
+          <div
+            className="w-full max-w-4xl overflow-hidden rounded-3xl bg-white shadow-2xl shadow-slate-900/20"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="relative bg-white px-6 py-4 border-b border-gray-300">
+              <div className="text-center">
+                <h2 className="text-2xl font-bold leading-tight text-slate-900">{editingSubmission ? 'Sửa bài nộp' : 'Nộp bài tập'}</h2>
+              </div>
+              <button
+                className="absolute right-4 top-4 inline-flex h-9 w-9 items-center justify-center rounded-full text-slate-600 hover:bg-slate-100"
+                onClick={handleCloseSubmissionModal}
+                type="button"
+                aria-label="Đóng"
+              >
+                ✕
+              </button>
             </div>
-            <div className="common-modal-form">
-              <div className="submission-assignment-info" style={{ marginBottom: '1.5rem', padding: '1rem', background: 'rgba(102, 126, 234, 0.05)', borderRadius: '8px', borderLeft: '4px solid #667eea' }}>
-                <h3 style={{ margin: '0 0 0.75rem 0', color: '#667eea', fontSize: '1.2rem' }}>{submittingAssignment.title}</h3>
-                <p style={{ margin: '0.5rem 0', fontSize: '0.9rem', color: '#666' }}><strong>Mô tả:</strong> {submittingAssignment.description || 'N/A'}</p>
-                <p style={{ margin: '0.5rem 0', fontSize: '0.9rem', color: '#666' }}><strong>Hướng dẫn:</strong> {submittingAssignment.instructions || 'N/A'}</p>
-                <p style={{ margin: '0.5rem 0', fontSize: '0.9rem', color: '#666' }}><strong>Điểm tối đa:</strong> {submittingAssignment.maxScore}</p>
-                <p style={{ margin: '0.5rem 0', fontSize: '0.9rem', color: '#666' }}><strong>Hạn nộp:</strong> {formatDate(submittingAssignment.dueDate)}</p>
+            <div className="max-h-[75vh] overflow-auto px-6 pt-6 pb-5">
+              <div className="submission-assignment-info">
+                <h3>{submittingAssignment.title}</h3>
+                <p><strong>Mô tả:</strong> {submittingAssignment.description || 'N/A'}</p>
+                <p><strong>Hướng dẫn:</strong> {submittingAssignment.instructions || 'N/A'}</p>
+                <p><strong>Hạn nộp:</strong> {formatDate(submittingAssignment.dueDate)}</p>
+                {submittingAssignment.attachmentName && (
+                  <p>
+                    <strong>File bài tập:</strong>{' '}
+                    <button
+                      type="button"
+                      className="inline-flex items-center rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                      onClick={() => handleDownloadFile(submittingAssignment.id, submittingAssignment.attachmentName)}
+                    >
+                      Tải file đính kèm
+                    </button>
+                  </p>
+                )}
               </div>
               <form onSubmit={(e) => { e.preventDefault(); handleSubmitAssignmentForm(); }}>
                 <div className="common-form-group">
@@ -846,35 +869,25 @@ const AssignmentListPage = () => {
                 <div className="common-form-group">
                   <label>Đính kèm file Word (.doc, .docx)</label>
                   {editingSubmission && editingSubmission.attachmentName && !submissionFile && (
-                    <div style={{
-                      padding: '10px',
-                      backgroundColor: '#f5f5f5',
-                      borderRadius: '4px',
-                      border: '1px solid #ddd',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      marginBottom: '0.5rem'
-                    }}>
+                    <div className="assignment-file-summary">
                       <div>
-                        <span style={{ fontWeight: '500' }}>📄 {editingSubmission.attachmentName}</span>
+                        <span className="assignment-file-summary__name">📄 {editingSubmission.attachmentName}</span>
                         {editingSubmission.attachmentSize && (
-                          <span style={{ marginLeft: '10px', color: '#666', fontSize: '0.9em' }}>
+                          <span className="assignment-file-summary__size">
                             ({(editingSubmission.attachmentSize / 1024).toFixed(2)} KB)
                           </span>
                         )}
                       </div>
                       <button
                         type="button"
-                        className="btn btn-sm btn-primary"
+                        className="inline-flex items-center rounded-full bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-500"
                         onClick={() => handleDownloadSubmissionFile(editingSubmission.id, editingSubmission.attachmentName)}
-                        style={{ marginLeft: '10px' }}
                       >
                         Tải xuống
                       </button>
                     </div>
                   )}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginTop: '0.5rem' }}>
+                  <div className="assignment-file-picker">
                     <input
                       type="file"
                       id="submission-file-input"
@@ -902,48 +915,34 @@ const AssignmentListPage = () => {
                     />
                     <label
                       htmlFor="submission-file-input"
-                      style={{
-                        padding: '0.5rem 1rem',
-                        background: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)',
-                        color: 'white',
-                        borderRadius: '8px',
-                        cursor: 'pointer',
-                        fontSize: '0.9rem',
-                        fontWeight: '600',
-                        whiteSpace: 'nowrap',
-                        transition: 'all 0.3s ease'
-                      }}
-                      onMouseEnter={(e) => {
-                        e.target.style.transform = 'translateY(-2px)';
-                        e.target.style.boxShadow = '0 4px 15px rgba(79, 172, 254, 0.4)';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.target.style.transform = 'translateY(0)';
-                        e.target.style.boxShadow = 'none';
-                      }}
+                      className="inline-flex items-center rounded-full bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-500 cursor-pointer"
                     >
                       {editingSubmission && editingSubmission.attachmentName ? 'Thay đổi file' : 'Chọn tệp'}
                     </label>
-                    <span style={{ color: '#666', fontSize: '0.9rem', fontStyle: 'italic' }}>
+                    <span className="assignment-file-picker__hint">
                       {submissionFile ? submissionFile.name : (editingSubmission && editingSubmission.attachmentName ? 'Giữ nguyên file cũ' : 'Không có tệp nào được chọn')}
                     </span>
                   </div>
                   {submissionFile && (
-                    <p style={{ marginTop: '5px', fontSize: '0.9em', color: '#666' }}>
+                    <p className="assignment-file-note">
                       Đã chọn: {submissionFile.name} ({(submissionFile.size / 1024).toFixed(2)} KB)
                     </p>
                   )}
-                  <p style={{ marginTop: '5px', fontSize: '0.85em', color: '#999' }}>
+                  <p className="assignment-file-subnote">
                     Bạn có thể nộp bài bằng nội dung text hoặc file Word, hoặc cả hai
                   </p>
                 </div>
-                <div className="common-modal-actions">
-                  <button type="button" className="btn btn-secondary" onClick={handleCloseSubmissionModal}>
+                <div className="assignment-modal-actions">
+                  <button
+                    type="button"
+                    className="inline-flex items-center rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                    onClick={handleCloseSubmissionModal}
+                  >
                     Hủy
                   </button>
                   <button
                     type="submit"
-                    className="btn btn-primary"
+                    className="inline-flex items-center rounded-full bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-md shadow-indigo-500/30 hover:bg-indigo-500 disabled:opacity-60 disabled:cursor-not-allowed"
                     disabled={!submissionContent && !submissionFile && (!editingSubmission || !editingSubmission.attachmentName)}
                   >
                     {editingSubmission ? 'Cập nhật' : 'Nộp bài'}
@@ -956,13 +955,31 @@ const AssignmentListPage = () => {
       )}
 
       {showModal && (
-        <div className="common-modal-overlay">
-          <div className="common-modal">
-            <div className="common-modal-header">
-              <h2>{editingAssignment ? 'Sửa bài tập' : 'Thêm bài tập'}</h2>
-              <button className="common-close-btn" onClick={handleCloseModal}>×</button>
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4"
+          onClick={handleCloseModal}
+          role="dialog"
+          aria-modal="true"
+          aria-label={editingAssignment ? 'Sửa bài tập' : 'Thêm bài tập'}
+        >
+          <div
+            className="w-full max-w-4xl overflow-hidden rounded-3xl bg-white shadow-2xl shadow-slate-900/20"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="relative bg-white px-6 py-4 border-b border-gray-300">
+              <div className="text-center">
+                <h2 className="text-2xl font-bold leading-tight text-slate-900">{editingAssignment ? 'Sửa bài tập' : 'Thêm bài tập'}</h2>
+              </div>
+              <button
+                className="absolute right-4 top-4 inline-flex h-9 w-9 items-center justify-center rounded-full text-slate-600 hover:bg-slate-100"
+                onClick={handleCloseModal}
+                type="button"
+                aria-label="Đóng"
+              >
+                ✕
+              </button>
             </div>
-            <form onSubmit={handleSubmit} className="common-modal-form modal-form">
+            <form onSubmit={handleSubmit} className="max-h-[75vh] overflow-auto px-6 pt-6 pb-5 modal-form">
               <div className="common-form-group form-group">
                 <label>Tiêu đề *</label>
                 <input
@@ -1015,7 +1032,7 @@ const AssignmentListPage = () => {
                     }}
                   />
                   {selectedFile && (
-                    <p style={{ marginTop: '5px', fontSize: '0.9em', color: '#666' }}>
+                    <p className="assignment-file-note">
                       Đã chọn: {selectedFile.name} ({(selectedFile.size / 1024).toFixed(2)} KB)
                     </p>
                   )}
@@ -1024,33 +1041,24 @@ const AssignmentListPage = () => {
               {editingAssignment && editingAssignment.attachmentName && (
                 <div className="common-form-group form-group">
                   <label>File đã đính kèm</label>
-                  <div style={{
-                    padding: '10px',
-                    backgroundColor: '#f5f5f5',
-                    borderRadius: '4px',
-                    border: '1px solid #ddd',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between'
-                  }}>
+                  <div className="assignment-file-summary">
                     <div>
-                      <span style={{ fontWeight: '500' }}>📄 {editingAssignment.attachmentName}</span>
+                      <span className="assignment-file-summary__name">📄 {editingAssignment.attachmentName}</span>
                       {editingAssignment.attachmentSize && (
-                        <span style={{ marginLeft: '10px', color: '#666', fontSize: '0.9em' }}>
+                        <span className="assignment-file-summary__size">
                           ({(editingAssignment.attachmentSize / 1024).toFixed(2)} KB)
                         </span>
                       )}
                     </div>
                     <button
                       type="button"
-                      className="btn btn-sm btn-primary"
+                      className="inline-flex items-center rounded-full bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-500"
                       onClick={() => handleDownloadFile(editingAssignment.id, editingAssignment.attachmentName)}
-                      style={{ marginLeft: '10px' }}
                     >
                       Tải xuống
                     </button>
                   </div>
-                  <p style={{ marginTop: '5px', fontSize: '0.85em', color: '#999' }}>
+                  <p className="assignment-file-subnote">
                     Để thay đổi file, vui lòng xóa bài tập và tạo lại với file mới
                   </p>
                 </div>
@@ -1077,23 +1085,6 @@ const AssignmentListPage = () => {
                 />
               </div>
               <div className="common-form-group form-group">
-                <label>Trường *</label>
-                <select
-                  value={formData.schoolId}
-                  onChange={(e) => setFormData({ ...formData, schoolId: e.target.value })}
-                  disabled={(user?.role?.name?.toUpperCase() === 'ADMIN' || user?.role?.name?.toUpperCase() === 'TEACHER') && user?.school?.id}
-                  required
-                  style={(user?.role?.name?.toUpperCase() === 'ADMIN' || user?.role?.name?.toUpperCase() === 'TEACHER') && user?.school?.id ? { backgroundColor: '#f3f4f6', cursor: 'not-allowed' } : {}}
-                >
-                  <option value="">Chọn trường</option>
-                  {schools.map(school => (
-                    <option key={school.id} value={school.id}>
-                      {school.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="common-form-group form-group">
                 <label>Lớp *</label>
                 <select
                   value={formData.classId}
@@ -1110,7 +1101,7 @@ const AssignmentListPage = () => {
                   ))}
                 </select>
                 {user?.role?.name?.toUpperCase() === 'TEACHER' && filteredClasses.length === 0 && (
-                  <p style={{ fontSize: '12px', color: '#999', marginTop: '5px' }}>
+                  <p className="assignment-helper-text">
                     Bạn chưa được phân công dạy lớp nào
                   </p>
                 )}
@@ -1157,7 +1148,7 @@ const AssignmentListPage = () => {
                     });
                     if (availableSubjects.length === 0) {
                       return (
-                        <p style={{ fontSize: '12px', color: '#999', marginTop: '5px' }}>
+                        <p className="assignment-helper-text">
                           Bạn không dạy môn nào cho lớp này
                         </p>
                       );
@@ -1165,23 +1156,6 @@ const AssignmentListPage = () => {
                     return null;
                   })()
                 )}
-              </div>
-              <div className="common-form-group form-group">
-                <label>Giáo viên tạo *</label>
-                <select
-                  value={formData.createdById}
-                  onChange={(e) => setFormData({ ...formData, createdById: e.target.value })}
-                  disabled={isTeacherOrAdmin}
-                  required
-                  style={isTeacherOrAdmin ? { backgroundColor: '#f3f4f6', cursor: 'not-allowed' } : {}}
-                >
-                  <option value="">Chọn giáo viên</option>
-                  {teachers.map(teacher => (
-                    <option key={teacher.id} value={teacher.id}>
-                      {teacher.fullName}
-                    </option>
-                  ))}
-                </select>
               </div>
               <div className="common-form-group form-group">
                 <label>Trạng thái</label>
@@ -1194,11 +1168,15 @@ const AssignmentListPage = () => {
                   <option value="CLOSED">Đã đóng</option>
                 </select>
               </div>
-              <div className="common-modal-actions modal-actions">
-                <button type="button" className="btn btn-secondary" onClick={handleCloseModal}>
+              <div className="assignment-modal-actions modal-actions">
+                <button
+                  type="button"
+                  className="inline-flex items-center rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                  onClick={handleCloseModal}
+                >
                   Hủy
                 </button>
-                <button type="submit" className="btn btn-primary">
+                <button type="submit" className="inline-flex items-center rounded-full bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-md shadow-indigo-500/30 hover:bg-indigo-500">
                   {editingAssignment ? 'Cập nhật' : 'Tạo mới'}
                 </button>
               </div>
@@ -1209,15 +1187,34 @@ const AssignmentListPage = () => {
 
       {/* Submissions Modal */}
       {showSubmissionsModal && (
-        <div className="common-modal-overlay" onClick={handleCloseSubmissionsModal}>
-          <div className="common-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '900px', width: '90%' }}>
-            <div className="common-modal-header">
-              <h2>Danh sách nộp bài</h2>
-              <button className="common-close-btn" onClick={handleCloseSubmissionsModal}>×</button>
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4"
+          onClick={handleCloseSubmissionsModal}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Danh sách nộp bài"
+        >
+          <div
+            className="w-full max-w-5xl overflow-hidden rounded-3xl bg-white shadow-2xl shadow-slate-900/20"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="relative bg-white px-6 py-4 border-b border-gray-300">
+              <div className="text-center">
+                <h2 className="text-2xl font-bold leading-tight text-slate-900">Danh sách nộp bài</h2>
+              </div>
+              <button
+                className="absolute right-4 top-4 inline-flex h-9 w-9 items-center justify-center rounded-full text-slate-600 hover:bg-slate-100"
+                onClick={handleCloseSubmissionsModal}
+                type="button"
+                aria-label="Đóng"
+              >
+                ✕
+              </button>
             </div>
-            <div className="common-modal-form" style={{ padding: '2rem', overflowX: 'auto' }}>
-              <table className="common-table">
-                <thead>
+            <div className="assignment-submissions-body">
+              <div className="assignment-submissions-table-wrap">
+              <table className="assignment-admin-table">
+                <thead className="assignment-admin-table__head">
                   <tr>
                     <th>Học sinh</th>
                     <th>Nội dung</th>
@@ -1226,38 +1223,37 @@ const AssignmentListPage = () => {
                     <th>Trạng thái</th>
                   </tr>
                 </thead>
-                <tbody>
+                <tbody className="assignment-admin-table__body">
                   {submissions.map((submission) => (
                     <tr key={submission.id}>
                       <td>{submission.student?.fullName || 'N/A'}</td>
                       <td>
                         {submission.content ? (
-                          <div style={{ maxWidth: '200px', wordBreak: 'break-word' }}>
+                          <div className="submission-content-cell">
                             {submission.content}
                           </div>
                         ) : (
-                          <span style={{ color: '#999', fontStyle: 'italic' }}>Không có</span>
+                          <span className="assignment-empty-text">Không có</span>
                         )}
                       </td>
                       <td>
                         {submission.attachmentName ? (
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                            <span style={{ fontSize: '0.9em' }}>📄 {submission.attachmentName}</span>
+                          <div className="submission-attachment-row">
+                            <span className="submission-attachment-name">📄 {submission.attachmentName}</span>
                             {submission.attachmentSize && (
-                              <span style={{ fontSize: '0.8em', color: '#666' }}>
+                              <span className="submission-attachment-size">
                                 ({(submission.attachmentSize / 1024).toFixed(2)} KB)
                               </span>
                             )}
                             <button
-                              className="btn btn-sm btn-secondary"
+                              className="inline-flex items-center rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
                               onClick={() => handleDownloadSubmissionFile(submission.id, submission.attachmentName)}
-                              style={{ padding: '2px 8px', fontSize: '0.8em' }}
                             >
                               Tải xuống
                             </button>
                           </div>
                         ) : (
-                          <span style={{ color: '#999', fontStyle: 'italic' }}>Không có</span>
+                          <span className="assignment-empty-text">Không có</span>
                         )}
                       </td>
                       <td>{formatDate(submission.submittedAt)}</td>
@@ -1270,13 +1266,14 @@ const AssignmentListPage = () => {
                   ))}
                   {submissions.length === 0 && (
                     <tr>
-                      <td colSpan="5" style={{ textAlign: 'center', padding: '2rem' }}>
-                        <span style={{ color: '#999', fontStyle: 'italic' }}>Chưa có học sinh nào nộp bài</span>
+                      <td colSpan="5" className="submission-empty-row">
+                        <span className="assignment-empty-text">Chưa có học sinh nào nộp bài</span>
                       </td>
                     </tr>
                   )}
                 </tbody>
               </table>
+              </div>
             </div>
           </div>
         </div>
@@ -1284,14 +1281,32 @@ const AssignmentListPage = () => {
 
       {/* Grading Modal */}
       {gradingSubmission && (
-        <div className="modal-overlay">
-          <div className="modal">
-            <div className="modal-header">
-              <h2>Chấm điểm</h2>
-              <button className="close-btn" onClick={handleCloseGradingModal}>×</button>
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4"
+          onClick={handleCloseGradingModal}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Chấm điểm"
+        >
+          <div
+            className="w-full max-w-3xl overflow-hidden rounded-3xl bg-white shadow-2xl shadow-slate-900/20"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="relative bg-white px-6 py-4 border-b border-gray-300">
+              <div className="text-center">
+                <h2 className="text-2xl font-bold leading-tight text-slate-900">Chấm điểm</h2>
+              </div>
+              <button
+                className="absolute right-4 top-4 inline-flex h-9 w-9 items-center justify-center rounded-full text-slate-600 hover:bg-slate-100"
+                onClick={handleCloseGradingModal}
+                type="button"
+                aria-label="Đóng"
+              >
+                ✕
+              </button>
             </div>
-            <form onSubmit={(e) => { e.preventDefault(); handleSubmitGrade(); }}>
-              <div className="form-group">
+            <form onSubmit={(e) => { e.preventDefault(); handleSubmitGrade(); }} className="max-h-[75vh] overflow-auto px-6 pt-6 pb-5">
+              <div className="common-form-group">
                 <label>Điểm *</label>
                 <input
                   type="number"
@@ -1302,7 +1317,7 @@ const AssignmentListPage = () => {
                   required
                 />
               </div>
-              <div className="form-group">
+              <div className="common-form-group">
                 <label>Nhận xét</label>
                 <textarea
                   value={gradeData.feedback}
@@ -1310,11 +1325,15 @@ const AssignmentListPage = () => {
                   rows="5"
                 />
               </div>
-              <div className="modal-actions">
-                <button type="button" className="btn btn-secondary" onClick={handleCloseGradingModal}>
+              <div className="assignment-modal-actions">
+                <button
+                  type="button"
+                  className="inline-flex items-center rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                  onClick={handleCloseGradingModal}
+                >
                   Hủy
                 </button>
-                <button type="submit" className="btn btn-primary">
+                <button type="submit" className="inline-flex items-center rounded-full bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-md shadow-indigo-500/30 hover:bg-indigo-500">
                   Lưu điểm
                 </button>
               </div>
