@@ -157,6 +157,7 @@ const ParentDashboard = () => {
   const [assignmentTab, setAssignmentTab] = useState('pending');
   const [announcements, setAnnouncements] = useState([]);
   const [examScores, setExamScores] = useState([]);
+  const [showWeakSubjects, setShowWeakSubjects] = useState(false);
 
   const [aiLoading, setAiLoading] = useState(false);
   const [aiAnalysis, setAiAnalysis] = useState(null);
@@ -305,25 +306,24 @@ const ParentDashboard = () => {
 
           if (classSectionIds.length === 0) {
             setTodayAttendance([]);
-            return;
+          } else {
+            const attendancePromises = classSectionIds.map(async (classSectionId) => {
+              try {
+                const res = await api.get(`/attendance`, { params: { classSectionId, date: todayStr } });
+                const items = res.data?.items || [];
+                // Tìm bản ghi điểm danh của đúng con mình trong lớp học phần này
+                const myChildRecord = items.find(it => String(it.studentId) === String(selectedChildId));
+                if (myChildRecord) {
+                  return { ...myChildRecord, boundClassSectionId: classSectionId };
+                }
+              } catch (e) { }
+              return null;
+            });
+  
+            // Chờ tất cả các request lấy điểm danh xong
+            const attendanceResults = (await Promise.all(attendancePromises)).filter(item => item !== null);
+            setTodayAttendance(attendanceResults);
           }
-
-          const attendancePromises = classSectionIds.map(async (classSectionId) => {
-            try {
-              const res = await api.get(`/attendance`, { params: { classSectionId, date: todayStr } });
-              const items = res.data?.items || [];
-              // Tìm bản ghi điểm danh của đúng con mình trong lớp học phần này
-              const myChildRecord = items.find(it => String(it.studentId) === String(selectedChildId));
-              if (myChildRecord) {
-                return { ...myChildRecord, boundClassSectionId: classSectionId };
-              }
-            } catch (e) { }
-            return null;
-          });
-
-          // Chờ tất cả các request lấy điểm danh xong
-          const attendanceResults = (await Promise.all(attendancePromises)).filter(item => item !== null);
-          setTodayAttendance(attendanceResults);
         } catch (e) { }
 
         // 4. Assignments & Announcements (cần cId)
@@ -490,7 +490,8 @@ const ParentDashboard = () => {
   const assignmentsSubmitted = assignments.filter(a => submittedIds.has(a.id));
 
   // Cảnh báo học tập từ data thật
-  const hasWeakSubject = examScores.some(e => Number(e.score) < 5.0);
+  const weakSubjects = Array.from(new Set(examScores.filter(e => Number(e.score) < 5.0).map(e => e.subject?.name || 'Môn học')));
+  const hasWeakSubject = weakSubjects.length > 0;
   const hasAbsent = scheduleRowsWithAttendance.some(r => r.status === 'absent');
   const hasOverdueAssign = assignmentsOverdue.length > 0;
 
@@ -582,9 +583,24 @@ const ParentDashboard = () => {
         {(hasWeakSubject || hasAbsent || hasOverdueAssign) && (
           <div className="pd-alerts-bar">
             {hasWeakSubject && (
-              <div className="pd-alert pd-alert--danger">
-                <span className="pd-alert-icon">⚠</span>
-                <span>Có môn điểm dưới 5.0 — cần chú ý bổ sung kiến thức</span>
+              <div 
+                className="pd-alert pd-alert--danger" 
+                style={{ cursor: 'pointer', display: 'block', transition: 'all 0.3s ease' }}
+                onClick={() => setShowWeakSubjects(!showWeakSubjects)}
+              >
+                <div style={{ display: 'flex', alignItems: 'center' }}>
+                  <span className="pd-alert-icon" style={{ marginRight: '8px' }}>⚠</span>
+                  <span style={{ fontWeight: '500' }}>Có {weakSubjects.length} môn điểm dưới 5.0 — {showWeakSubjects ? 'Bấm để ẩn' : 'Bấm để xem chi tiết'}</span>
+                </div>
+                {showWeakSubjects && (
+                  <div style={{ marginTop: '10px', paddingLeft: '34px', fontSize: '0.85rem' }}>
+                    <ul style={{ margin: 0, paddingLeft: '16px', listStyleType: 'disc', color: '#b91c1c' }}>
+                      {weakSubjects.map((sub, idx) => (
+                        <li key={idx} style={{ marginBottom: '4px' }}>Môn {sub}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
               </div>
             )}
             {hasAbsent && (
