@@ -8,7 +8,6 @@ import {
   ChevronLeft, ChevronRight, ClipboardList, Clock, PencilLine, User
 } from 'lucide-react';
 import api from '../../../../shared/lib/api';
-import { formatGradeAnalysisForDisplay } from '../../../../shared/lib/formatGradeAnalysisForDisplay';
 import { scheduleSubjectDisplayName } from '../../../../shared/lib/scheduleLabels';
 import { useAuth } from '../../../auth/context/AuthContext';
 import '../StudentDashboard/StudentDashboard.css';
@@ -160,8 +159,9 @@ const ParentDashboard = () => {
   const [showWeakSubjects, setShowWeakSubjects] = useState(false);
 
   const [aiLoading, setAiLoading] = useState(false);
-  const [aiAnalysis, setAiAnalysis] = useState(null);
+  const [aiResult, setAiResult] = useState(null); // raw response object
   const [aiError, setAiError] = useState('');
+  const [aiExpanded, setAiExpanded] = useState(false);
 
   const schoolId = user?.school?.id;
 
@@ -397,44 +397,178 @@ const ParentDashboard = () => {
     window.location.reload();
   };
 
-  const analyzeWithAi = async () => {
-    try {
-      setAiError('');
-      setAiAnalysis(null);
-      if (!examScores || examScores.length === 0) {
-        setAiError('Con chưa có điểm để phân tích.');
-        return;
-      }
-      setAiLoading(true);
+  // === ENGINE PHÂN TÍCH FE THUẦN (không cần API key) ===
+  const buildLocalAnalysis = (subjectSummaries, ctx = {}) => {
+    const { absentCount = 0, lateCount = 0, overdueAssignments = 0, pendingAssignments = 0 } = ctx;
+    const sorted = [...subjectSummaries].sort((a, b) => a.avgScore - b.avgScore);
+    const avg = subjectSummaries.reduce((s, x) => s + x.avgScore, 0) / subjectSummaries.length;
 
-      const recentMinScores = [];
-      const bySubject = {};
-      examScores.forEach((e) => {
-        const subjectName = e.subject?.name || 'Môn';
-        const score = Number(e.score);
-        if (Number.isNaN(score)) return;
-        if (!bySubject[subjectName]) bySubject[subjectName] = { min: score };
-        else bySubject[subjectName].min = Math.min(bySubject[subjectName].min, score);
+    const weakSubs = subjectSummaries.filter(s => s.avgScore < 5.0);
+    const mediumSubs = subjectSummaries.filter(s => s.avgScore >= 5.0 && s.avgScore < 6.5);
+    const goodSubs = subjectSummaries.filter(s => s.avgScore >= 6.5 && s.avgScore < 8.0);
+    const excellentSubs = subjectSummaries.filter(s => s.avgScore >= 8.0);
+
+    // Mức độ rủi ro
+    let riskLevel;
+    if (weakSubs.length >= 2 || avg < 5.0 || absentCount >= 3) riskLevel = 'HIGH';
+    else if (weakSubs.length === 1 || absentCount >= 1 || overdueAssignments >= 2) riskLevel = 'MEDIUM';
+    else riskLevel = 'LOW';
+
+    // Học lực
+    let performanceLevel;
+    if (avg < 4.0) performanceLevel = 'YEU';
+    else if (avg < 5.0) performanceLevel = 'KEM';
+    else if (avg < 6.5) performanceLevel = 'TRUNG_BINH';
+    else if (avg < 8.0) performanceLevel = 'KHA';
+    else performanceLevel = 'GIOI';
+
+    // Nhận xét tổng quan
+    let summary;
+    const weakNames = weakSubs.map(s => s.subject);
+    const bestSub = sorted[sorted.length - 1];
+    if (performanceLevel === 'GIOI') {
+      summary = `Con đang có kết quả học tập xuất sắc với điểm TB ${avg.toFixed(1)}/10. Môn nổi bật nhất là ${bestSub?.subject} (${bestSub?.avgScore} điểm). Hãy duy trì phong độ và tiếp tục phát huy!`;
+    } else if (performanceLevel === 'KHA') {
+      summary = `Kết quả khá tốt, điểm TB ${avg.toFixed(1)}/10. ${mediumSubs.length > 0 ? `Còn ${mediumSubs.length} môn ở mức trung bình (${mediumSubs.map(s => s.subject).join(', ')}) cần cải thiện thêm.` : 'Tiếp tục nỗ lực để đạt kết quả tốt hơn.'}`;
+    } else if (performanceLevel === 'TRUNG_BINH') {
+      summary = `Điểm TB ${avg.toFixed(1)}/10 ở mức trung bình. ${weakNames.length > 0 ? `Đặc biệt chú ý ${weakNames.join(', ')} đang dưới điểm 5.` : 'Cần nỗ lực hơn để cải thiện tất cả các môn.'}`;
+    } else {
+      summary = `Điểm TB ${avg.toFixed(1)}/10 đang ở mức yếu. Cần có kế hoạch học tập rõ ràng ngay, đặc biệt là ${weakNames.slice(0, 2).join(', ')}. Phụ huynh nên liên hệ giáo viên chủ nhiệm sớm.`;
+    }
+
+    // Ưu tiên môn cần làm ngay
+    const prioritySubjects = sorted.filter(s => s.avgScore < 8.0).slice(0, 3).map(s => s.subject);
+
+    // Gợi ý CHI TIẾT theo từng nhóm môn
+    const recommendations = [];
+
+    // --- GỢI Ý THEO MÔN YẾU ---
+    if (weakSubs.length > 0) {
+      weakSubs.slice(0, 3).forEach(s => {
+        if (s.avgScore < 3.0) {
+          recommendations.push(`🔴 ${s.subject} (${s.avgScore} điểm): Mức điểm rất thấp — cần học thêm hoặc gặp trực tiếp giáo viên bộ môn để được giải thích bài từ đầu. Phụ huynh nên liên hệ trường ngay.`);
+        } else if (s.avgScore < 4.0) {
+          recommendations.push(`🔴 ${s.subject} (${s.avgScore} điểm): Cần ưu tiên ôn tập ngay. Dành ít nhất 1 tiếng/ngày, tập trung vào phần lý thuyết cơ bản trước khi làm bài tập.`);
+        } else {
+          recommendations.push(`🟠 ${s.subject} (${s.avgScore} điểm): Điểm dưới trung bình. Nên xem lại bài cũ, làm thêm bài tập và nhờ bạn bè hoặc giáo viên hỗ trợ phần chưa hiểu.`);
+        }
       });
-      Object.entries(bySubject).forEach(([subject, v]) => recentMinScores.push({ subject, score: v.min }));
+    }
 
+    // --- GỢI Ý THEO MÔN TRUNG BÌNH ---
+    if (mediumSubs.length > 0 && recommendations.length < 5) {
+      const midList = mediumSubs.map(s => `${s.subject} (${s.avgScore}đ)`).join(', ');
+      recommendations.push(`🟡 Các môn cần cải thiện thêm: ${midList}. Nên làm thêm đề cũ, kiểm tra lại những phần hay sai để nâng lên mức Khá.`);
+    }
+
+    // --- GỢI Ý ĐIỂM DANH ---
+    if (absentCount >= 3) {
+      recommendations.push(`📅 Vắng mặt nhiều (${absentCount} tiết): Nghỉ học nhiều ảnh hưởng đến việc tiếp thu bài. Phụ huynh cần xác nhận lý do và đảm bảo con học bù kiến thức đã mất.`);
+    } else if (absentCount > 0) {
+      recommendations.push(`📅 Con có ${absentCount} tiết vắng gần đây — nhắc con xem lại bài và ghi chép đầy đủ những nội dung đã bỏ lỡ.`);
+    }
+    if (lateCount > 0 && recommendations.length < 6) {
+      recommendations.push(`⏰ Con đi trễ ${lateCount} tiết — nhắc con chuẩn bị đồ dùng và ra khỏi nhà sớm hơn để không bỏ lỡ phần đầu tiết học.`);
+    }
+
+    // --- GỢI Ý BÀI TẬP ---
+    if (overdueAssignments > 0 && recommendations.length < 6) {
+      recommendations.push(`📝 Có ${overdueAssignments} bài tập đã quá hạn chưa nộp — liên hệ giáo viên bộ môn để hỏi có thể nộp muộn không, tránh bị điểm 0.`);
+    } else if (pendingAssignments > 2 && recommendations.length < 6) {
+      recommendations.push(`📝 Còn ${pendingAssignments} bài tập chưa nộp — nhắc con sắp xếp thời gian hoàn thành trước hạn.`);
+    }
+
+    // --- GỢI Ý TỔNG QUÁT theo học lực (nếu còn slot) ---
+    if (performanceLevel === 'GIOI' && recommendations.length < 4) {
+      recommendations.push(`⭐ ${bestSub?.subject} đang rất tốt (${bestSub?.avgScore} điểm) — khuyến khích con tham gia các kỳ thi học sinh giỏi hoặc đội tuyển bộ môn.`);
+    }
+    if (excellentSubs.length > 0 && weakSubs.length > 0 && recommendations.length < 6) {
+      recommendations.push(`💪 Con học tốt môn ${excellentSubs[0].subject} — có thể tận dụng kỹ năng tự học này áp dụng cho các môn đang yếu hơn.`);
+    }
+    if (recommendations.length < 3) {
+      recommendations.push('📖 Lập thời gian biểu học tập cố định mỗi ngày, ưu tiên ôn bài cũ trước khi học bài mới.');
+    }
+
+    // Tổng hợp điểm danh insight để render riêng
+    const attendanceInsight = { absentCount, lateCount };
+
+    return {
+      source: 'LOCAL_FALLBACK',
+      riskLevel,
+      trend: null,
+      summary,
+      underAverageSubjects: weakSubs.map(s => s.subject),
+      topConcerns: [],
+      prioritySubjects,
+      recommendations: recommendations.slice(0, 6),
+      attendanceInsight,
+      aiSuccess: false,
+      severity: riskLevel,
+    };
+  };
+
+  const analyzeWithAi = async () => {
+    setAiError('');
+    setAiResult(null);
+    setAiExpanded(false);
+    if (!examScores || examScores.length === 0) {
+      setAiError('Con chưa có điểm để phân tích.');
+      return;
+    }
+    setAiLoading(true);
+
+    // Tính điểm trung bình mỗi môn
+    const bySubject = {};
+    examScores.forEach((e) => {
+      const subjectName = e.subject?.name || 'Môn';
+      const score = Number(e.score);
+      if (Number.isNaN(score)) return;
+      if (!bySubject[subjectName]) bySubject[subjectName] = { sum: score, count: 1 };
+      else { bySubject[subjectName].sum += score; bySubject[subjectName].count += 1; }
+    });
+
+    const subjectSummaries = Object.entries(bySubject).map(([subject, v]) => ({
+      subject,
+      avgScore: Number((v.sum / v.count).toFixed(1)),
+      count: v.count,
+    }));
+
+    if (subjectSummaries.length === 0) {
+      setAiError('Điểm số không hợp lệ, không thể phân tích.');
+      setAiLoading(false);
+      return;
+    }
+
+    // Context điểm danh & bài tập để truyền vào FE engine
+    const attendanceCtx = {
+      absentCount: scheduleRowsWithAttendance.filter(r => r.status === 'absent').length,
+      lateCount: scheduleRowsWithAttendance.filter(r => r.status === 'late').length,
+      overdueAssignments: assignmentsOverdue.length,
+      pendingAssignments: assignmentsNew.length,
+    };
+
+    // Thử gọi BE trước; nếu lỗi -> fallback phân tích FE thuần
+    try {
       const payload = {
         target: `Học sinh: ${studentDetail?.fullName || 'con bạn'}`,
-        subjects: recentMinScores.map((r) => ({
+        subjects: subjectSummaries.map((r) => ({
           name: r.subject,
-          score: Number(r.score),
+          score: r.avgScore,
           previousScore: null,
         })),
       };
-
       const res = await api.post('/ai/grade-analysis', payload);
-      setAiAnalysis(formatGradeAnalysisForDisplay(res.data) || '');
-    } catch (e) {
-      setAiError(e?.response?.data?.error || e?.message || 'Phân tích AI thất bại');
+      // Ghép thêm attendanceInsight vào raw để render panel
+      setAiResult({ raw: { ...res.data, attendanceInsight: attendanceCtx }, subjectSummaries });
+    } catch {
+      const localRaw = buildLocalAnalysis(subjectSummaries, attendanceCtx);
+      setAiResult({ raw: localRaw, subjectSummaries });
     } finally {
+      setAiExpanded(true);
       setAiLoading(false);
     }
   };
+
 
 
   // --- Chuẩn bị số liệu hiển thị ---
@@ -620,7 +754,7 @@ const ParentDashboard = () => {
 
         {/* Nút hành động nhanh (CTA) */}
         <div className="pd-cta-bar">
-          <button className="pd-cta-btn pd-cta-btn--primary" onClick={() => navigate('/announcements')}>
+          <button className="pd-cta-btn pd-cta-btn--primary" onClick={() => alert('Tính năng sẽ được cập nhật vào sau này')}>
             📞 Liên hệ giáo viên
           </button>
           <button className="pd-cta-btn" onClick={() => navigate('/exam-scores')}>
@@ -700,25 +834,245 @@ const ParentDashboard = () => {
             </section>
 
             {/* Phân tích AI */}
-            <section className="sd2-card" style={{ marginTop: '24px' }}>
+            <section className="sd2-card ai-analysis-card" style={{ marginTop: '24px' }}>
               <div className="sd2-card-head">
-                <h2 className="sd2-card-title">Phân tích & gợi ý từ AI</h2>
-              </div>
-              <div className="sd2-ai-block">
-                <button
-                  type="button"
-                  className="sd2-outline-btn"
-                  onClick={analyzeWithAi}
-                  disabled={aiLoading}
-                >
-                  {aiLoading ? 'Đang phân tích...' : 'Bắt đầu phân tích'}
-                </button>
-                {aiError ? <p className="sd2-ai-err">{aiError}</p> : null}
-                {aiAnalysis ? <pre className="sd2-ai-out">{aiAnalysis}</pre> : null}
-                {!aiAnalysis && !aiError && !aiLoading && (
-                  <p className="sd2-chart-note" style={{ marginTop: '10px' }}>Nhấn nút để AI phân tích toàn bộ điểm số của con bạn và đưa ra lời khuyên học tập phù hợp!</p>
+                <h2 className="sd2-card-title">
+                  <span className="ai-title-icon">🤖</span>
+                  Phân tích học tập bằng AI
+                </h2>
+                {aiResult && (
+                  <button
+                    type="button"
+                    className="sd2-link-btn"
+                    onClick={analyzeWithAi}
+                    disabled={aiLoading}
+                  >
+                    Phân tích lại
+                  </button>
                 )}
               </div>
+
+              {/* Trạng thái chưa phân tích */}
+              {!aiResult && !aiLoading && !aiError && (
+                <div className="ai-idle-state">
+                  <div className="ai-idle-icon">🧠</div>
+                  <p className="ai-idle-title">Phân tích tình hình học tập</p>
+                  <p className="ai-idle-desc">AI sẽ đánh giá toàn bộ điểm số của con bạn và đưa ra lời khuyên học tập cá nhân hóa</p>
+                  <button
+                    type="button"
+                    className="ai-start-btn"
+                    onClick={analyzeWithAi}
+                    disabled={aiLoading || examScores.length === 0}
+                  >
+                    <span>✨</span>
+                    Bắt đầu phân tích
+                  </button>
+                  {examScores.length === 0 && (
+                    <p className="ai-idle-hint">Chưa có điểm để phân tích</p>
+                  )}
+                </div>
+              )}
+
+              {/* Loading spinner */}
+              {aiLoading && (
+                <div className="ai-loading-state">
+                  <div className="ai-spinner"></div>
+                  <p className="ai-loading-text">Đang phân tích dữ liệu học tập...</p>
+                  <p className="ai-loading-sub">AI đang xử lý {examScores.length} điểm số</p>
+                </div>
+              )}
+
+              {/* Lỗi */}
+              {aiError && !aiLoading && (
+                <div className="ai-error-state">
+                  <span className="ai-error-icon">⚠️</span>
+                  <p className="ai-error-msg">{aiError}</p>
+                  <button type="button" className="ai-retry-btn" onClick={analyzeWithAi}>
+                    Thử lại
+                  </button>
+                </div>
+              )}
+
+              {/* KẾT QUẢ PHÂN TÍCH */}
+              {aiResult && !aiLoading && (() => {
+                const { raw, subjectSummaries } = aiResult;
+                const riskLevel = raw.riskLevel || raw.severity || null;
+                const riskBadge = riskLevel === 'HIGH' ? { label: 'Con cần được hỗ trợ ngay', cls: 'ai-risk--high', emoji: '🔴' }
+                  : riskLevel === 'MEDIUM' ? { label: 'Cần theo dõi thêm', cls: 'ai-risk--medium', emoji: '🟡' }
+                  : riskLevel === 'LOW' ? { label: 'Đang học tốt', cls: 'ai-risk--low', emoji: '🟢' }
+                  : null;
+                const trend = raw.trend || null;
+                const summary = raw.summary || null;
+                const underAvg = Array.isArray(raw.underAverageSubjects) ? raw.underAverageSubjects : [];
+                const concerns = Array.isArray(raw.topConcerns) ? raw.topConcerns : [];
+                const priority = Array.isArray(raw.prioritySubjects) ? raw.prioritySubjects : [];
+                const recommendations = Array.isArray(raw.recommendations) ? raw.recommendations : [];
+
+                return (
+                  <div className="ai-result-wrap">
+
+                    {/* Header badges */}
+                    <div className="ai-result-badges">
+                      {riskBadge && (
+                        <span className={`ai-risk-badge ${riskBadge.cls}`}>
+                          {riskBadge.emoji} {riskBadge.label}
+                        </span>
+                      )}
+                      {trend && trend !== 'Không đủ dữ liệu để xác định xu hướng' && (
+                        <span className="ai-trend-badge">
+                          {trend === 'IMPROVING' || trend === 'Tăng' ? '📈 Điểm đang cải thiện'
+                            : trend === 'DECLINING' || trend === 'Giảm' ? '📉 Điểm đang giảm sút'
+                            : trend === 'STABLE' || trend === 'Ổn định' ? '➡️ Điểm ổn định'
+                            : `📊 ${trend}`}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Tóm tắt */}
+                    {summary && (
+                      <div className="ai-summary-box">
+                        <p className="ai-summary-label">📋 Nhận xét tổng quan</p>
+                        <p className="ai-summary-text">{summary}</p>
+                      </div>
+                    )}
+
+                    {/* Bảng điểm theo môn */}
+                    {(() => {
+                      const SCORE_TYPE_LABEL = {
+                        '15P': 'Điểm 15p', 'MIENG': 'Điểm miệng',
+                        '1TIET': 'Điểm 1 tiết', 'CUOIKI': 'Cuối kỳ',
+                        'GIUAKI': 'Giữa kỳ', 'TX': 'Thường xuyên',
+                      };
+                      return (
+                        <div className="ai-subjects-section">
+                          <div className="ai-subjects-header">
+                            <p className="ai-section-label" style={{ margin: 0 }}>📚 Điểm trung bình theo môn</p>
+                            {/* Legend màu */}
+                            <div className="ai-legend">
+                              <span className="ai-legend-dot" style={{ background: '#10b981' }} />Giỏi
+                              <span className="ai-legend-dot" style={{ background: '#3b82f6' }} />Khá
+                              <span className="ai-legend-dot" style={{ background: '#f59e0b' }} />TB
+                              <span className="ai-legend-dot" style={{ background: '#ef4444' }} />Yếu
+                            </div>
+                          </div>
+                          <div className="ai-subjects-grid">
+                            {subjectSummaries
+                              .sort((a, b) => a.avgScore - b.avgScore)
+                              .map((s) => {
+                                const isPriority = priority.includes(s.subject);
+                                const isWeak = underAvg.includes(s.subject) || s.avgScore < 5;
+                                const barColor = s.avgScore >= 8 ? '#10b981'
+                                  : s.avgScore >= 6.5 ? '#3b82f6'
+                                  : s.avgScore >= 5 ? '#f59e0b'
+                                  : '#ef4444';
+                                const scoreLabel = s.avgScore >= 8 ? 'Giỏi'
+                                  : s.avgScore >= 6.5 ? 'Khá'
+                                  : s.avgScore >= 5 ? 'TB'
+                                  : 'Yếu';
+                                const weakDetails = examScores
+                                  .filter(e => (e.subject?.name || '') === s.subject && Number(e.score) < 5)
+                                  .map(e => ({
+                                    type: e.scoreType || '15P',
+                                    score: Number(e.score),
+                                    attempt: e.attempt,
+                                  }))
+                                  .sort((a, b) => a.score - b.score);
+                                return (
+                                  <div key={s.subject} className={`ai-subject-row ${isWeak ? 'ai-subject-row--weak' : ''} ${isPriority ? 'ai-subject-row--priority' : ''}`}>
+                                    <div className="ai-subject-name">
+                                      {s.subject}
+                                      {isPriority && <span className="ai-priority-tag">Cần ưu tiên</span>}
+                                    </div>
+                                    <div className="ai-subject-bar-wrap">
+                                      <div className="ai-subject-bar">
+                                        <div
+                                          className="ai-subject-bar-fill"
+                                          style={{ width: `${(s.avgScore / 10) * 100}%`, backgroundColor: barColor }}
+                                        />
+                                      </div>
+                                      <span className="ai-subject-score" style={{ color: barColor }}>
+                                        {s.avgScore} <span className="ai-subject-label">{scoreLabel}</span>
+                                      </span>
+                                    </div>
+                                    {/* Điểm thành phần nào dưới 5 */}
+                                    {weakDetails.length > 0 && (
+                                      <div className="ai-score-details">
+                                        {weakDetails.map((d, di) => (
+                                          <span key={di} className="ai-score-detail-chip">
+                                            <span className="ai-score-detail-type">
+                                              {SCORE_TYPE_LABEL[d.type] || d.type}
+                                              {d.attempt > 1 ? ` (lần ${d.attempt})` : ''}
+                                            </span>
+                                            <span className="ai-score-detail-val">{d.score}</span>
+                                          </span>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                          </div>
+                        </div>
+                      );
+                    })()}
+
+                    {/* Tóm tắt điểm danh */}
+                    {(() => {
+                      const att = raw.attendanceInsight;
+                      if (!att || (att.absentCount === 0 && att.lateCount === 0)) {
+                        return (
+                          <div className="ai-attend-block ai-attend-block--ok">
+                            <span className="ai-attend-icon">✅</span>
+                            <div>
+                              <p className="ai-attend-title">Điểm danh tốt</p>
+                              <p className="ai-attend-sub">Con đi học đầy đủ, không có tiết vắng hay đi trễ được ghi nhận.</p>
+                            </div>
+                          </div>
+                        );
+                      }
+                      return (
+                        <div className={`ai-attend-block ${att.absentCount >= 3 ? 'ai-attend-block--danger' : 'ai-attend-block--warn'}`}>
+                          <span className="ai-attend-icon">{att.absentCount >= 3 ? '🚨' : '⚠️'}</span>
+                          <div>
+                            <p className="ai-attend-title">Tình hình điểm danh</p>
+                            <div className="ai-attend-pills">
+                              {att.absentCount > 0 && (
+                                <span className="ai-attend-pill ai-attend-pill--absent">
+                                  Vắng {att.absentCount} tiết
+                                </span>
+                              )}
+                              {att.lateCount > 0 && (
+                                <span className="ai-attend-pill ai-attend-pill--late">
+                                  Đi trễ {att.lateCount} tiết
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })()}
+
+                    {/* Gợi ý hành động cho phụ huynh */}
+                    {recommendations.length > 0 && (
+                      <div className="ai-recs-section">
+                        <p className="ai-section-label">💡 Gợi ý hành động cho phụ huynh</p>
+                        <div className="ai-recs-list">
+                          {recommendations.map((rec, i) => (
+                            <div key={i} className="ai-rec-item">
+                              <span className="ai-rec-text">{rec}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Source tag */}
+                      <p className="ai-source-tag">
+                        {raw.source === 'GEMINI' ? '✨ Phân tích bởi Gemini AI' : '📊 Phân tích từ dữ liệu điểm số'}
+                      </p>
+                  </div>
+                );
+              })()}
             </section>
 
           </div>
