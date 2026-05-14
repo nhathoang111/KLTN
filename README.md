@@ -1,11 +1,13 @@
 ## Giới thiệu dự án
 
 Đây là hệ thống **quản lý trường học (School Management)** gồm:
+
 - **Backend:** Java 17, Spring Boot 3, REST API.
 - **Frontend:** React 18, Vite, React Router.
 - **Database:** MySQL (có thể chạy H2 trong quá trình phát triển).
 
 Các chức năng chính:
+
 - **Quản lý trường, lớp, môn học**.
 - **Quản lý người dùng** (Học sinh, Giáo viên, Phụ huynh, Admin, Super Admin).
 - **Phân công giáo viên – môn học**, quản lý điểm, điểm danh, tài liệu, thông báo, báo cáo.
@@ -154,15 +156,15 @@ Phần này mô tả luồng chạy từ giao diện đến database để dễ 
 
 ### Tóm tắt flow theo lớp
 
-| Lớp | Vai trò |
-|-----|--------|
-| **Trình duyệt** | Hiển thị giao diện, gửi HTTP request (do React/Axios thực hiện). |
-| **React (FE)** | Điều hướng (Router), form, gọi API (api.js), lưu token/user (AuthContext, localStorage). |
-| **Axios (api.js)** | Gửi request tới `http://localhost:8080/api`, thêm header Authorization, xử lý 401. |
-| **Controller (BE)** | Nhận request REST, gọi Service, trả JSON. |
-| **Service (BE)** | Nghiệp vụ: validate, đổi role, cập nhật enrollment/parent_student/teacher_subjects, import Excel. |
-| **Repository (BE)** | Truy vấn DB qua JPA (findBy..., save, delete). |
-| **Database** | Lưu trữ users, schools, classes, subjects, enrollment, teacher_subjects, parent_student, ... |
+| Lớp                      | Vai trò                                                                                                |
+| ------------------------- | ------------------------------------------------------------------------------------------------------- |
+| **Trình duyệt**   | Hiển thị giao diện, gửi HTTP request (do React/Axios thực hiện).                                  |
+| **React (FE)**      | Điều hướng (Router), form, gọi API (api.js), lưu token/user (AuthContext, localStorage).          |
+| **Axios (api.js)**  | Gửi request tới `http://localhost:8080/api`, thêm header Authorization, xử lý 401.               |
+| **Controller (BE)** | Nhận request REST, gọi Service, trả JSON.                                                            |
+| **Service (BE)**    | Nghiệp vụ: validate, đổi role, cập nhật enrollment/parent_student/teacher_subjects, import Excel. |
+| **Repository (BE)** | Truy vấn DB qua JPA (findBy..., save, delete).                                                         |
+| **Database**        | Lưu trữ users, schools, classes, subjects, enrollment, teacher_subjects, parent_student, ...          |
 
 Hiểu flow này giúp biết khi một tính năng "không chạy" thì cần xem ở bước nào: FE (request đúng chưa?), BE (controller/service có nhận đúng không?), hay DB (dữ liệu có đúng không?).
 
@@ -185,15 +187,16 @@ Hệ thống quản lý trường học hoàn chỉnh với Spring Boot backend 
 ## 🚀 Quick Start
 
 ### 1. Khởi động Backend (Spring Boot)
+
 ```bash
 # Cách 1: Sử dụng script tự động
 restart-server.bat
-
 # Cách 2: Manual
 mvn spring-boot:run
 ```
 
 ### 2. Khởi động Frontend (React)
+
 ```bash
 cd frontend
 npm install
@@ -201,6 +204,7 @@ npm run dev
 ```
 
 ### 3. Test APIs
+
 ```bash
 test-apis.bat
 ```
@@ -209,38 +213,41 @@ test-apis.bat
 
 ### ✅ **Hoàn thiện (10/11 entities)**
 
-| Entity | Endpoint | CREATE | READ | UPDATE | DELETE |
-|--------|----------|--------|------|--------|--------|
-| **User** | `/api/users` | ✅ | ✅ | ✅ | ✅ |
-| **School** | `/api/schools` | ✅ | ✅ | ✅ | ✅ |
-| **Class** | `/api/classes` | ✅ | ✅ | ✅ | ✅ |
-| **Subject** | `/api/subjects` | ✅ | ✅ | ✅ | ✅ |
-| **Assignment** | `/api/assignments` | ✅ | ✅ | ✅ | ✅ |
-| **Announcement** | `/api/announcements` | ✅ | ✅ | ✅ | ✅ |
-| **Document** | `/api/documents` | ✅ | ✅ | ✅ | ✅ |
-| **Role** | `/api/roles` | ✅ | ✅ | ✅ | ✅ |
-| **Attendance** | `/api/attendance` | ✅ | ✅ | ✅ | ✅ |
-| **Record** | `/api/records` | ✅ | ✅ | ✅ | ✅ |
+| Entity                 | Endpoint               | CREATE | READ | UPDATE | DELETE |
+| ---------------------- | ---------------------- | ------ | ---- | ------ | ------ |
+| **User**         | `/api/users`         | ✅     | ✅   | ✅     | ✅     |
+| **School**       | `/api/schools`       | ✅     | ✅   | ✅     | ✅     |
+| **Class**        | `/api/classes`       | ✅     | ✅   | ✅     | ✅     |
+| **Subject**      | `/api/subjects`      | ✅     | ✅   | ✅     | ✅     |
+| **Assignment**   | `/api/assignments`   | ✅     | ✅   | ✅     | ✅     |
+| **Announcement** | `/api/announcements` | ✅     | ✅   | ✅     | ✅     |
+| **Document**     | `/api/documents`     | ✅     | ✅   | ✅     | ✅     |
+| **Role**         | `/api/roles`         | ✅     | ✅   | ✅     | ✅     |
+| **Attendance**   | `/api/attendance`    | ✅     | ✅   | ✅     | ✅     |
+| **Record**       | `/api/records`       | ✅     | ✅   | ✅     | ✅     |
 
 ### ⚠️ **Cần kiểm tra**
 
-| Entity | Endpoint | CREATE | READ | UPDATE | DELETE | Ghi chú |
-|--------|----------|--------|------|--------|--------|---------|
-| **Schedule** | `/api/schedules` | ⚠️ | ✅ | ✅ | ✅ | Conflict detection |
+| Entity             | Endpoint           | CREATE | READ | UPDATE | DELETE | Ghi chú           |
+| ------------------ | ------------------ | ------ | ---- | ------ | ------ | ------------------ |
+| **Schedule** | `/api/schedules` | ⚠️   | ✅   | ✅     | ✅     | Conflict detection |
 
 ## 🔧 **Các sửa đổi đã thực hiện**
 
 ### 1. **DocumentController**
+
 - ✅ Thêm POST method cho JSON data
 - ✅ Hỗ trợ tạo document metadata
 - ✅ Validation đầy đủ
 
-### 2. **RecordController** 
+### 2. **RecordController**
+
 - ✅ Tạo controller hoàn chỉnh
 - ✅ Tạo RecordRepository
 - ✅ CRUD operations đầy đủ
 
 ### 3. **ScheduleController**
+
 - ✅ Sửa conflict detection logic
 - ✅ Thêm UTF-8 encoding support
 - ✅ Cải thiện error handling
@@ -248,6 +255,7 @@ test-apis.bat
 ## 🗄️ **Database Schema**
 
 ### Core Entities:
+
 - **School** - Trường học
 - **User** - Người dùng (Admin, Teacher, Student)
 - **Role** - Vai trò
@@ -255,6 +263,7 @@ test-apis.bat
 - **Subject** - Môn học
 
 ### Academic Entities:
+
 - **Schedule** - Lịch học
 - **Assignment** - Bài tập
 - **AssignmentSubmission** - Nộp bài
@@ -285,6 +294,7 @@ test-apis.bat
 ## 🛠️ **Tech Stack**
 
 ### Backend:
+
 - **Spring Boot 3.3.4**
 - **Spring Data JPA**
 - **Spring Security**
@@ -292,6 +302,7 @@ test-apis.bat
 - **Maven**
 
 ### Frontend:
+
 - **React 18**
 - **Vite**
 - **React Router**
@@ -300,6 +311,7 @@ test-apis.bat
 ## 📝 **API Examples**
 
 ### Create User:
+
 ```bash
 curl -X POST http://localhost:8080/api/users \
   -H "Content-Type: application/json" \
@@ -314,6 +326,7 @@ curl -X POST http://localhost:8080/api/users \
 ```
 
 ### Create School:
+
 ```bash
 curl -X POST http://localhost:8080/api/schools \
   -H "Content-Type: application/json" \
@@ -330,6 +343,7 @@ curl -X POST http://localhost:8080/api/schools \
 ## 🎯 **Status: HOÀN THIỆN**
 
 Hệ thống đã được hoàn thiện với:
+
 - ✅ **10/11 entities** có đầy đủ CRUD operations
 - ✅ **API endpoints** hoàn chỉnh
 - ✅ **Validation và error handling** tốt
