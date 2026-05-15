@@ -5,7 +5,8 @@ import {
 } from 'recharts';
 import {
   Bell, Book, BookOpen, Calendar, CheckCircle2,
-  ChevronLeft, ChevronRight, ClipboardList, Clock, PencilLine, User
+  ChevronLeft, ChevronRight, ClipboardList, Clock, PencilLine, User,
+  Phone, Copy, Check, AlertTriangle, UserCheck
 } from 'lucide-react';
 import api from '../../../../shared/lib/api';
 import { scheduleSubjectDisplayName } from '../../../../shared/lib/scheduleLabels';
@@ -142,6 +143,169 @@ function getAcademicYearLabelFromData(classInfo, studentDetail) {
   return `${startYear} - ${startYear + 1}`;
 }
 
+// --- CONTACT PANEL COMPONENT (Parent only) ---
+
+// Format SĐT: 0901234567 → 0901 234 567 | +84901234567 → +84 901 234 567
+function formatPhoneVN(phone) {
+  if (!phone) return phone;
+  const digits = phone.replace(/\D/g, '');
+  // Số quốc tế +84xxxxxxxxx
+  if (phone.startsWith('+84') && digits.length === 11) {
+    return `+84 ${digits.slice(2, 5)} ${digits.slice(5, 8)} ${digits.slice(8)}`;
+  }
+  // Số 10 chữ số: 0xxx xxx xxx
+  if (digits.length === 10) {
+    return `${digits.slice(0, 4)} ${digits.slice(4, 7)} ${digits.slice(7)}`;
+  }
+  // Số 11 chữ số (cũ): 0xxx xxxx xxx
+  if (digits.length === 11) {
+    return `${digits.slice(0, 4)} ${digits.slice(4, 8)} ${digits.slice(8)}`;
+  }
+  return phone; // giữ nguyên nếu không khớp
+}
+
+const ContactPanel = ({ teacher, subjectTeachers = [], onClose }) => {
+  const [copied, setCopied] = useState(false);
+  const [copyError, setCopyError] = useState(false);
+  const [selectedSubjectTeacher, setSelectedSubjectTeacher] = useState(null);
+  const [copiedSubject, setCopiedSubject] = useState(false);
+
+  const hasValidPhone = teacher && teacher.phone && teacher.phone.trim() !== '';
+
+  const handleCopyPhone = async (phone, isSubject = false) => {
+    try {
+      await navigator.clipboard.writeText(phone);
+      if (isSubject) {
+        setCopiedSubject(true);
+        setTimeout(() => setCopiedSubject(false), 1500);
+      } else {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500);
+      }
+    } catch {
+      setCopyError(true);
+      setTimeout(() => setCopyError(false), 2000);
+    }
+  };
+
+  return (
+    <div className="contact-panel-overlay" onClick={onClose}>
+      <div className="contact-panel" onClick={(e) => e.stopPropagation()}>
+        <button className="contact-panel-close" onClick={onClose} aria-label="Đóng">×</button>
+
+        {/* === GVCN === */}
+        <h3 className="contact-panel-title">
+          <UserCheck size={20} strokeWidth={2} style={{ verticalAlign: 'middle', marginRight: 8, color: '#1d4ed8' }} />
+          Giáo viên Chủ nhiệm
+        </h3>
+        {!teacher ? (
+          <p className="contact-panel-empty">Chưa có thông tin giáo viên chủ nhiệm</p>
+        ) : (
+          <div className="contact-panel-body">
+            <div className="contact-panel-row">
+              <span className="contact-panel-label">Họ và tên</span>
+              <span className="contact-panel-name">{teacher.fullName || 'Chưa cập nhật'}</span>
+            </div>
+            <div className="contact-panel-row">
+              <span className="contact-panel-label">Số điện thoại</span>
+              {hasValidPhone ? (
+                <span
+                  className={`contact-panel-phone contact-panel-phone--clickable${copied ? ' contact-panel-copied' : ''}`}
+                  data-testid="phone-copy"
+                  title="Nhấn để sao chép số điện thoại"
+                  onClick={() => handleCopyPhone(teacher.phone)}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleCopyPhone(teacher.phone); }}
+                >
+                  <Phone size={16} strokeWidth={2} style={{ flexShrink: 0 }} />
+                  {formatPhoneVN(teacher.phone)}
+                  {copied
+                    ? <span className="contact-panel-check"><Check size={14} strokeWidth={3} /> Đã sao chép</span>
+                    : <span className="contact-panel-copy-hint"><Copy size={13} strokeWidth={2} /> Nhấn để sao chép</span>
+                  }
+                </span>
+              ) : (
+                <span className="contact-panel-phone">Chưa cập nhật</span>
+              )}
+            </div>
+            {copyError && (
+              <p className="contact-panel-error">
+                <AlertTriangle size={15} strokeWidth={2} style={{ verticalAlign: 'middle', marginRight: 4 }} />
+                Không thể sao chép. Vui lòng thử lại.
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* === GV BỘ MÔN (optional) === */}
+        {subjectTeachers.length > 0 && (
+          <div className="contact-panel-subject-section">
+            <div className="contact-panel-divider" />
+            <p className="contact-panel-subject-hint">
+              Liên hệ Giáo viên bộ môn để trao đổi về kết quả học tập:
+              {subjectTeachers.some(t => t.avgScore !== null && t.avgScore < 6.5) && (
+                <span className="contact-panel-weak-note">
+                  <AlertTriangle size={13} strokeWidth={2} style={{ verticalAlign: 'middle', marginRight: 3 }} />
+                  Môn điểm thấp được xếp lên đầu
+                </span>
+              )}
+            </p>
+            <select
+              className="contact-panel-subject-select"
+              value={selectedSubjectTeacher ? `${selectedSubjectTeacher.id}__${selectedSubjectTeacher.subject}` : ''}
+              onChange={(e) => {
+                const found = subjectTeachers.find(t => `${t.id}__${t.subject}` === e.target.value);
+                setSelectedSubjectTeacher(found || null);
+                setCopiedSubject(false);
+              }}
+            >
+              <option value="">— Chọn môn học —</option>
+              {subjectTeachers.map((t) => (
+                <option key={`${t.id}__${t.subject}`} value={`${t.id}__${t.subject}`}>
+                  {t.avgScore !== null && t.avgScore < 6.5 ? '[Cần chú ý] ' : ''}{t.subject}
+                  {t.avgScore !== null ? ` — Điểm TB: ${t.avgScore.toFixed(1)}` : ''} — {t.fullName}
+                </option>
+              ))}
+            </select>
+
+            {selectedSubjectTeacher && (
+              <div className="contact-panel-subject-info">
+                <div className="contact-panel-row">
+                  <span className="contact-panel-label">Giáo viên</span>
+                  <span className="contact-panel-name">{selectedSubjectTeacher.fullName}</span>
+                </div>
+                <div className="contact-panel-row">
+                  <span className="contact-panel-label">Số điện thoại</span>
+                  {selectedSubjectTeacher.phone && selectedSubjectTeacher.phone.trim() !== '' ? (
+                    <span
+                      className={`contact-panel-phone contact-panel-phone--clickable${copiedSubject ? ' contact-panel-copied' : ''}`}
+                      title="Nhấn để sao chép số điện thoại"
+                      onClick={() => handleCopyPhone(selectedSubjectTeacher.phone, true)}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleCopyPhone(selectedSubjectTeacher.phone, true); }}
+                    >
+                      <Phone size={16} strokeWidth={2} style={{ flexShrink: 0 }} />
+                      {formatPhoneVN(selectedSubjectTeacher.phone)}
+                      {copiedSubject
+                        ? <span className="contact-panel-check"><Check size={14} strokeWidth={3} /> Đã sao chép</span>
+                        : <span className="contact-panel-copy-hint"><Copy size={13} strokeWidth={2} /> Nhấn để sao chép</span>
+                      }
+                    </span>
+                  ) : (
+                    <span className="contact-panel-phone">Chưa cập nhật</span>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
 // --- MAIN COMPONENT ---
 const ParentDashboard = () => {
   const { user } = useAuth();
@@ -159,13 +323,16 @@ const ParentDashboard = () => {
   const [studentDetail, setStudentDetail] = useState(null);
   const [classInfo, setClassInfo] = useState(null);
   const [todaySchedules, setTodaySchedules] = useState([]);
+  const [allSchedules, setAllSchedules] = useState([]);
   const [todayAttendance, setTodayAttendance] = useState([]);
   const [assignments, setAssignments] = useState([]);
   const [submissions, setSubmissions] = useState([]);
   const [assignmentTab, setAssignmentTab] = useState('pending');
+  const [showOverdueList, setShowOverdueList] = useState(false);
   const [announcements, setAnnouncements] = useState([]);
   const [examScores, setExamScores] = useState([]);
   const [showWeakSubjects, setShowWeakSubjects] = useState(false);
+  const [showContactPanel, setShowContactPanel] = useState(false);
 
   const [aiLoading, setAiLoading] = useState(false);
   const [aiResult, setAiResult] = useState(null); // raw response object
@@ -321,6 +488,7 @@ const ParentDashboard = () => {
 
         todayList.sort((a, b) => (a.period || 0) - (b.period || 0));
         setTodaySchedules(todayList);
+        setAllSchedules(schedules);
 
         // 3. Điểm danh
         try {
@@ -623,7 +791,9 @@ const ParentDashboard = () => {
   }, [todaySchedules, todayAttendance]);
 
   const lessonsToday = todaySchedules.length;
-  const attendedCount = scheduleRowsWithAttendance.filter(r => r.status !== 'pending').length;
+  const presentCount = scheduleRowsWithAttendance.filter(r => r.status === 'present' || r.status === 'late').length;
+  const absentCount = scheduleRowsWithAttendance.filter(r => r.status === 'absent').length;
+  const attendedCount = presentCount; // chỉ tính có mặt thực sự (present + late)
   const attendancePct = lessonsToday > 0 ? Math.round((attendedCount / lessonsToday) * 100) : 0;
 
   // Tính điểm trung bình và xếp loại
@@ -645,10 +815,61 @@ const ParentDashboard = () => {
   const assignmentsOverdue = assignments.filter(a => !submittedIds.has(a.id) && a.dueDate && new Date(a.dueDate) < today0);
   const assignmentsSubmitted = assignments.filter(a => submittedIds.has(a.id));
 
+  // Danh sách GV bộ môn từ toàn bộ TKB (dedup theo teacher+môn, ưu tiên môn điểm thấp)
+  const subjectTeachers = (() => {
+    const homeroomId = classInfo?.homeroomTeacher?.id;
+
+    // Tính điểm TB mỗi môn từ examScores
+    const avgBySubject = {};
+    for (const e of examScores) {
+      const name = e.subject?.name;
+      if (!name) continue;
+      const score = Number(e.score);
+      if (Number.isNaN(score)) continue;
+      if (!avgBySubject[name]) avgBySubject[name] = { sum: score, n: 1 };
+      else { avgBySubject[name].sum += score; avgBySubject[name].n += 1; }
+    }
+
+    // Build danh sách GV từ allSchedules, dedup theo (teacherId + subjectName)
+    const seen = new Set();
+    const result = [];
+    for (const s of allSchedules) {
+      const t = s.teacher;
+      if (!t?.id) continue;
+      if (t.id === homeroomId) continue;
+      const subjectName = scheduleSubjectDisplayName(s, null) || 'Bộ môn';
+      const key = `${t.id}__${subjectName}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const subAvg = avgBySubject[subjectName]
+        ? avgBySubject[subjectName].sum / avgBySubject[subjectName].n
+        : null;
+      result.push({
+        id: t.id,
+        fullName: t.fullName || t.full_name || 'Giáo viên',
+        phone: t.phone || '',
+        subject: subjectName,
+        avgScore: subAvg,
+      });
+    }
+
+    // Sắp xếp: môn điểm thấp (< 6.5) lên đầu, trong nhóm sắp theo điểm tăng dần
+    result.sort((a, b) => {
+      const aWeak = a.avgScore !== null && a.avgScore < 6.5;
+      const bWeak = b.avgScore !== null && b.avgScore < 6.5;
+      if (aWeak && !bWeak) return -1;
+      if (!aWeak && bWeak) return 1;
+      if (a.avgScore !== null && b.avgScore !== null) return a.avgScore - b.avgScore;
+      return 0;
+    });
+
+    return result;
+  })();
+
   // Cảnh báo học tập từ data thật
   const weakSubjects = Array.from(new Set(examScores.filter(e => Number(e.score) < 5.0).map(e => e.subject?.name || 'Môn học')));
   const hasWeakSubject = weakSubjects.length > 0;
-  const hasAbsent = scheduleRowsWithAttendance.some(r => r.status === 'absent');
+  const hasAbsent = absentCount > 0;
   const hasOverdueAssign = assignmentsOverdue.length > 0;
 
   if (loading) {
@@ -717,7 +938,15 @@ const ParentDashboard = () => {
             <div className="pd-stat-info">
               <p className="pd-stat-label">Điểm danh hôm nay</p>
               <p className="pd-stat-value">{lessonsToday > 0 ? `${attendedCount} / ${lessonsToday}` : '—'}</p>
-              <p className="pd-stat-hint">{lessonsToday > 0 ? (attendedCount === lessonsToday ? '✓ Đầy đủ các tiết' : `Còn ${lessonsToday - attendedCount} tiết chưa điểm danh`) : 'Chưa có dữ liệu'}</p>
+              <p className="pd-stat-hint">
+                {lessonsToday === 0
+                  ? 'Chưa có dữ liệu'
+                  : absentCount > 0
+                    ? `⚠️ Vắng ${absentCount} tiết`
+                    : attendedCount === lessonsToday
+                      ? '✓ Đầy đủ các tiết'
+                      : `Còn ${lessonsToday - attendedCount - absentCount} tiết chưa điểm danh`}
+              </p>
             </div>
           </div>
           <div className="pd-stat-card">
@@ -766,9 +995,34 @@ const ParentDashboard = () => {
               </div>
             )}
             {hasOverdueAssign && (
-              <div className="pd-alert pd-alert--warn">
+              <div
+                className="pd-alert pd-alert--warn pd-alert--overdue"
+                onClick={() => setShowOverdueList(v => !v)}
+                style={{ cursor: 'pointer' }}
+                title="Click để xem danh sách bài quá hạn"
+              >
                 <span className="pd-alert-icon">📌</span>
-                <span>Có {assignmentsOverdue.length} bài tập đã quá hạn chưa nộp</span>
+                <span style={{ flex: 1 }}>
+                  Có <strong>{assignmentsOverdue.length}</strong> bài tập đã quá hạn chưa nộp
+                  <span className="pd-overdue-hint"> — click để xem</span>
+                </span>
+                <span style={{ fontSize: '0.8rem', color: '#92400e' }}>{showOverdueList ? '▲' : '▼'}</span>
+                {showOverdueList && (
+                  <ul className="pd-overdue-list" onClick={e => e.stopPropagation()}>
+                    {assignmentsOverdue.map((a) => {
+                      const dLeft = daysUntilDue(a.dueDate || a.due_date);
+                      return (
+                        <li key={a.id} className="pd-overdue-item">
+                          <span className="pd-overdue-dot">●</span>
+                          <span className="pd-overdue-title">{a.title}</span>
+                          {dLeft !== null && (
+                            <span className="pd-overdue-days">Trễ {Math.abs(dLeft)} ngày</span>
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
               </div>
             )}
           </div>
@@ -776,8 +1030,8 @@ const ParentDashboard = () => {
 
         {/* Nút hành động nhanh (CTA) */}
         <div className="pd-cta-bar">
-          <button className="pd-cta-btn pd-cta-btn--primary" onClick={() => alert('Tính năng sẽ được cập nhật vào sau này')}>
-            📞 Liên hệ giáo viên
+          <button className="pd-cta-btn pd-cta-btn--primary" onClick={() => setShowContactPanel(true)} disabled={loadingDetails}>
+            📞 Liên hệ Giáo viên
           </button>
           <button className="pd-cta-btn" onClick={() => navigate('/exam-scores')}>
             📊 Xem chi tiết học tập
@@ -1131,12 +1385,14 @@ const ParentDashboard = () => {
                 <button
                   className={`pd-tab ${assignmentTab === 'pending' ? 'pd-tab--active' : ''}`}
                   onClick={() => setAssignmentTab('pending')}
+                  title="Bài còn hạn nhưng chưa nộp"
                 >
                   Chưa nộp {assignmentsNew.length > 0 && <span className="pd-tab-badge">{assignmentsNew.length}</span>}
                 </button>
                 <button
                   className={`pd-tab ${assignmentTab === 'overdue' ? 'pd-tab--active pd-tab--danger' : ''}`}
                   onClick={() => setAssignmentTab('overdue')}
+                  title="Bài đã hết hạn mà chưa nộp"
                 >
                   Quá hạn {assignmentsOverdue.length > 0 && <span className="pd-tab-badge pd-tab-badge--danger">{assignmentsOverdue.length}</span>}
                 </button>
@@ -1261,6 +1517,15 @@ const ParentDashboard = () => {
             </section>
           </div>
         </div>
+
+        {/* ContactPanel — Liên hệ GVCN */}
+        {showContactPanel && (
+          <ContactPanel
+            teacher={classInfo?.homeroomTeacher ?? null}
+            subjectTeachers={subjectTeachers}
+            onClose={() => setShowContactPanel(false)}
+          />
+        )}
       </div>
     );
   }

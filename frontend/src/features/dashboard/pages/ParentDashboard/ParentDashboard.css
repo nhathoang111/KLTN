@@ -994,3 +994,278 @@
   color: #334155;
   line-height: 1.6;
 }
+
+
+/* ============================================================
+   CONTACT PANEL — Liên hệ Giáo viên Chủ nhiệm (Parent only)
+   ============================================================ */
+
+.contact-panel-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: pd-fadein 0.2s ease;
+}
+
+.contact-panel {
+  background: #ffffff;
+  border-radius: 20px;
+  padding: 32px 36px 28px;
+  min-width: 340px;
+  max-width: 440px;
+  width: 90%;
+  position: relative;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.18);
+  animation: pd-fadein 0.25s ease;
+}
+
+.contact-panel-close {
+  position: absolute;
+  top: 14px;
+  right: 18px;
+  background: #f1f5f9;
+  border: none;
+  border-radius: 50%;
+  width: 32px;
+  height: 32px;
+  font-size: 1.2rem;
+  line-height: 1;
+  color: #64748b;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, color 0.15s;
+}
+
+.contact-panel-close:hover {
+  background: #e2e8f0;
+  color: #0f172a;
+}
+
+.contact-panel-title {
+  margin: 0 0 24px;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.contact-panel-empty {
+  color: #64748b;
+  font-size: 0.9rem;
+  margin: 0;
+  text-align: center;
+  padding: 12px 0;
+}
+
+.contact-panel-body {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.contact-panel-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.contact-panel-label {
+  font-size: 0.8rem;
+  color: #64748b;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.contact-panel-name {
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: #1d4ed8;
+}
+
+.contact-panel-phone {
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: #1d4ed8;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.contact-panel-phone--clickable {
+  cursor: pointer;
+  border-radius: 8px;
+  padding: 4px 8px;
+  margin: -4px -8px;
+  transition: background 0.15s;
+}
+
+.contact-panel-phone--clickable:hover {
+  background: #eff6ff;
+}
+
+.contact-panel-copied {
+  color: #16a34a !important;
+}
+
+.contact-panel-check {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #16a34a;
+  background: #dcfce7;
+  border: 1px solid #86efac;
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+
+.contact-panel-error {
+  font-size: 0.85rem;
+  color: #b91c1c;
+  background: #fee2e2;
+  border: 1px solid #fca5a5;
+  border-radius: 8px;
+  padding: 8px 12px;
+  margin: 0;
+}
+
+/* ============================================================
+   OVERDUE ASSIGNMENT DROPDOWN (Parent only)
+   ============================================================ */
+
+.pd-alert--overdue {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.pd-overdue-hint {
+  font-size: 0.78rem;
+  color: #92400e;
+  opacity: 0.75;
+  margin-left: 4px;
+}
+
+.pd-overdue-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  animation: pd-fadein 0.2s ease;
+}
+
+.pd-overdue-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  border-radius: 8px;
+  padding: 7px 12px;
+}
+
+.pd-overdue-dot {
+  color: #dc2626;
+  font-size: 0.5rem;
+  flex-shrink: 0;
+}
+
+.pd-overdue-title {
+  flex: 1;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #7c2d12;
+}
+
+.pd-overdue-days {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #dc2626;
+  background: #fee2e2;
+  border: 1px solid #fca5a5;
+  padding: 2px 8px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+/* === Contact Panel — Subject Teacher Section === */
+
+.contact-panel-divider {
+  height: 1px;
+  background: #e2e8f0;
+  margin: 20px 0 16px;
+}
+
+.contact-panel-subject-hint {
+  font-size: 0.82rem;
+  color: #64748b;
+  margin: 0 0 10px;
+  line-height: 1.5;
+}
+
+.contact-panel-subject-select {
+  width: 100%;
+  padding: 9px 12px;
+  border: 1.5px solid #cbd5e1;
+  border-radius: 10px;
+  font-size: 0.88rem;
+  color: #1e293b;
+  background: #f8fafc;
+  cursor: pointer;
+  outline: none;
+  transition: border-color 0.15s;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  padding-right: 32px;
+}
+
+.contact-panel-subject-select:focus {
+  border-color: #1d4ed8;
+}
+
+.contact-panel-subject-info {
+  margin-top: 14px;
+  padding: 14px 16px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  animation: pd-fadein 0.2s ease;
+}
+
+.contact-panel-copy-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: #94a3b8;
+  margin-left: 6px;
+}
+
+.contact-panel-weak-note {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #b45309;
+  background: #fef3c7;
+  border: 1px solid #fcd34d;
+  padding: 2px 8px;
+  border-radius: 6px;
+  margin-left: 6px;
+  vertical-align: middle;
+}
