@@ -21,12 +21,21 @@ const PERIOD_TIMES = [
   { start: '13:50', end: '14:35' }, { start: '14:40', end: '15:25' },
   { start: '15:30', end: '16:15' }, { start: '16:20', end: '17:05' },
 ];
-///
 function periodTimeRange(period) {
   const p = Number(period);
   if (!p || p < 1 || p > PERIOD_TIMES.length) return '—';
   const { start, end } = PERIOD_TIMES[p - 1];
   return `${start} - ${end}`;
+}
+
+// Trả về số tiết (1-based) đang diễn ra tại thời điểm hiện tại, hoặc null
+function getCurrentPeriod(nowMin) {
+  for (let i = 0; i < PERIOD_TIMES.length; i++) {
+    const [sh, sm] = PERIOD_TIMES[i].start.split(':').map(Number);
+    const [eh, em] = PERIOD_TIMES[i].end.split(':').map(Number);
+    if (nowMin >= sh * 60 + sm && nowMin <= eh * 60 + em) return i + 1;
+  }
+  return null;
 }
 
 function scheduleDayOfWeekFromRow(s) {
@@ -162,6 +171,19 @@ const ParentDashboard = () => {
   const [aiResult, setAiResult] = useState(null); // raw response object
   const [aiError, setAiError] = useState('');
   const [aiExpanded, setAiExpanded] = useState(false);
+
+  // Giờ hiện tại (phút từ 00:00) — tự cập nhật mỗi 30 giây để highlight tiết đang học
+  const [nowMinutes, setNowMinutes] = useState(() => {
+    const n = new Date();
+    return n.getHours() * 60 + n.getMinutes();
+  });
+  useEffect(() => {
+    const tick = setInterval(() => {
+      const n = new Date();
+      setNowMinutes(n.getHours() * 60 + n.getMinutes());
+    }, 30000);
+    return () => clearInterval(tick);
+  }, []);
 
   const schoolId = user?.school?.id;
 
@@ -802,19 +824,36 @@ const ParentDashboard = () => {
                       scheduleRowsWithAttendance.map(({ schedule: s, status, statusText }) => {
                         const subj = scheduleSubjectDisplayName(s, '—');
                         const hue = hueFromString(subj);
+                        const thisPeriod = Number(s.period);
+                        const activePeriod = getCurrentPeriod(nowMinutes);
+                        const isLive = thisPeriod > 0 && thisPeriod === activePeriod;
                         return (
-                          <tr key={s.id} className={status === 'pending' ? 'sd2-row-pending' : ''}>
-                            <td>{s.period ?? '—'}</td>
+                          <tr
+                            key={s.id}
+                            className={[
+                              isLive ? 'sd2-row-live' : '',
+                              !isLive && status === 'pending' ? 'sd2-row-pending' : '',
+                            ].filter(Boolean).join(' ')}
+                          >
+                            <td>
+                              <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                {isLive && <span className="sd2-live-dot" title="Đang diễn ra" />}
+                                {s.period ?? '—'}
+                              </span>
+                            </td>
                             <td className="sd2-nowrap">{periodTimeRange(s.period)}</td>
                             <td>
                               <span className="sd2-subj-cell">
                                 <span className="sd2-subj-dot" style={{ background: `hsl(${hue} 70% 52%)` }} aria-hidden />
                                 {subj}
+                                {isLive && <span className="sd2-live-badge">Đang học</span>}
                               </span>
                             </td>
                             <td>{s.teacher?.fullName ?? s.teacher?.full_name ?? '—'}</td>
                             <td>
-                              {status === 'pending' ? (
+                              {isLive ? (
+                                <span className="sd2-pill sd2-pill--live">🟢 Đang diễn ra</span>
+                              ) : status === 'pending' ? (
                                 <span className="sd2-pill sd2-pill--wait">{statusText}</span>
                               ) : status === 'absent' ? (
                                 <span className="sd2-pill sd2-pill--danger">{statusText}</span>

@@ -4,6 +4,64 @@
     min-height: 100vh;
 }
 
+/* ===== TIẾT ĐANG HỌC — HIGHLIGHT REALTIME ===== */
+.sd2-row-live {
+  background: linear-gradient(90deg, #eff6ff 0%, #f0fdf4 100%);
+  outline: 2px solid #22c55e;
+  outline-offset: -2px;
+  position: relative;
+  animation: pd-fadein 0.4s ease;
+}
+
+.sd2-row-live td {
+  font-weight: 600;
+}
+
+/* Chấm nhấp nháy đỏ bên cạnh số tiết */
+.sd2-live-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #22c55e;
+  flex-shrink: 0;
+  animation: sd2-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes sd2-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.4; transform: scale(0.75); }
+}
+
+/* Badge "Đang học" bên cạnh tên môn */
+.sd2-live-badge {
+  display: inline-block;
+  background: #dcfce7;
+  color: #15803d;
+  border: 1px solid #86efac;
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 1px 7px;
+  border-radius: 999px;
+  letter-spacing: 0.02em;
+  vertical-align: middle;
+  margin-left: 4px;
+  text-transform: uppercase;
+}
+
+/* Pill trạng thái tiết đang diễn ra */
+.sd2-pill--live {
+  background: #dcfce7;
+  color: #15803d;
+  border: 1px solid #86efac;
+  display: inline-block;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
 .child-selection-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
