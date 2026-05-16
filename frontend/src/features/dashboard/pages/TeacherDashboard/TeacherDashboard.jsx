@@ -40,7 +40,6 @@ const TeacherDashboard = () => {
   const [infoQuestion, setInfoQuestion] = useState('');
   const [infoLoading, setInfoLoading] = useState(false);
   const [infoAnswer, setInfoAnswer] = useState('');
-  const [infoData, setInfoData] = useState(null);
   const [infoError, setInfoError] = useState('');
 
   const teacherId = user?.id;
@@ -277,7 +276,6 @@ const TeacherDashboard = () => {
       const q = String(infoQuestion || '').trim();
       setInfoError('');
       setInfoAnswer('');
-      setInfoData(null);
       if (!q) {
         setInfoError('Vui lòng nhập câu hỏi.');
         return;
@@ -290,7 +288,6 @@ const TeacherDashboard = () => {
         return;
       }
       setInfoAnswer(String(r?.answer || '').trim());
-      setInfoData(r?.data ?? null);
     } catch (e) {
       const msg = e?.response?.data?.message || e?.response?.data?.error || e?.message || 'Tra cứu thất bại';
       setInfoError(String(msg));
@@ -372,13 +369,6 @@ const TeacherDashboard = () => {
           <div className="td-aiq-answer">
             {infoAnswer}
           </div>
-        )}
-
-        {infoData && (
-          <details className="td-aiq-details">
-            <summary className="td-aiq-summary">Xem dữ liệu trả về</summary>
-            <pre className="td-aiq-pre">{JSON.stringify(infoData, null, 2)}</pre>
-          </details>
         )}
       </div>
 

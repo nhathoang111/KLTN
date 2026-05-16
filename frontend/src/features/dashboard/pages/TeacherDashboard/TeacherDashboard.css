@@ -175,28 +175,6 @@
   white-space: pre-line;
 }
 
-.td-aiq-details {
-  margin-top: 10px;
-}
-
-.td-aiq-summary {
-  cursor: pointer;
-  color: #4f46e5;
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.td-aiq-pre {
-  margin-top: 8px;
-  padding: 10px 12px;
-  border-radius: 12px;
-  background: #0b1020;
-  color: #e5e7eb;
-  overflow: auto;
-  max-height: 240px;
-  font-size: 12px;
-}
-
 .td-card-title {
   font-size: 16px;
   font-weight: 600;
