@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../../auth/context/AuthContext';
+import { BarChart3, Bell, Building2, CheckCircle2, Plus, School, UsersRound } from 'lucide-react';
 import api from '../../../../shared/lib/api';
+import NotificationBellPopup from '../../../../shared/components/notifications/NotificationBellPopup';
 import './SuperAdminDashboard.css';
 
 const formatSchoolStatusLabel = (status) => {
@@ -36,6 +38,7 @@ const SuperAdminDashboard = () => {
     inactive: 0,
   });
   const [recentSchools, setRecentSchools] = useState([]);
+  const [notifications, setNotifications] = useState([]);
   const [roleStats, setRoleStats] = useState({
     ADMIN: 0,
     TEACHER: 0,
@@ -49,17 +52,24 @@ const SuperAdminDashboard = () => {
 
   const fetchStats = async () => {
     try {
-      const [dashboardRes, schoolsRes, usersRes] = await Promise.all([
+      const [dashboardRes, schoolsRes, usersRes, announcementsRes] = await Promise.all([
         api.get('/dashboard'),
         api.get('/schools'),
         api.get('/users?userRole=SUPER_ADMIN'),
+        api.get('/announcements').catch(() => ({ data: { announcements: [] } })),
       ]);
 
       const dashboardStats = dashboardRes?.data?.stats || {};
       const schoolsData = schoolsRes.data.schools || [];
       const usersData = usersRes.data.users || [];
+      const announcementsData = announcementsRes.data.announcements || [];
 
       setSchools(schoolsData);
+      setNotifications(
+        [...announcementsData]
+          .sort((a, b) => new Date(b.createdAt || b.created_at || 0) - new Date(a.createdAt || a.created_at || 0))
+          .slice(0, 8)
+      );
 
       const activeSchools = schoolsData.filter((school) => school.status === 'ACTIVE').length;
       const pausedSchools = schoolsData.filter((school) => school.status === 'LOCKED').length;
@@ -103,9 +113,9 @@ const SuperAdminDashboard = () => {
   };
 
   const quickActions = [
-    { title: 'Thêm trường mới', badge: null, path: '/schools/create' },
-    { title: 'Quản lý người dùng', badge: stats.users || null, path: '/users?userRole=SUPER_ADMIN' },
-    { title: 'Thống kê toàn hệ thống', badge: null, path: '/platform-reports' },
+    { title: 'Thêm trường mới', badge: null, path: '/schools/create', Icon: Plus },
+    { title: 'Quản lý người dùng', badge: stats.users || null, path: '/users?userRole=SUPER_ADMIN', Icon: UsersRound },
+    { title: 'Thống kê toàn hệ thống', badge: null, path: '/platform-reports', Icon: BarChart3 },
   ];
 
   const formatDate = (dateString) => {
@@ -153,13 +163,18 @@ const SuperAdminDashboard = () => {
         </div>
         <div className="sa-topbar-right">
           <div className="sa-topbar-icons">
-            <button type="button" className="sa-icon-btn sa-noti" aria-label="Thông báo">
-              <span className="sa-icon-bell" />
-              <span className="sa-noti-dot" />
-            </button>
-            <button type="button" className="sa-icon-btn" aria-label="Tin nhắn">
-              <span className="sa-icon-bell sa-icon-bell--outline" />
-            </button>
+            <NotificationBellPopup
+              announcements={notifications}
+              user={user}
+              buttonClassName="sa-icon-btn sa-noti"
+              renderIcon={() => (
+                <>
+                  <Bell size={19} strokeWidth={2.2} />
+                  {notifications.length > 0 ? <span className="sa-noti-dot" /> : null}
+                </>
+              )}
+              showBadge={false}
+            />
           </div>
           <div className="sa-user-chip">
             <div className="sa-user-avatar">
@@ -175,28 +190,28 @@ const SuperAdminDashboard = () => {
 
       <div className="sa-kpi-row">
         <div className="sa-kpi-card">
-          <div className="sa-kpi-icon sa-kpi-icon--home" />
+          <div className="sa-kpi-icon sa-kpi-icon--home"><School size={22} /></div>
           <div className="sa-kpi-content">
             <span className="sa-kpi-label">Tổng số trường</span>
             <span className="sa-kpi-value">{stats.schools}</span>
           </div>
         </div>
         <div className="sa-kpi-card">
-          <div className="sa-kpi-icon sa-kpi-icon--user" />
+          <div className="sa-kpi-icon sa-kpi-icon--user"><UsersRound size={22} /></div>
           <div className="sa-kpi-content">
             <span className="sa-kpi-label">Tổng người dùng</span>
             <span className="sa-kpi-value">{stats.users}</span>
           </div>
         </div>
         <div className="sa-kpi-card">
-          <div className="sa-kpi-icon sa-kpi-icon--check" />
+          <div className="sa-kpi-icon sa-kpi-icon--check"><Building2 size={22} /></div>
           <div className="sa-kpi-content">
             <span className="sa-kpi-label">Tổng số lớp học</span>
             <span className="sa-kpi-value">{stats.classes}</span>
           </div>
         </div>
         <div className="sa-kpi-card">
-          <div className="sa-kpi-icon sa-kpi-icon--home" />
+          <div className="sa-kpi-icon sa-kpi-icon--student"><CheckCircle2 size={22} /></div>
           <div className="sa-kpi-content">
             <span className="sa-kpi-label">Tổng số học sinh</span>
             <span className="sa-kpi-value">{stats.students}</span>
@@ -305,22 +320,25 @@ const SuperAdminDashboard = () => {
             <span className="sa-card-title">Quick Actions</span>
           </div>
           <div className="sa-quick-actions">
-            {quickActions.map((action) => (
-              <button
-                key={action.title}
-                type="button"
-                className="sa-quick-action-btn"
-                onClick={() => {
-                  window.location.href = action.path;
-                }}
-              >
-                <span className="sa-quick-action-left">
-                  <span className="sa-quick-action-icon" />
-                  <span>{action.title}</span>
-                </span>
-                {action.badge && <span className="sa-quick-action-badge">{action.badge}</span>}
-              </button>
-            ))}
+            {quickActions.map((action) => {
+              const Icon = action.Icon;
+              return (
+                <button
+                  key={action.title}
+                  type="button"
+                  className="sa-quick-action-btn"
+                  onClick={() => {
+                    window.location.href = action.path;
+                  }}
+                >
+                  <span className="sa-quick-action-left">
+                    <span className="sa-quick-action-icon"><Icon size={15} /></span>
+                    <span>{action.title}</span>
+                  </span>
+                  {action.badge && <span className="sa-quick-action-badge">{action.badge}</span>}
+                </button>
+              );
+            })}
           </div>
         </div>
       </div>

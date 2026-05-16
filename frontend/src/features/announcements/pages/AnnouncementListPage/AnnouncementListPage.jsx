@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { useAuth } from '../../../auth/context/AuthContext';
 import { Pencil, Plus, Trash2 } from 'lucide-react';
 import api from '../../../../shared/lib/api';
@@ -7,6 +8,7 @@ import AnnouncementFormModal from '../../components/AnnouncementFormModal';
 
 const AnnouncementListPage = () => {
   const { user } = useAuth();
+  const location = useLocation();
   const [announcements, setAnnouncements] = useState([]);
   const [schools, setSchools] = useState([]);
   const [classes, setClasses] = useState([]);
@@ -158,6 +160,20 @@ const AnnouncementListPage = () => {
       fetchData();
     }
   }, [user, selectedSchoolId, studentClassId]);
+
+  useEffect(() => {
+    if (loading || announcements.length === 0) return;
+    const targetId = new URLSearchParams(location.search).get('announcementId');
+    if (!targetId) return;
+    const el = document.getElementById(`announcement-${targetId}`);
+    if (!el) return;
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    el.classList.add('announcement-card--focus');
+    const timer = window.setTimeout(() => {
+      el.classList.remove('announcement-card--focus');
+    }, 1800);
+    return () => window.clearTimeout(timer);
+  }, [announcements, loading, location.search]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -554,7 +570,11 @@ const AnnouncementListPage = () => {
 
       <div className="announcements-container grid grid-cols-1 gap-4 lg:grid-cols-2">
         {announcements.map((announcement) => (
-          <div key={announcement.id} className="announcement-card rounded-2xl border border-slate-200 bg-white/95 p-4 shadow-xl shadow-slate-900/5">
+          <div
+            key={announcement.id}
+            id={`announcement-${announcement.id}`}
+            className="announcement-card rounded-2xl border border-slate-200 bg-white/95 p-4 shadow-xl shadow-slate-900/5"
+          >
             <div className="announcement-header">
               <h3>{announcement.title}</h3>
               <div className="announcement-meta">
@@ -688,4 +708,3 @@ const AnnouncementListPage = () => {
 };
 
 export default AnnouncementListPage;
-

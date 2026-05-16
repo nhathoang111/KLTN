@@ -80,6 +80,11 @@
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15);
 }
 
+.announcement-card--focus {
+  border-color: #38bdf8 !important;
+  box-shadow: 0 0 0 4px rgba(56, 189, 248, 0.22), 0 12px 40px rgba(15, 23, 42, 0.16) !important;
+}
+
 .announcement-header {
   margin-bottom: 1rem;
   padding-bottom: 1rem;
@@ -168,4 +173,3 @@
     padding: 1rem;
   }
 }
-

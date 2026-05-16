@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../../auth/context/AuthContext';
 import api from '../../../../shared/lib/api';
+import NotificationBellPopup from '../../../../shared/components/notifications/NotificationBellPopup';
 import './AdminDashboard.css';
 
 const AdminDashboard = () => {
@@ -229,9 +230,12 @@ const AdminDashboard = () => {
             <span className="ad-search-icon" />
             <input placeholder="Tìm kiếm nhanh..." />
           </div>
-          <button className="ad-topbar-icon-btn">
-            <span className="ad-topbar-icon-bell" />
-          </button>
+          <NotificationBellPopup
+            announcements={notifications}
+            user={user}
+            buttonClassName="ad-topbar-icon-btn"
+            renderIcon={() => <span className="ad-topbar-icon-bell" />}
+          />
           <div className="ad-user-chip">
             <div className="ad-user-avatar">
               {user?.fullName ? user.fullName.charAt(0).toUpperCase() : 'A'}

@@ -20,6 +20,7 @@ import {
 import api from '../../../../shared/lib/api';
 import { formatGradeAnalysisForDisplay } from '../../../../shared/lib/formatGradeAnalysisForDisplay';
 import { scheduleSubjectDisplayName } from '../../../../shared/lib/scheduleLabels';
+import NotificationBellPopup from '../../../../shared/components/notifications/NotificationBellPopup';
 import { useAuth } from '../../../auth/context/AuthContext';
 import './StudentDashboard.css';
 
@@ -481,10 +482,13 @@ const StudentDashboard = () => {
             <Calendar size={16} strokeWidth={2} aria-hidden />
             {headerDate}
           </time>
-          <button type="button" className="sd2-icon-btn" aria-label="Thông báo">
-            <Bell size={20} strokeWidth={2} />
-            {announcements.length > 0 ? <span className="sd2-badge">{Math.min(announcements.length, 9)}</span> : null}
-          </button>
+          <NotificationBellPopup
+            announcements={announcements}
+            user={user}
+            buttonClassName="sd2-icon-btn"
+            badgeClassName="sd2-badge"
+            renderIcon={() => <Bell size={20} strokeWidth={2} />}
+          />
         </div>
       </header>
 
