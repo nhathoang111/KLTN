@@ -190,13 +190,14 @@ const ScheduleFullCalendarPage = () => {
             schoolId: Number(schoolId),
             includeHomeroom: true,
           });
+          setSelectedClassId('');
         } catch (_) {
           allClasses = [];
         }
       }
 
       setClasses(allClasses);
-      if (allClasses.length > 0 && !selectedClassId) {
+      if (userRole !== 'TEACHER' && userRole !== 'PARENT' && allClasses.length > 0 && !selectedClassId) {
         setSelectedClassId(String(allClasses[0].id));
       }
 
@@ -259,13 +260,7 @@ const ScheduleFullCalendarPage = () => {
         schedulesData = response.data.schedules || [];
       } else if (userRole === 'TEACHER' && user?.id) {
         const response = await api.get(`/schedules/teacher/${user.id}`);
-        const allTeacherSchedules = response.data.schedules || [];
-        schedulesData = selectedClassId
-          ? allTeacherSchedules.filter((schedule) => {
-              const classId = schedule.classEntity?.id || schedule.class_id;
-              return classId && String(classId) === selectedClassId;
-            })
-          : allTeacherSchedules;
+        schedulesData = response.data.schedules || [];
       } else if (selectedClassId) {
         const response = await api.get(`/schedules/class/${selectedClassId}`);
         schedulesData = response.data.schedules || [];
@@ -487,7 +482,7 @@ const ScheduleFullCalendarPage = () => {
         )}
       </div>
 
-      {!isStudent && (
+      {!isStudent && !isTeacher && !isParent && (
         <div className="schedule-fullcalendar-filters">
           {!isTeacher && !isParent && (
             <label htmlFor="school-year-select-fullcalendar">Niên khóa:</label>

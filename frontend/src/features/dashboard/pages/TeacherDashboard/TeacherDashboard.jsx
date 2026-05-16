@@ -20,6 +20,50 @@ const PERIOD_TIMES = [
   { start: '16:20', end: '17:05' },
 ];
 
+const getSchoolYearLabel = (classEntity) => {
+  const sy = classEntity?.schoolYear ?? classEntity?.school_year;
+  if (sy && typeof sy === 'object') return String(sy.name || '').trim();
+  if (typeof sy === 'string') return sy.trim();
+  const nameMatch = String(classEntity?.name || '').match(/(\d{4}\s*-\s*\d{4})/);
+  if (nameMatch) return nameMatch[1].replace(/\s+/g, '');
+  return '';
+};
+
+const parseSchoolYearStart = (schoolYearName) => {
+  const match = String(schoolYearName || '').match(/(\d{4})/);
+  return match ? Number(match[1]) : -1;
+};
+
+const isHomeroomClassOfTeacher = (classEntity, teacherId) => {
+  const homeroomTeacherId = Number(classEntity?.homeroomTeacher?.id ?? classEntity?.homeroomTeacherId);
+  const currentTeacherId = Number(teacherId);
+  return Number.isFinite(homeroomTeacherId)
+    && Number.isFinite(currentTeacherId)
+    && homeroomTeacherId === currentTeacherId;
+};
+
+const sortClassesByGradeAndName = (classes) => {
+  return [...classes].sort((a, b) => {
+    const gradeDiff = Number(a?.gradeLevel || 0) - Number(b?.gradeLevel || 0);
+    if (gradeDiff !== 0) return gradeDiff;
+    const classDiff = Number(a?.classNumber || 0) - Number(b?.classNumber || 0);
+    if (classDiff !== 0) return classDiff;
+    return (a?.name || '').localeCompare(b?.name || '', 'vi', { numeric: true });
+  });
+};
+
+const latestSchoolYearStart = (classes) => {
+  return (classes || []).reduce((max, c) => {
+    const startYear = parseSchoolYearStart(getSchoolYearLabel(c));
+    return startYear > max ? startYear : max;
+  }, -1);
+};
+
+const filterClassesByStartYear = (classes, startYear) => {
+  if (startYear < 0) return classes || [];
+  return (classes || []).filter((c) => parseSchoolYearStart(getSchoolYearLabel(c)) === startYear);
+};
+
 const TeacherDashboard = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -172,7 +216,7 @@ const TeacherDashboard = () => {
     });
     if (ids.size === 0) teacherClasses.forEach((c) => ids.add(c.id));
     return ids;
-  }, [allSchedules, teacherClasses]);
+  }, [allSchedules, classSections, teacherClasses]);
 
   // "Danh sách lớp phụ trách" chỉ hiển thị lớp mà giáo viên có lớp học phần.
   const classesFromClassSections = React.useMemo(() => {
@@ -191,14 +235,26 @@ const TeacherDashboard = () => {
     });
   }, [classSections]);
 
+  const homeroomClasses = React.useMemo(() => {
+    return (teacherClasses || []).filter((c) => isHomeroomClassOfTeacher(c, teacherId));
+  }, [teacherClasses, teacherId]);
+
+  const responsibilityClasses = React.useMemo(() => {
+    const homeroomIds = new Set((homeroomClasses || []).map((c) => c?.id).filter(Boolean));
+    return (classesFromClassSections || []).filter((c) => !homeroomIds.has(c?.id));
+  }, [homeroomClasses, classesFromClassSections]);
+
+  const dashboardSchoolYearStart = React.useMemo(() => {
+    return latestSchoolYearStart([...homeroomClasses, ...responsibilityClasses]);
+  }, [homeroomClasses, responsibilityClasses]);
+
   const homeroomClassesList = React.useMemo(() => {
-    return (teacherClasses || []).slice();
-  }, [teacherClasses]);
+    return sortClassesByGradeAndName(filterClassesByStartYear(homeroomClasses, dashboardSchoolYearStart));
+  }, [homeroomClasses, dashboardSchoolYearStart]);
 
   const otherResponsibilityClassesList = React.useMemo(() => {
-    const homeroomIds = new Set((teacherClasses || []).map((c) => c?.id).filter(Boolean));
-    return (classesFromClassSections || []).filter((c) => !homeroomIds.has(c?.id));
-  }, [teacherClasses, classesFromClassSections]);
+    return sortClassesByGradeAndName(filterClassesByStartYear(responsibilityClasses, dashboardSchoolYearStart));
+  }, [responsibilityClasses, dashboardSchoolYearStart]);
   const classesTeachingCount = classIdsTeaching.size;
   const totalStudents = Array.from(classIdsTeaching).reduce(
     (sum, id) => sum + (studentCountByClassId[id] ?? 0),
@@ -497,7 +553,7 @@ const TeacherDashboard = () => {
         {/* Cột phải */}
         <div className="td-right-col">
           <div className="td-card">
-            <h3 className="td-card-title">Lớp chủ nhệm</h3>
+            <h3 className="td-card-title">Lớp chủ nhiệm</h3>
             <ul className="td-class-list">
               {homeroomClassesList.length === 0 ? (
                 <li className="td-empty">Chưa có lớp chủ nhiệm.</li>

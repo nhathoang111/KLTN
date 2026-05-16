@@ -126,6 +126,7 @@ const ScheduleListPage = () => {
           });
           console.log('Teacher class sections:', teacherSections.length);
           console.log('Filtered classes for teacher:', allClasses.length);
+          setSelectedClassId('');
         } catch (sectionError) {
           console.error('Error fetching teacher class sections:', sectionError);
           // If error, show no classes for teacher
@@ -204,7 +205,7 @@ const ScheduleListPage = () => {
         }
       }
 
-      if (allClasses.length > 0 && !selectedClassId) {
+      if (userRole !== 'TEACHER' && userRole !== 'PARENT' && allClasses.length > 0 && !selectedClassId) {
         setSelectedClassId(allClasses[0].id.toString());
       }
     } catch (error) {
@@ -220,7 +221,8 @@ const ScheduleListPage = () => {
     const userRole = user?.role?.name?.toUpperCase();
     if (selectedClassId ||
       (userRole === 'TEACHER' && user?.id) ||
-      (userRole === 'STUDENT' && user?.id)) {
+      (userRole === 'STUDENT' && user?.id) ||
+      (userRole === 'PARENT' && localStorage.getItem('activeStudentId'))) {
       fetchSchedules();
     }
   }, [selectedClassId, user, loading]);
@@ -300,22 +302,11 @@ const ScheduleListPage = () => {
           schedulesData = [];
         }
       } else if (userRole === 'TEACHER' && user?.id) {
-        // For teacher, fetch all their schedules and filter by selected class
+        // For teacher, fetch all their own schedules. Teachers do not choose a class here.
         try {
           const response = await api.get(`/schedules/teacher/${user.id}`);
-          const allTeacherSchedules = response.data.schedules || [];
-          console.log('Teacher schedules fetched:', allTeacherSchedules.length);
-
-          // Filter by selected class if a class is selected
-          if (selectedClassId) {
-            schedulesData = allTeacherSchedules.filter(schedule => {
-              const classId = schedule.classEntity?.id || schedule.class_id;
-              return classId && classId.toString() === selectedClassId;
-            });
-            console.log('Filtered schedules for class', selectedClassId, ':', schedulesData.length);
-          } else {
-            schedulesData = allTeacherSchedules;
-          }
+          schedulesData = response.data.schedules || [];
+          console.log('Teacher schedules fetched:', schedulesData.length);
         } catch (teacherError) {
           console.error('Error fetching teacher schedules:', teacherError);
           schedulesData = [];
@@ -899,7 +890,7 @@ const ScheduleListPage = () => {
         )}
       </div>
 
-      {!isStudent && (
+      {!isStudent && !isTeacher && !isParent && (
         <div className="schedule-filters">
           <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
             <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
@@ -946,7 +937,7 @@ const ScheduleListPage = () => {
         </div>
       )}
 
-      {(selectedClassId || isStudent) && (
+      {(selectedClassId || isStudent || isTeacher || isParent) && (
         <div className="schedule-timetable-wrapper">
           {/* Navigation controls */}
           <div className="timetable-navigation">
