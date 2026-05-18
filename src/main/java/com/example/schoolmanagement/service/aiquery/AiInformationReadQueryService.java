@@ -9,6 +9,7 @@ import com.example.schoolmanagement.entity.Subject;
 import com.example.schoolmanagement.entity.User;
 import com.example.schoolmanagement.exception.BadRequestException;
 import com.example.schoolmanagement.repository.AttendanceRepository;
+import com.example.schoolmanagement.repository.ClassRepository;
 import com.example.schoolmanagement.repository.EnrollmentRepository;
 import com.example.schoolmanagement.repository.ExamScoreRepository;
 import com.example.schoolmanagement.repository.ParentStudentRepository;
@@ -35,6 +36,7 @@ import java.util.stream.Collectors;
 public class AiInformationReadQueryService {
 
     @Autowired private UserRepository userRepository;
+    @Autowired private ClassRepository classRepository;
     @Autowired private EnrollmentRepository enrollmentRepository;
     @Autowired private ExamScoreRepository examScoreRepository;
     @Autowired private AttendanceRepository attendanceRepository;
@@ -406,6 +408,7 @@ public class AiInformationReadQueryService {
     public QueryPayload schoolStatistics(Integer schoolId) {
         List<User> students = userRepository.findBySchoolIdAndRoleName(schoolId, "%STUDENT%");
         long total = students.size();
+        long classes = classRepository.countBySchoolId(schoolId);
         long male = students.stream().filter(u -> eqAny(u.getGender(), "MALE", "NAM")).count();
         long female = students.stream().filter(u -> eqAny(u.getGender(), "FEMALE", "NU", "NỮ")).count();
         List<ExamScore> scores = examScoreRepository.findBySchoolId(schoolId).stream()
@@ -418,12 +421,13 @@ public class AiInformationReadQueryService {
         long gioi = avgByStu.values().stream().filter(v -> v >= 8.0).count();
         long yeu = avgByStu.values().stream().filter(v -> v < 5.0).count();
         Map<String, Object> data = new LinkedHashMap<>();
+        data.put("classCount", classes);
         data.put("totalStudents", total);
         data.put("maleStudents", male);
         data.put("femaleStudents", female);
         data.put("excellentStudents", gioi);
         data.put("weakStudents", yeu);
-        return new QueryPayload(data, "Toàn trường có " + total + " học sinh; giỏi " + gioi + ", yếu " + yeu + ".");
+        return new QueryPayload(data, "Toàn trường hiện có " + classes + " lớp, " + total + " học sinh; giỏi " + gioi + ", yếu " + yeu + ".");
     }
 
     public QueryPayload studentOverview(AuthorizationService.AuthContext ctx,

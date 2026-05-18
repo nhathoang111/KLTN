@@ -8,7 +8,9 @@ import com.example.schoolmanagement.entity.Subject;
 import com.example.schoolmanagement.entity.User;
 import com.example.schoolmanagement.exception.BadRequestException;
 import com.example.schoolmanagement.exception.ForbiddenException;
+import com.example.schoolmanagement.repository.ClassRepository;
 import com.example.schoolmanagement.repository.ParentStudentRepository;
+import com.example.schoolmanagement.repository.UserRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -26,7 +28,7 @@ public class AiInformationQueryService {
     private static final Logger log = LoggerFactory.getLogger(AiInformationQueryService.class);
     private static final double THRESHOLD = 5.0;
 
-    @Autowired private IntentParsingService intentParsingService;
+    @Autowired private AiInformationLlmRouterService aiInformationLlmRouterService;
     @Autowired private EntityExtractionService entityExtractionService;
     @Autowired private AuthorizationService authorizationService;
 
@@ -36,6 +38,8 @@ public class AiInformationQueryService {
     @Autowired private ManagementInfoQueryService managementInfoQueryService;
     @Autowired private AiInformationReadQueryService aiInformationReadQueryService;
     @Autowired private ParentStudentRepository parentStudentRepository;
+    @Autowired private ClassRepository classRepository;
+    @Autowired private UserRepository userRepository;
 
     public AiInformationQueryResponse handle(AiInformationQueryRequest req, Integer userIdHeader, String roleHeader) {
         long started = System.currentTimeMillis();
@@ -45,7 +49,9 @@ public class AiInformationQueryService {
         try {
             AuthorizationService.AuthContext ctx = authorizationService.buildContext(userIdHeader, roleHeader);
 
-            IntentResult intentRes = intentParsingService.parse(question);
+            AiInformationQueryPlan plan = aiInformationLlmRouterService.plan(question, ctx.getRole());
+            Map<String, String> planFilters = plan.getFilters() == null ? Map.of() : plan.getFilters();
+            IntentResult intentRes = new IntentResult(plan.getLegacyAction(), plan.getConfidence(), new LinkedHashMap<>(planFilters));
             AiInformationIntent intent = parseIntent(intentRes.getIntent());
 
             Map<String, String> entitiesForNormalize = new LinkedHashMap<>();
@@ -54,12 +60,24 @@ public class AiInformationQueryService {
             EntityExtractionService.NormalizedEntities ne = entityExtractionService.normalizeEntities(ctx.getSchoolId(), entitiesForNormalize);
             Map<String, Object> entitiesOut = buildEntitiesOut(intentRes, ne);
 
+            QueryResult planned = executePlanIfSupported(plan, ctx, ne, planFilters);
+            if (planned != null) {
+                resp.setIntent(intent.name());
+                resp.setEntities(entitiesOut);
+                resp.setData(planned.data);
+                resp.setAnswer(planned.answer);
+                resp.setSource("GEMINI_QUERY_PLAN_DB");
+                resp.setSuccess(true);
+                resp.setMessage("OK");
+                return resp;
+            }
+
             if (intent == AiInformationIntent.UNKNOWN) {
                 resp.setIntent(AiInformationIntent.UNKNOWN.name());
                 resp.setEntities(entitiesOut);
                 resp.setData(null);
                 resp.setAnswer(unknownIntentAnswer(ctx.getRole()));
-                resp.setSource("RULE_BASED");
+                resp.setSource("GEMINI_ROUTER");
                 resp.setSuccess(true);
                 resp.setMessage("UNKNOWN_INTENT");
                 return resp;
@@ -70,7 +88,7 @@ public class AiInformationQueryService {
             resp.setEntities(entitiesOut);
             resp.setData(qr.data);
             resp.setAnswer(qr.answer);
-            resp.setSource("AI+DB");
+            resp.setSource("GEMINI_ROUTER_DB");
             resp.setSuccess(true);
             resp.setMessage("OK");
 
@@ -108,6 +126,75 @@ public class AiInformationQueryService {
         }
     }
 
+    private QueryResult executePlanIfSupported(
+            AiInformationQueryPlan plan,
+            AuthorizationService.AuthContext ctx,
+            EntityExtractionService.NormalizedEntities ne,
+            Map<String, String> filters
+    ) {
+        if (plan == null) return null;
+        String entity = normalize(plan.getEntity());
+        String operation = normalize(plan.getOperation());
+        if (entity.isBlank() || operation.isBlank() || "unknown".equals(entity) || "unknown".equals(operation)) return null;
+
+        if ("summary".equals(operation) && "school".equals(entity)) {
+            authorizationService.requireAdmin(ctx);
+            var payload = aiInformationReadQueryService.schoolStatistics(ctx.getSchoolId());
+            return new QueryResult(payload.data(), payload.answer());
+        }
+
+        if ("count".equals(operation)) {
+            if ("class".equals(entity)) {
+                if (ne.getClassEntity() != null) {
+                    authorizationService.requireCanAccessClassFull(ctx, ne.getClassEntity().getId());
+                    long count = 1;
+                    return new QueryResult(Map.of("classCount", count, "className", ne.getClassEntity().getName()), "Có 1 lớp khớp với yêu cầu: " + ne.getClassEntity().getName() + ".");
+                }
+                authorizationService.requireAdmin(ctx);
+                long count = classRepository.countBySchoolId(ctx.getSchoolId());
+                return new QueryResult(Map.of("classCount", count), "Toàn trường hiện có " + count + " lớp.");
+            }
+
+            if ("student".equals(entity)) {
+                if (ne.getClassEntity() != null) {
+                    authorizationService.requireCanAccessClassFull(ctx, ne.getClassEntity().getId());
+                    long count = classInfoQueryService.classStudentCount(ne.getClassEntity().getId());
+                    return new QueryResult(
+                            Map.of("classId", ne.getClassEntity().getId(), "className", ne.getClassEntity().getName(), "studentCount", count),
+                            "Lớp " + ne.getClassEntity().getName() + " hiện có " + count + " học sinh."
+                    );
+                }
+                authorizationService.requireAdmin(ctx);
+                long count = userRepository.findBySchoolIdAndRoleName(ctx.getSchoolId(), "%STUDENT%").size();
+                return new QueryResult(Map.of("studentCount", count), "Toàn trường hiện có " + count + " học sinh.");
+            }
+
+            if ("teacher".equals(entity)) {
+                authorizationService.requireAdmin(ctx);
+                long count = userRepository.findBySchoolIdAndRoleName(ctx.getSchoolId(), "%TEACHER%").size();
+                return new QueryResult(Map.of("teacherCount", count), "Toàn trường hiện có " + count + " giáo viên.");
+            }
+
+            if ("parent".equals(entity)) {
+                authorizationService.requireAdmin(ctx);
+                long count = userRepository.findBySchoolIdAndRoleName(ctx.getSchoolId(), "%PARENT%").size();
+                return new QueryResult(Map.of("parentCount", count), "Toàn trường hiện có " + count + " phụ huynh.");
+            }
+        }
+
+        if ("list".equals(operation) && "student".equals(entity) && ne.getClassEntity() != null) {
+            authorizationService.requireCanAccessClassFull(ctx, ne.getClassEntity().getId());
+            var payload = aiInformationReadQueryService.studentsByClass(ne);
+            return new QueryResult(payload.data(), payload.answer());
+        }
+
+        return null;
+    }
+
+    private static String normalize(String value) {
+        return value == null ? "" : value.trim().toLowerCase();
+    }
+
     private QueryResult dispatch(AiInformationIntent intent, AuthorizationService.AuthContext ctx, EntityExtractionService.NormalizedEntities ne, Map<String, String> entities) {
         if (intent == AiInformationIntent.TEACHER_ASSIGNMENTS || intent == AiInformationIntent.ASK_TEACHER_ASSIGNMENTS) {
             if (!"TEACHER".equals(ctx.getRole())) throw new ForbiddenException("Chỉ giáo viên mới dùng truy vấn này.");
@@ -117,6 +204,26 @@ public class AiInformationQueryService {
                     ? "Hiện chưa có phân công giảng dạy (lớp/môn) cho tài khoản này."
                     : "Bạn đang phụ trách " + r.getAssignments().size() + " lớp (theo phân công/TKB).";
             return new QueryResult(data, answer);
+        }
+
+        if (intent == AiInformationIntent.ASK_TEACHER_HOMEROOM_CLASSES) {
+            if (!"TEACHER".equals(ctx.getRole())) throw new ForbiddenException("Chỉ giáo viên mới dùng truy vấn này.");
+            List<ClassEntity> classes = classInfoQueryService.homeroomClasses(ctx.getUserId());
+            List<Map<String, Object>> rows = classes.stream()
+                    .filter(Objects::nonNull)
+                    .map(c -> {
+                        Map<String, Object> row = new LinkedHashMap<>();
+                        row.put("classId", c.getId());
+                        row.put("className", c.getName());
+                        row.put("schoolYear", c.getSchoolYear() != null ? c.getSchoolYear().getName() : null);
+                        row.put("status", c.getStatus());
+                        return row;
+                    })
+                    .toList();
+            String answer = rows.isEmpty()
+                    ? "Hiện tại tài khoản giáo viên này chưa được gán lớp chủ nhiệm nào."
+                    : "Bạn đang chủ nhiệm " + rows.size() + " lớp.";
+            return new QueryResult(Map.of("homeroomClasses", rows), answer);
         }
 
         if (intent == AiInformationIntent.SCHOOL_RISK_OVERVIEW) {
