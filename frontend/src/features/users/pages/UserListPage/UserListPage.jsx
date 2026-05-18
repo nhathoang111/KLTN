@@ -170,14 +170,12 @@ const UserListPage = () => {
 
         await api.delete(`/users/${id}`);
         setUsers(users.filter(user => user.id !== id));
-        setSuccess(`Đã xóa người dùng "${userName || 'này'}" thành công.`);
-
-        setTimeout(() => setSuccess(''), 3000);
+        toast.success(`Đã xóa người dùng "${userName || 'này'}" thành công.`);
 
       } catch (err) {
         const data = err.response?.data || {};
         const errorMessage = data.message || data.error || 'Không thể xóa người dùng. Vui lòng thử lại.';
-        setError(errorMessage);
+        toast.error(errorMessage);
         console.error('Error deleting user:', err.response?.data || err);
       } finally {
         setDeleteLoading(null);
@@ -325,12 +323,11 @@ const UserListPage = () => {
         await api.delete(`/users/${id}`);
       }
       setUsers((prev) => prev.filter((u) => !selectedIds.has(u.id)));
-      setSuccess(`Đã xóa ${count} người dùng.`);
+      toast.success(`Đã xóa ${count} người dùng.`);
       setSelectedIds(new Set());
-      setTimeout(() => setSuccess(''), 3000);
     } catch (err) {
       const data = err.response?.data || {};
-      setError(data.message || data.error || 'Không thể xóa người dùng đã chọn. Vui lòng thử lại.');
+      toast.error(data.message || data.error || 'Không thể xóa người dùng đã chọn. Vui lòng thử lại.');
     } finally {
       setBulkActionLoading(false);
     }
@@ -434,7 +431,6 @@ const UserListPage = () => {
         isSuperAdmin={isSuperAdmin}
         onClose={() => setShowCreateModal(false)}
         onCreated={() => {
-          toast.success(isSuperAdmin ? 'Tạo quản trị viên thành công.' : 'Tạo người dùng thành công.');
           fetchUsers();
         }}
       />
@@ -1075,7 +1071,6 @@ const UserListPage = () => {
 };
 
 export default UserListPage;
-
 
 
 
