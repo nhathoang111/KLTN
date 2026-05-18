@@ -260,6 +260,11 @@ public class GeminiGradeAnalysisService {
         return parsed;
     }
 
+    public String generateJson(String prompt, String responseSchemaJson, int maxOutputTokens, int timeoutSeconds) throws Exception {
+        GeminiCallResult gemini = callGemini(prompt, responseSchemaJson, maxOutputTokens, timeoutSeconds);
+        return gemini.analysisText;
+    }
+
     private GeminiCallResult callGemini(String prompt) throws Exception {
         String schema = "{"
                 + "\"type\":\"OBJECT\","
