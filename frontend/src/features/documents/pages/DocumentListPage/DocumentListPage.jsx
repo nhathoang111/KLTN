@@ -6,6 +6,7 @@ import React, { useState, useEffect } from 'react';
 import api from '../../../../shared/lib/api';
 import './DocumentListPage.css';
 import { Pencil, Trash2 } from 'lucide-react';
+import { confirmDialog } from '../../../../shared/lib/confirmDialog';
 
 const DocumentListPage = () => {
   const [documents, setDocuments] = useState([]);
@@ -104,13 +105,18 @@ const DocumentListPage = () => {
   };
 
   const handleDelete = async (id) => {
-    if (window.confirm('Are you sure you want to delete this document?')) {
-      try {
-        await api.delete(`/documents/${id}`);
-        fetchData();
-      } catch (error) {
-        console.error('Error deleting document:', error);
-      }
+    const confirmed = await confirmDialog({
+      title: 'Xóa tài liệu',
+      message: 'Bạn có chắc chắn muốn xóa tài liệu này?',
+      confirmText: 'Xóa',
+    });
+    if (!confirmed) return;
+
+    try {
+      await api.delete(`/documents/${id}`);
+      fetchData();
+    } catch (error) {
+      console.error('Error deleting document:', error);
     }
   };
 
@@ -394,7 +400,6 @@ const DocumentListPage = () => {
 };
 
 export default DocumentListPage;
-
 
 
 

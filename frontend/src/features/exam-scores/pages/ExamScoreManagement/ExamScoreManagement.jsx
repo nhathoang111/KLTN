@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useMemo } from 'react';
+﻿import React, { useState, useEffect, useMemo } from 'react';
+import { toast } from 'react-toastify';
 import api from '../../../../shared/lib/api';
 import './ExamScoreManagement.css';
 import { useAuth } from '../../../auth/context/AuthContext';
@@ -11,6 +12,7 @@ import {
   teacherSubjectIdsFromSections,
 } from '../../../../shared/lib/teacherScope';
 import { isTeachingActiveClass } from '../../../../shared/lib/classStatus';
+import { confirmDialog } from '../../../../shared/lib/confirmDialog';
 
 const ADMIN_VIEW_SEMESTERS = [
   { value: '1', label: 'Học kỳ 1' },
@@ -153,7 +155,7 @@ function AdminXemDiemSection({ classes, subjects, user }) {
 
   const downloadCsv = () => {
     if (!classIdNum || !subjectIdNum || !filteredRows.length) {
-      alert('Chọn lớp, môn và đảm bảo có danh sách học sinh.');
+      toast.error('Chọn lớp, môn và đảm bảo có danh sách học sinh.');
       return;
     }
     const cls = classes.find((c) => c.id === classIdNum);
@@ -489,12 +491,12 @@ const ExamScoreManagement = () => {
   };
   const handleTeacherImport = async () => {
     if (!teacherImportFile) {
-      alert('Chọn file trước');
+      toast.error('Chọn file trước');
       return;
     }
 
     if (!user?.id || !user?.role?.name || !user?.school?.id) {
-      alert('Thiếu thông tin người dùng hoặc trường học');
+      toast.error('Thiếu thông tin người dùng hoặc trường học');
       return;
     }
 
@@ -532,7 +534,7 @@ const ExamScoreManagement = () => {
         }
       }
 
-      alert(message);
+      toast.error(message);
       setTeacherImportFile(null);
 
       await fetchExamScores();
@@ -543,7 +545,7 @@ const ExamScoreManagement = () => {
         err?.response?.data ||
         'Import failed';
 
-      alert(typeof serverMessage === 'string' ? serverMessage : 'Import failed');
+      toast.error(typeof serverMessage === 'string' ? serverMessage : 'Import failed');
     } finally {
       setTeacherImporting(false);
     }
@@ -728,7 +730,7 @@ const ExamScoreManagement = () => {
 
   const handleDelete = async (scoreId) => {
     if (isScoreLocked) {
-      alert('Điểm số đã bị khóa. Không thể xóa điểm.');
+      toast.error('Điểm số đã bị khóa. Không thể xóa điểm.');
       return;
     }
 
@@ -743,7 +745,7 @@ const ExamScoreManagement = () => {
 
   const handleDeleteAll = async (group) => {
     if (isScoreLocked) {
-      alert('Điểm số đã bị khóa. Không thể xóa điểm.');
+      toast.error('Điểm số đã bị khóa. Không thể xóa điểm.');
       return;
     }
 
@@ -762,7 +764,7 @@ const ExamScoreManagement = () => {
     }
 
     if (scoresToDelete.length === 0) {
-      alert('Không có điểm nào để xóa');
+      toast.error('Không có điểm nào để xóa');
       return;
     }
 
@@ -770,31 +772,30 @@ const ExamScoreManagement = () => {
       ? `Bạn có chắc chắn muốn xóa điểm ${scoresToDelete[0].type}?`
       : `Bạn có chắc chắn muốn xóa tất cả điểm (${scoresToDelete.map(s => s.type).join(', ')})?`;
 
-    if (window.confirm(confirmMessage)) {
-      try {
-        console.log('=== DELETING ALL SCORES ===');
-        console.log('Scores to delete:', scoresToDelete);
+    const confirmed = await confirmDialog({
+      title: 'Xóa điểm',
+      message: confirmMessage,
+      confirmText: 'Xóa',
+    });
+    if (!confirmed) return;
 
-        // Xóa tất cả điểm đồng thời và đợi tất cả hoàn thành
-        const deletePromises = scoresToDelete.map(({ id, type }) => {
-          console.log(`Deleting ${type} score ID:`, id);
-          return handleDelete(id);
-        });
+    try {
+      console.log('=== DELETING ALL SCORES ===');
+      console.log('Scores to delete:', scoresToDelete);
 
-        await Promise.all(deletePromises);
-        console.log('✅ All scores deleted successfully');
+      const deletePromises = scoresToDelete.map(({ id, type }) => {
+        console.log(`Deleting ${type} score ID:`, id);
+        return handleDelete(id);
+      });
 
-        // Đợi một chút để đảm bảo database đã cập nhật
-        await new Promise(resolve => setTimeout(resolve, 300));
-
-        // Refresh danh sách điểm
-        await fetchExamScores();
-
-        alert('Xóa điểm thành công!');
-      } catch (error) {
-        console.error('❌ Error deleting scores:', error);
-        alert('Có lỗi xảy ra khi xóa điểm số');
-      }
+      await Promise.all(deletePromises);
+      console.log('All scores deleted successfully');
+      await new Promise(resolve => setTimeout(resolve, 300));
+      await fetchExamScores();
+      toast.success('Xóa điểm thành công!');
+    } catch (error) {
+      console.error('Error deleting scores:', error);
+      toast.error('Có lỗi xảy ra khi xóa điểm số');
     }
   };
 
@@ -1002,7 +1003,7 @@ const ExamScoreManagement = () => {
 
   const handleEdit = async (group) => {
     if (isScoreLocked) {
-      alert('Điểm số đã bị khóa. Không thể chỉnh sửa điểm.');
+      toast.error('Điểm số đã bị khóa. Không thể chỉnh sửa điểm.');
       return;
     }
 
@@ -1043,12 +1044,12 @@ const ExamScoreManagement = () => {
     e.preventDefault();
 
     if (isScoreLocked) {
-      alert('Điểm số đã bị khóa. Không thể thêm hoặc chỉnh sửa điểm.');
+      toast.error('Điểm số đã bị khóa. Không thể thêm hoặc chỉnh sửa điểm.');
       return;
     }
 
     if (!selectedClassForScore || !selectedSubjectForScore) {
-      alert('Vui lòng chọn lớp và môn học');
+      toast.error('Vui lòng chọn lớp và môn học');
       return;
     }
 
@@ -1350,9 +1351,9 @@ const ExamScoreManagement = () => {
       if (promises.length === 0) {
         console.log('⚠️ No promises to execute');
         if (currentEditMode) {
-          alert('Không có thay đổi nào để lưu. Vui lòng thay đổi điểm trước khi lưu.');
+          toast.error('Không có thay đổi nào để lưu. Vui lòng thay đổi điểm trước khi lưu.');
         } else {
-          alert('Vui lòng nhập ít nhất một điểm');
+          toast.error('Vui lòng nhập ít nhất một điểm');
         }
         return;
       }
@@ -1379,7 +1380,7 @@ const ExamScoreManagement = () => {
         setTeacherModalSemester('1');
         setShowClassModal(false);
 
-        alert(currentEditMode ? 'Sửa điểm thành công!' : 'Nhập điểm theo lớp thành công!');
+        toast.success(currentEditMode ? 'Sửa điểm thành công!' : 'Nhập điểm theo lớp thành công!');
       } catch (submitError) {
         console.error('Error submitting scores:', submitError);
         const msg =
@@ -1387,11 +1388,11 @@ const ExamScoreManagement = () => {
           submitError?.response?.data?.message ||
           submitError?.message ||
           'Có lỗi xảy ra khi lưu điểm số. Vui lòng thử lại.';
-        alert(msg);
+        toast.error(msg);
       }
     } catch (error) {
       console.error('Error saving class scores:', error);
-      alert('Có lỗi xảy ra khi lưu điểm số');
+      toast.error('Có lỗi xảy ra khi lưu điểm số');
     }
   };
 
@@ -1579,7 +1580,7 @@ const ExamScoreManagement = () => {
 
     // Only admin can lock/unlock scores
     if (userRole !== 'ADMIN' || !schoolId) {
-      alert('Chỉ admin mới có quyền khóa/mở khóa điểm số');
+      toast.error('Chỉ admin mới có quyền khóa/mở khóa điểm số');
       return;
     }
 
@@ -1588,18 +1589,24 @@ const ExamScoreManagement = () => {
       ? 'Bạn có chắc chắn muốn khóa điểm số? Điều này sẽ ngăn chỉnh sửa và thêm điểm mới cho tất cả giáo viên.'
       : 'Bạn có chắc chắn muốn mở khóa điểm số? Điều này sẽ cho phép chỉnh sửa và thêm điểm mới.';
 
-    if (window.confirm(confirmMessage)) {
-      try {
-        const response = await api.put(`/exam-scores/lock-status/${schoolId}`, {
-          scoreLocked: newLockStatus
-        });
+    const confirmed = await confirmDialog({
+      title: newLockStatus ? 'Khóa điểm số' : 'Mở khóa điểm số',
+      message: confirmMessage,
+      confirmText: newLockStatus ? 'Khóa' : 'Mở khóa',
+      variant: 'warning',
+    });
+    if (!confirmed) return;
 
-        setIsScoreLocked(newLockStatus);
-        alert(newLockStatus ? 'Đã khóa điểm số thành công' : 'Đã mở khóa điểm số thành công');
-      } catch (error) {
-        console.error('Error updating score lock status:', error);
-        alert('Có lỗi xảy ra khi cập nhật trạng thái khóa điểm số');
-      }
+    try {
+      await api.put(`/exam-scores/lock-status/${schoolId}`, {
+        scoreLocked: newLockStatus
+      });
+
+      setIsScoreLocked(newLockStatus);
+      toast.success(newLockStatus ? 'Đã khóa điểm số thành công' : 'Đã mở khóa điểm số thành công');
+    } catch (error) {
+      console.error('Error updating score lock status:', error);
+      toast.error('Có lỗi xảy ra khi cập nhật trạng thái khóa điểm số');
     }
   };
 
@@ -1641,7 +1648,7 @@ const ExamScoreManagement = () => {
               className="btn btn-primary"
               onClick={() => {
                 if (isScoreLocked) {
-                  alert('Điểm số đã bị khóa. Không thể thêm điểm mới.');
+                  toast.error('Điểm số đã bị khóa. Không thể thêm điểm mới.');
                   return;
                 }
                 setSelectedClassForScore('');

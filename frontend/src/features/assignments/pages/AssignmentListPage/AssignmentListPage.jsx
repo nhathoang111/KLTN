@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useMemo } from 'react';
+﻿import React, { useState, useEffect, useMemo } from 'react';
+import { toast } from 'react-toastify';
 import api from '../../../../shared/lib/api';
 import './AssignmentListPage.css';
 import { useAuth } from '../../../auth/context/AuthContext';
@@ -9,6 +10,7 @@ import {
   teacherSubjectIdsByClassFromSections,
   teacherSubjectIdsFromSections,
 } from '../../../../shared/lib/teacherScope';
+import { confirmDialog } from '../../../../shared/lib/confirmDialog';
 
 const AssignmentListPage = () => {
   const { user } = useAuth();
@@ -325,11 +327,11 @@ const AssignmentListPage = () => {
         '';
       const parsedMaxScore = parseFloat(formData.maxScore);
       if (Number.isNaN(parsedMaxScore) || parsedMaxScore < 0 || parsedMaxScore > 10) {
-        alert('Điểm tối đa phải nằm trong khoảng từ 0 đến 10');
+        toast.error('Điểm tối đa phải nằm trong khoảng từ 0 đến 10');
         return;
       }
       if (formData.dueDate && new Date(formData.dueDate) < new Date()) {
-        alert('Thời gian nộp bài không được ở quá khứ');
+        toast.error('Thời gian nộp bài không được ở quá khứ');
         return;
       }
 
@@ -398,7 +400,7 @@ const AssignmentListPage = () => {
       fetchData();
     } catch (error) {
       console.error('Error saving assignment:', error);
-      alert(error.response?.data?.error || 'Có lỗi xảy ra khi lưu bài tập');
+      toast.error(error.response?.data?.error || 'Có lỗi xảy ra khi lưu bài tập');
     }
   };
 
@@ -437,7 +439,7 @@ const AssignmentListPage = () => {
       window.URL.revokeObjectURL(url);
     } catch (error) {
       console.error('Error downloading file:', error);
-      alert('Không thể tải file');
+      toast.error('Không thể tải file');
     }
   };
 
@@ -458,18 +460,24 @@ const AssignmentListPage = () => {
       window.URL.revokeObjectURL(url);
     } catch (error) {
       console.error('Error downloading submission file:', error);
-      alert('Không thể tải file');
+      toast.error('Không thể tải file');
     }
   };
 
   const handleDelete = async (id) => {
-    if (window.confirm('Bạn có chắc chắn muốn xóa bài tập này?')) {
-      try {
-        await api.delete(`/assignments/${id}`);
-        fetchData();
-      } catch (error) {
-        console.error('Error deleting assignment:', error);
-      }
+    const confirmed = await confirmDialog({
+      title: 'Xóa bài tập',
+      message: 'Bạn có chắc chắn muốn xóa bài tập này?',
+      confirmText: 'Xóa',
+    });
+    if (!confirmed) return;
+
+    try {
+      await api.delete(`/assignments/${id}`);
+      fetchData();
+    } catch (error) {
+      console.error('Error deleting assignment:', error);
+      toast.error('Không thể xóa bài tập');
     }
   };
 
@@ -550,7 +558,7 @@ const AssignmentListPage = () => {
   const handleSubmitAssignment = (assignment) => {
     // Check if assignment is active
     if (assignment.status !== 'ACTIVE') {
-      alert('Bài tập này không còn hoạt động. Bạn không thể nộp bài.');
+      toast.error('Bài tập này không còn hoạt động. Bạn không thể nộp bài.');
       return;
     }
 
@@ -576,7 +584,7 @@ const AssignmentListPage = () => {
 
     // Double check status before submitting
     if (submittingAssignment.status !== 'ACTIVE') {
-      alert('Bài tập này không còn hoạt động. Bạn không thể nộp bài.');
+      toast.error('Bài tập này không còn hoạt động. Bạn không thể nộp bài.');
       setSubmittingAssignment(null);
       setSubmissionContent('');
       setSubmissionFile(null);
@@ -611,11 +619,11 @@ const AssignmentListPage = () => {
       // Refresh assignments and submissions
       fetchData();
 
-      alert(editingSubmission ? 'Cập nhật bài nộp thành công!' : 'Nộp bài thành công!');
+      toast.success(editingSubmission ? 'Cập nhật bài nộp thành công!' : 'Nộp bài thành công!');
     } catch (error) {
       console.error('Error submitting assignment:', error);
       const errorMessage = error.response?.data?.error || 'Có lỗi xảy ra khi nộp bài';
-      alert(errorMessage);
+      toast.error(errorMessage);
     }
   };
 
@@ -898,13 +906,13 @@ const AssignmentListPage = () => {
                           // Validate file type
                           const fileName = file.name.toLowerCase();
                           if (!fileName.endsWith('.doc') && !fileName.endsWith('.docx')) {
-                            alert('Chỉ chấp nhận file Word (.doc, .docx)');
+                            toast.error('Chỉ chấp nhận file Word (.doc, .docx)');
                             e.target.value = '';
                             return;
                           }
                           // Validate file size (max 10MB)
                           if (file.size > 10 * 1024 * 1024) {
-                            alert('File không được vượt quá 10MB');
+                            toast.error('File không được vượt quá 10MB');
                             e.target.value = '';
                             return;
                           }
@@ -1017,13 +1025,13 @@ const AssignmentListPage = () => {
                         // Validate file type
                         const fileName = file.name.toLowerCase();
                         if (!fileName.endsWith('.doc') && !fileName.endsWith('.docx')) {
-                          alert('Chỉ chấp nhận file Word (.doc, .docx)');
+                          toast.error('Chỉ chấp nhận file Word (.doc, .docx)');
                           e.target.value = '';
                           return;
                         }
                         // Validate file size (max 10MB)
                         if (file.size > 10 * 1024 * 1024) {
-                          alert('File không được vượt quá 10MB');
+                          toast.error('File không được vượt quá 10MB');
                           e.target.value = '';
                           return;
                         }
@@ -1347,4 +1355,3 @@ const AssignmentListPage = () => {
 };
 
 export default AssignmentListPage;
-

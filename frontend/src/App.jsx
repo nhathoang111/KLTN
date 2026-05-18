@@ -6,6 +6,7 @@ import LoginPage from './features/auth/pages/LoginPage/LoginPage';
 import ProtectedRoute from './features/auth/components/ProtectedRoute';
 import Layout from './shared/components/layout/Layout/Layout';
 import { protectedRoutes } from './app/router/routeConfig';
+import ConfirmDialogHost from './shared/components/feedback/ConfirmDialogHost';
 
 function App() {
   return (
@@ -47,6 +48,7 @@ function App() {
             theme="colored"
             style={{ zIndex: 999999 }}
           />
+          <ConfirmDialogHost />
         </div>
       </Router>
     </AuthProvider>

@@ -10,6 +10,7 @@ import ClassYearArchiveModal from '../../components/ClassYearArchiveModal';
 import ClassRolloverModal from '../../components/ClassRolloverModal';
 import { buildTeacherVisibleClasses } from '../../../../shared/lib/teacherScope';
 import { isValidSchoolYearFormat } from '../../../../shared/lib/schoolYearFormat';
+import { confirmDialog } from '../../../../shared/lib/confirmDialog';
 
 /** Tên niên khóa từ object lớp (API có thể trả schoolYear là object hoặc chuỗi). */
 function schoolYearLabel(c) {
@@ -361,29 +362,32 @@ const ClassListPage = () => {
   };
 
   const handleDelete = async (id) => {
-    if (
-      window.confirm(
-        'Lưu trữ lớp này? Học sinh sẽ được gỡ khỏi lớp đang hoạt động (enrollment chuyển INACTIVE). Dữ liệu điểm, lịch sử… được giữ lại.'
-      )
-    ) {
-      try {
-        const headers = {
-          'X-User-Role': user?.role?.name || ''
-        };
-        await api.delete(`/classes/${id}`, { headers });
-        toast.success('Đã lưu trữ lớp học (dữ liệu được giữ lại).');
-        fetchData();
-      } catch (error) {
-        console.error('Error deleting class:', error);
-        const delMsg =
-          error.response?.data?.message ||
-          error.response?.data?.error ||
-          'Xóa lớp học thất bại.';
-        if (error.response?.status === 403) {
-          toast.error('Bạn không có quyền xóa lớp học');
-        } else {
-          toast.error(typeof delMsg === 'string' ? delMsg : String(delMsg));
-        }
+    const confirmed = await confirmDialog({
+      title: 'Lưu trữ lớp học',
+      message:
+        'Lưu trữ lớp này? Học sinh sẽ được gỡ khỏi lớp đang hoạt động (enrollment chuyển INACTIVE). Dữ liệu điểm, lịch sử... được giữ lại.',
+      confirmText: 'Lưu trữ',
+      variant: 'warning',
+    });
+    if (!confirmed) return;
+
+    try {
+      const headers = {
+        'X-User-Role': user?.role?.name || ''
+      };
+      await api.delete(`/classes/${id}`, { headers });
+      toast.success('Đã lưu trữ lớp học (dữ liệu được giữ lại).');
+      fetchData();
+    } catch (error) {
+      console.error('Error deleting class:', error);
+      const delMsg =
+        error.response?.data?.message ||
+        error.response?.data?.error ||
+        'Xóa lớp học thất bại.';
+      if (error.response?.status === 403) {
+        toast.error('Bạn không có quyền xóa lớp học');
+      } else {
+        toast.error(typeof delMsg === 'string' ? delMsg : String(delMsg));
       }
     }
   };
@@ -804,4 +808,3 @@ const ClassListPage = () => {
 };
 
 export default ClassListPage;
-

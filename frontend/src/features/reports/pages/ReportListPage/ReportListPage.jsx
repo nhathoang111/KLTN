@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { toast } from 'react-toastify';
 import api from '../../../../shared/lib/api';
 import './ReportListPage.css';
 
@@ -70,7 +71,7 @@ const ReportListPage = () => {
       if (filters.endDate) params.append('endDate', filters.endDate);
 
       const response = await api.get(`/reports/export/excel?${params}`);
-      alert('Excel export: ' + response.data.message);
+      toast.success('Excel export: ' + response.data.message);
     } catch (error) {
       console.error('Error exporting to Excel:', error);
     }
@@ -87,7 +88,7 @@ const ReportListPage = () => {
       if (filters.endDate) params.append('endDate', filters.endDate);
 
       const response = await api.get(`/reports/export/pdf?${params}`);
-      alert('PDF export: ' + response.data.message);
+      toast.success('PDF export: ' + response.data.message);
     } catch (error) {
       console.error('Error exporting to PDF:', error);
     }
@@ -324,4 +325,3 @@ const ReportListPage = () => {
 };
 
 export default ReportListPage;
-

@@ -2,6 +2,7 @@
 import api from '../../../../shared/lib/api';
 import './RecordListPage.css';
 import { useAuth } from '../../../auth/context/AuthContext';
+import { confirmDialog } from '../../../../shared/lib/confirmDialog';
 
 const RecordListPage = () => {
   const { user } = useAuth();
@@ -194,13 +195,18 @@ const RecordListPage = () => {
   };
 
   const handleDelete = async (id) => {
-    if (window.confirm('Are you sure you want to delete this record?')) {
-      try {
-        await api.delete(`/records/${id}`);
-        fetchData();
-      } catch (error) {
-        console.error('Error deleting record:', error);
-      }
+    const confirmed = await confirmDialog({
+      title: 'Xóa hồ sơ',
+      message: 'Bạn có chắc chắn muốn xóa hồ sơ này?',
+      confirmText: 'Xóa',
+    });
+    if (!confirmed) return;
+
+    try {
+      await api.delete(`/records/${id}`);
+      fetchData();
+    } catch (error) {
+      console.error('Error deleting record:', error);
     }
   };
 
@@ -520,7 +526,6 @@ const RecordListPage = () => {
 };
 
 export default RecordListPage;
-
 
 
 

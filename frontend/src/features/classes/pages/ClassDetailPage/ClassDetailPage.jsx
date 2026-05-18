@@ -5,6 +5,7 @@ import api from "../../../../shared/lib/api";
 import { useAuth } from "../../../auth/context/AuthContext";
 import ClassFormModal from "../../components/ClassFormModal";
 import { isValidSchoolYearFormat } from "../../../../shared/lib/schoolYearFormat";
+import { confirmDialog } from "../../../../shared/lib/confirmDialog";
 
 const tabs = [
   { id: "overview", label: "Thông tin lớp" },
@@ -324,7 +325,12 @@ const ClassDetailPage = () => {
     if (!canManageSections) return;
     if (!sectionId) return;
 
-    if (!window.confirm("Bạn có chắc muốn xóa lớp học phần này không?")) return;
+    const confirmed = await confirmDialog({
+      title: "Xóa lớp học phần",
+      message: "Bạn có chắc muốn xóa lớp học phần này không?",
+      confirmText: "Xóa",
+    });
+    if (!confirmed) return;
     try {
       setDeletingId(sectionId);
       await api.delete(`/class-sections/${sectionId}`);
@@ -669,4 +675,3 @@ const ClassDetailPage = () => {
 };
 
 export default ClassDetailPage;
-

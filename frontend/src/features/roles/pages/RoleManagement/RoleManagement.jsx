@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
+import { toast } from 'react-toastify';
 import api from '../../../../shared/lib/api';
 import { useAuth } from '../../../auth/context/AuthContext';
 import '../../../../styles/CommonPageStyles.css';
 import './RoleManagement.css';
 import { Pencil, Trash2 } from 'lucide-react';
+import { confirmDialog } from '../../../../shared/lib/confirmDialog';
 
 const RoleManagement = () => {
   const { user } = useAuth();
@@ -74,7 +76,7 @@ const RoleManagement = () => {
     if (isSchoolAdmin) {
       const inputNameUpper = (formData.name || '').toUpperCase().trim();
       if (!ADMIN_ALLOWED_ROLE_NAMES.includes(inputNameUpper)) {
-        alert('Admin chỉ được tạo phân quyền: PHỤ HUYNH (PARENT), HỌC SINH (STUDENT), GIÁO VIÊN (TEACHER).');
+        toast.error('Admin chỉ được tạo phân quyền: PHỤ HUYNH (PARENT), HỌC SINH (STUDENT), GIÁO VIÊN (TEACHER).');
         return;
       }
     }
@@ -91,7 +93,7 @@ const RoleManagement = () => {
 
       if (existingRole) {
         const schoolName = existingRole.school?.name || 'Toàn hệ thống';
-        alert(`Tên phân quyền "${formData.name}" đã tồn tại trong ${schoolName}. Vui lòng chọn tên khác.`);
+        toast.error(`Tên phân quyền "${formData.name}" đã tồn tại trong ${schoolName}. Vui lòng chọn tên khác.`);
         return;
       }
     }
@@ -122,7 +124,7 @@ const RoleManagement = () => {
         errorMsg = error.message;
       }
 
-      alert(errorMsg);
+      toast.error(errorMsg);
     } finally {
       setLoading(false);
     }
@@ -139,14 +141,19 @@ const RoleManagement = () => {
   };
 
   const handleDelete = async (roleId) => {
-    if (window.confirm('Bạn có chắc chắn muốn xóa phân quyền này?')) {
-      try {
-        await api.delete(`/roles/${roleId}`);
-        fetchRoles();
-      } catch (error) {
-        console.error('Error deleting role:', error);
-        alert('Có lỗi xảy ra khi xóa phân quyền');
-      }
+    const confirmed = await confirmDialog({
+      title: 'Xóa phân quyền',
+      message: 'Bạn có chắc chắn muốn xóa phân quyền này?',
+      confirmText: 'Xóa',
+    });
+    if (!confirmed) return;
+
+    try {
+      await api.delete(`/roles/${roleId}`);
+      fetchRoles();
+    } catch (error) {
+      console.error('Error deleting role:', error);
+      toast.error('Có lỗi xảy ra khi xóa phân quyền');
     }
   };
 

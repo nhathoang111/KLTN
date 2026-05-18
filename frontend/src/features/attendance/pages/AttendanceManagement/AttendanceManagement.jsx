@@ -3,6 +3,7 @@
 // Previous: 2026-04-14 - Fix bug điểm danh không lưu đúng classSectionId
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { toast } from 'react-toastify';
 import api from '../../../../shared/lib/api';
 import './AttendanceManagement.css';
 import { useAuth } from '../../../auth/context/AuthContext';
@@ -604,11 +605,11 @@ function AttendanceDefaultLegacy() {
 
   const handleSave = async () => {
     if (!selectedClassSectionId) {
-      alert("Vui lòng chọn lớp học phần.");
+      toast.error("Vui lòng chọn lớp học phần.");
       return;
     }
     if (!date) {
-      alert("Vui lòng chọn ngày.");
+      toast.error("Vui lòng chọn ngày.");
       return;
     }
     try {

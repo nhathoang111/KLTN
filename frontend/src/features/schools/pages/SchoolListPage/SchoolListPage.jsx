@@ -8,6 +8,7 @@ import SchoolTable from './components/SchoolTable';
 import useVietnamLocations from './hooks/useVietnamLocations';
 import SchoolFormModal from './components/SchoolFormModal';
 import SchoolDeleteRelatedModal from './components/SchoolDeleteRelatedModal';
+import { confirmDialog } from '../../../../shared/lib/confirmDialog';
 
 const SchoolListPage = () => {
   const [schools, setSchools] = useState([]);
@@ -289,9 +290,12 @@ const SchoolListPage = () => {
   const handleDeleteAll = async () => {
     if (!schoolToDelete) return;
 
-    if (!window.confirm('Bạn có chắc chắn muốn xóa tất cả dữ liệu liên quan và trường học này?')) {
-      return;
-    }
+    const confirmed = await confirmDialog({
+      title: 'Xóa trường học',
+      message: 'Bạn có chắc chắn muốn xóa tất cả dữ liệu liên quan và trường học này?',
+      confirmText: 'Xóa',
+    });
+    if (!confirmed) return;
 
     try {
       await api.delete(`/schools/${schoolToDelete.id}`);
@@ -315,9 +319,12 @@ const SchoolListPage = () => {
       return;
     }
 
-    if (!window.confirm(`Bạn có chắc chắn muốn xóa toàn bộ ${totalItems} mục dữ liệu liên quan của trường "${schoolToDelete.name}"?\n\nĐiều này sẽ xóa:\n- ${relatedData.userCount} người dùng\n- ${relatedData.roleCount} phân quyền\n- ${relatedData.classCount} lớp học\n\nTrường học sẽ được giữ lại (chỉ xóa thông tin bên trong).\n\nHành động này không thể hoàn tác!`)) {
-      return;
-    }
+    const confirmed = await confirmDialog({
+      title: 'Xóa dữ liệu liên quan',
+      message: `Bạn có chắc chắn muốn xóa toàn bộ ${totalItems} mục dữ liệu liên quan của trường "${schoolToDelete.name}"?\n\nĐiều này sẽ xóa:\n- ${relatedData.userCount} người dùng\n- ${relatedData.roleCount} phân quyền\n- ${relatedData.classCount} lớp học\n\nTrường học sẽ được giữ lại (chỉ xóa thông tin bên trong).\n\nHành động này không thể hoàn tác!`,
+      confirmText: 'Xóa toàn bộ',
+    });
+    if (!confirmed) return;
 
     try {
       // Chỉ xóa dữ liệu liên quan, KHÔNG xóa trường học
@@ -333,9 +340,12 @@ const SchoolListPage = () => {
   };
 
   const handleDeleteItem = async (type, id) => {
-    if (!window.confirm(`Bạn có chắc chắn muốn xóa ${type} này?`)) {
-      return;
-    }
+    const confirmed = await confirmDialog({
+      title: 'Xóa dữ liệu liên quan',
+      message: `Bạn có chắc chắn muốn xóa ${type} này?`,
+      confirmText: 'Xóa',
+    });
+    if (!confirmed) return;
 
     setDeletingItem({ type, id });
     try {
@@ -364,9 +374,13 @@ const SchoolListPage = () => {
     const newStatus = isLocked ? 'ACTIVE' : 'LOCKED';
     const action = isLocked ? 'mở khóa' : 'khóa';
 
-    if (!window.confirm(`Bạn có chắc chắn muốn ${action} trường học "${school.name}"?`)) {
-      return;
-    }
+    const confirmed = await confirmDialog({
+      title: 'Cập nhật trạng thái trường',
+      message: `Bạn có chắc chắn muốn ${action} trường học "${school.name}"?`,
+      confirmText: action,
+      variant: 'warning',
+    });
+    if (!confirmed) return;
 
     try {
       const updatedSchool = {
@@ -385,12 +399,18 @@ const SchoolListPage = () => {
   };
 
   const handleDelete = async (id) => {
-    if (window.confirm('Bạn có chắc chắn muốn xóa trường học này?')) {
-      try {
-        await api.delete(`/schools/${id}`);
-        toast.success('Xóa trường học thành công!');
-        fetchSchools();
-      } catch (error) {
+    const confirmed = await confirmDialog({
+      title: 'Xóa trường học',
+      message: 'Bạn có chắc chắn muốn xóa trường học này?',
+      confirmText: 'Xóa',
+    });
+    if (!confirmed) return;
+
+    try {
+      await api.delete(`/schools/${id}`);
+      toast.success('Xóa trường học thành công!');
+      fetchSchools();
+    } catch (error) {
         console.error('Error deleting school:', error);
         console.error('Error response:', error.response);
         console.error('Error response data:', error.response?.data);
@@ -462,8 +482,7 @@ const SchoolListPage = () => {
         }
 
         console.log('Final error message to display:', errorMessage);
-        toast.error(errorMessage);
-      }
+      toast.error(errorMessage);
     }
   };
 
@@ -631,5 +650,3 @@ const SchoolListPage = () => {
 };
 
 export default SchoolListPage;
-
-

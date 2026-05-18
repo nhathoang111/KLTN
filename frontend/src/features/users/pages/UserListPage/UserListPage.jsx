@@ -5,6 +5,7 @@ import { toast } from 'react-toastify';
 import { useAuth } from '../../../auth/context/AuthContext';
 import api from '../../../../shared/lib/api';
 import { isTeachingActiveClass } from '../../../../shared/lib/classStatus';
+import { confirmDialog } from '../../../../shared/lib/confirmDialog';
 import './UserListPage.css';
 import CreateUserModal from './components/CreateUserModal';
 import ImportUsersExcelModal from './components/ImportUsersExcelModal';
@@ -163,23 +164,28 @@ const UserListPage = () => {
   const handleDelete = async (id, userName) => {
     const confirmMessage = `Bạn có chắc muốn xóa người dùng "${userName || 'này'}"?\n\nHành động không thể hoàn tác.`;
 
-    if (window.confirm(confirmMessage)) {
-      try {
-        setDeleteLoading(id);
-        setError('');
+    const confirmed = await confirmDialog({
+      title: 'Xóa người dùng',
+      message: confirmMessage,
+      confirmText: 'Xóa',
+    });
+    if (!confirmed) return;
 
-        await api.delete(`/users/${id}`);
-        setUsers(users.filter(user => user.id !== id));
-        toast.success(`Đã xóa người dùng "${userName || 'này'}" thành công.`);
+    try {
+      setDeleteLoading(id);
+      setError('');
 
-      } catch (err) {
-        const data = err.response?.data || {};
-        const errorMessage = data.message || data.error || 'Không thể xóa người dùng. Vui lòng thử lại.';
-        toast.error(errorMessage);
-        console.error('Error deleting user:', err.response?.data || err);
-      } finally {
-        setDeleteLoading(null);
-      }
+      await api.delete(`/users/${id}`);
+      setUsers(users.filter(user => user.id !== id));
+      toast.success(`Đã xóa người dùng "${userName || 'này'}" thành công.`);
+
+    } catch (err) {
+      const data = err.response?.data || {};
+      const errorMessage = data.message || data.error || 'Không thể xóa người dùng. Vui lòng thử lại.';
+      toast.error(errorMessage);
+      console.error('Error deleting user:', err.response?.data || err);
+    } finally {
+      setDeleteLoading(null);
     }
   };
 
@@ -315,7 +321,12 @@ const UserListPage = () => {
   const handleBulkDelete = async () => {
     if (selectedIds.size === 0) return;
     const count = selectedIds.size;
-    if (!window.confirm(`Bạn có chắc muốn xóa ${count} người dùng đã chọn? Hành động không thể hoàn tác.`)) return;
+    const confirmed = await confirmDialog({
+      title: 'Xóa người dùng đã chọn',
+      message: `Bạn có chắc muốn xóa ${count} người dùng đã chọn? Hành động không thể hoàn tác.`,
+      confirmText: 'Xóa',
+    });
+    if (!confirmed) return;
     setBulkActionLoading(true);
     setError('');
     try {
@@ -1071,6 +1082,4 @@ const UserListPage = () => {
 };
 
 export default UserListPage;
-
-
 

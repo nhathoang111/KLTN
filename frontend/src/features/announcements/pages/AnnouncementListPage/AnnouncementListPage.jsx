@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
+import { toast } from 'react-toastify';
 import { useAuth } from '../../../auth/context/AuthContext';
 import { Pencil, Plus, Trash2 } from 'lucide-react';
 import api from '../../../../shared/lib/api';
 import './AnnouncementListPage.css';
 import AnnouncementFormModal from '../../components/AnnouncementFormModal';
+import { confirmDialog } from '../../../../shared/lib/confirmDialog';
 
 const AnnouncementListPage = () => {
   const { user } = useAuth();
@@ -186,7 +188,7 @@ const AnnouncementListPage = () => {
 
       // Validate required fields
       if (!formData.title || !formData.content || !formData.schoolId || !creatorId) {
-        alert('Vui lòng điền đầy đủ các trường bắt buộc');
+        toast.error('Vui lòng điền đầy đủ các trường bắt buộc');
         return;
       }
 
@@ -229,7 +231,7 @@ const AnnouncementListPage = () => {
         error.response?.data?.message ||
         error.message ||
         'Không thể lưu thông báo. Vui lòng thử lại.';
-      alert(errorMessage);
+      toast.error(errorMessage);
     }
   };
 
@@ -259,14 +261,14 @@ const AnnouncementListPage = () => {
 
       // If created by ADMIN, prevent editing - BLOCK IMMEDIATELY
       if (creatorRole === 'ADMIN') {
-        alert('Bạn không thể chỉnh sửa thông báo từ Admin');
+        toast.error('Bạn không thể chỉnh sửa thông báo từ Admin');
         return; // DO NOT OPEN MODAL
       }
 
       // If we cannot determine the role, be safe and block (for security)
       if (creatorRole === null && announcement.createdBy?.id) {
         console.warn('Cannot determine creator role, blocking edit for safety');
-        alert('Không thể xác định quyền của người tạo. Vui lòng thử lại sau.');
+        toast.error('Không thể xác định quyền của người tạo. Vui lòng thử lại sau.');
         return; // DO NOT OPEN MODAL
       }
     }
@@ -312,36 +314,41 @@ const AnnouncementListPage = () => {
 
       // If created by ADMIN, prevent deletion - BLOCK IMMEDIATELY
       if (creatorRole === 'ADMIN') {
-        alert('Bạn không thể xóa thông báo từ Admin');
+        toast.error('Bạn không thể xóa thông báo từ Admin');
         return; // DO NOT PROCEED
       }
 
       // If we cannot determine the role, be safe and block (for security)
       if (creatorRole === null && announcement.createdBy?.id) {
         console.warn('Cannot determine creator role, blocking delete for safety');
-        alert('Không thể xác định quyền của người tạo. Vui lòng thử lại sau.');
+        toast.error('Không thể xác định quyền của người tạo. Vui lòng thử lại sau.');
         return; // DO NOT PROCEED
       }
     }
 
-    if (window.confirm('Bạn có chắc chắn muốn xóa thông báo này?')) {
-      try {
-        // Send user role in header for backend validation
-        await api.delete(`/announcements/${id}`, {
-          headers: {
-            'X-User-Id': user?.id,
-            'X-User-Role': user?.role?.name
-          }
-        });
-        fetchData();
-      } catch (error) {
-        console.error('Error deleting announcement:', error);
-        const errorMessage = error.response?.data?.error ||
-          error.response?.data?.message ||
-          error.message ||
-          'Không thể xóa thông báo. Vui lòng thử lại.';
-        alert(errorMessage);
-      }
+    const confirmed = await confirmDialog({
+      title: 'Xóa thông báo',
+      message: 'Bạn có chắc chắn muốn xóa thông báo này?',
+      confirmText: 'Xóa',
+    });
+    if (!confirmed) return;
+
+    try {
+      // Send user role in header for backend validation
+      await api.delete(`/announcements/${id}`, {
+        headers: {
+          'X-User-Id': user?.id,
+          'X-User-Role': user?.role?.name
+        }
+      });
+      fetchData();
+    } catch (error) {
+      console.error('Error deleting announcement:', error);
+      const errorMessage = error.response?.data?.error ||
+        error.response?.data?.message ||
+        error.message ||
+        'Không thể xóa thông báo. Vui lòng thử lại.';
+      toast.error(errorMessage);
     }
   };
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import { toast } from 'react-toastify';
 import api from '../../../../shared/lib/api';
 import './SubjectListPage.css';
@@ -6,6 +6,7 @@ import { useAuth } from '../../../auth/context/AuthContext';
 import { Pencil, Plus, Trash2 } from 'lucide-react';
 import SubjectClassLinksModal from '../../components/SubjectClassLinksModal';
 import SubjectFormModal from '../../components/SubjectFormModal';
+import { confirmDialog } from '../../../../shared/lib/confirmDialog';
 
 /** Cùng pattern ClassCreatePage / ClassListPage: BE trả ErrorResponse { message } */
 function getApiErrorMessage(err, fallback) {
@@ -115,13 +116,19 @@ const SubjectListPage = () => {
   };
 
   const handleDelete = async (id) => {
-    if (window.confirm('Bạn có chắc chắn muốn xóa môn học này?')) {
-      try {
-        await api.delete(`/subjects/${id}`);
-        fetchData();
-      } catch (error) {
-        console.error('Error deleting subject:', error);
-      }
+    const confirmed = await confirmDialog({
+      title: 'Xóa môn học',
+      message: 'Bạn có chắc chắn muốn xóa môn học này?',
+      confirmText: 'Xóa',
+    });
+    if (!confirmed) return;
+
+    try {
+      await api.delete(`/subjects/${id}`);
+      fetchData();
+    } catch (error) {
+      console.error('Error deleting subject:', error);
+      toast.error(getApiErrorMessage(error, 'Không thể xóa môn học.'));
     }
   };
 

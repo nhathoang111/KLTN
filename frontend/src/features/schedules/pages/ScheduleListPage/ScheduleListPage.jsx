@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useMemo } from 'react';
+﻿import React, { useState, useEffect, useMemo } from 'react';
+import { toast } from 'react-toastify';
 import api from '../../../../shared/lib/api';
 import './ScheduleListPage.css';
 import { useAuth } from '../../../auth/context/AuthContext';
@@ -13,6 +14,7 @@ import { colorsForSubject } from './subjectColors';
 import { scheduleSubjectDisplayName } from '../../../../shared/lib/scheduleLabels';
 import { isTeachingActiveClass } from '../../../../shared/lib/classStatus';
 import { buildTeacherVisibleClasses } from '../../../../shared/lib/teacherScope';
+import { confirmDialog } from '../../../../shared/lib/confirmDialog';
 
 const getApiErrorMessage = (error, fallback) => {
   const data = error?.response?.data;
@@ -391,7 +393,7 @@ const ScheduleListPage = () => {
             schedulePayload.date = `${year}-${month}-${day}`;
             schedulePayload.dayOfWeek = null;
           } else {
-            alert('Ngày không hợp lệ. Vui lòng chọn lại.');
+            toast.error('Ngày không hợp lệ. Vui lòng chọn lại.');
             return;
           }
         }
@@ -403,11 +405,11 @@ const ScheduleListPage = () => {
           // Thứ 2 của tuần đang xem trên lưới — BE tính đúng ngày theo tuần admin chọn (không phải tuần hiện tại)
           schedulePayload.weekStart = formatDateToYYYYMMDD(currentWeekStart);
         } else {
-          alert('Thứ trong tuần không hợp lệ. Vui lòng chọn từ Thứ 2 đến Thứ 7.');
+          toast.error('Thứ trong tuần không hợp lệ. Vui lòng chọn từ Thứ 2 đến Thứ 7.');
           return;
         }
       } else {
-        alert('Vui lòng chọn ngày cụ thể hoặc thứ trong tuần.');
+        toast.error('Vui lòng chọn ngày cụ thể hoặc thứ trong tuần.');
         return;
       }
 
@@ -417,16 +419,16 @@ const ScheduleListPage = () => {
       let response;
       if (editingSchedule) {
         response = await api.put(`/schedules/${editingSchedule.id}`, schedulePayload);
-        alert('Cập nhật lịch học thành công!');
+        toast.success('Cập nhật lịch học thành công!');
       } else {
         response = await api.post('/schedules', schedulePayload);
-        alert('Thêm lịch học thành công!');
+        toast.success('Thêm lịch học thành công!');
       }
 
       const warning = response?.data?.warning;
       if (warning) {
         // Cảnh báo nhẹ: chưa có phân công chính thức lớp–môn–GV
-        alert(warning);
+        toast.warn(warning);
       }
 
       setShowModal(false);
@@ -443,7 +445,7 @@ const ScheduleListPage = () => {
       await fetchSchedules();
     } catch (error) {
       console.error('Error saving schedule:', error);
-      alert(getApiErrorMessage(error, 'Lỗi khi lưu lịch học.'));
+      toast.error(getApiErrorMessage(error, 'Lỗi khi lưu lịch học.'));
     }
   };
 
@@ -479,36 +481,46 @@ const ScheduleListPage = () => {
   };
 
   const handleDelete = async (id) => {
-    if (window.confirm('Bạn có chắc chắn muốn xóa lịch học này?')) {
-      try {
-        await api.delete(`/schedules/${id}`);
-        fetchSchedules();
-      } catch (error) {
-        console.error('Error deleting schedule:', error);
-        alert(getApiErrorMessage(error, 'Lỗi khi xóa lịch học.'));
-      }
+    const confirmed = await confirmDialog({
+      title: 'Xóa lịch học',
+      message: 'Bạn có chắc chắn muốn xóa lịch học này?',
+      confirmText: 'Xóa',
+    });
+    if (!confirmed) return;
+
+    try {
+      await api.delete(`/schedules/${id}`);
+      fetchSchedules();
+    } catch (error) {
+      console.error('Error deleting schedule:', error);
+      toast.error(getApiErrorMessage(error, 'Lỗi khi xóa lịch học.'));
     }
   };
 
   const handleDeleteAllByClass = async () => {
     if (!selectedClassId) {
-      alert('Vui lòng chọn lớp trước');
+      toast.error('Vui lòng chọn lớp trước');
       return;
     }
 
     const className = classes.find(c => c.id.toString() === selectedClassId)?.name || 'lớp này';
     const confirmMessage = `Bạn có chắc chắn muốn xóa TẤT CẢ thời khóa biểu của ${className}?\n\nHành động này không thể hoàn tác!`;
 
-    if (window.confirm(confirmMessage)) {
-      try {
-        const response = await api.delete(`/schedules/class/${selectedClassId}`);
-        const count = response.data.count || 0;
-        alert(`Đã xóa ${count} lịch học của ${className} thành công.`);
-        fetchSchedules();
-      } catch (error) {
-        console.error('Error deleting all schedules by class:', error);
-        alert(getApiErrorMessage(error, 'Lỗi khi xóa thời khóa biểu.'));
-      }
+    const confirmed = await confirmDialog({
+      title: 'Xóa thời khóa biểu lớp',
+      message: confirmMessage,
+      confirmText: 'Xóa thời khóa biểu',
+    });
+    if (!confirmed) return;
+
+    try {
+      const response = await api.delete(`/schedules/class/${selectedClassId}`);
+      const count = response.data.count || 0;
+      toast.success(`Đã xóa ${count} lịch học của ${className} thành công.`);
+      fetchSchedules();
+    } catch (error) {
+      console.error('Error deleting all schedules by class:', error);
+      toast.error(getApiErrorMessage(error, 'Lỗi khi xóa thời khóa biểu.'));
     }
   };
 
@@ -518,29 +530,34 @@ const ScheduleListPage = () => {
     const userInput = window.prompt(confirmMessage);
     if (userInput !== 'DELETE ALL') {
       if (userInput !== null) {
-        alert('Chuỗi xác nhận không khớp. Đã hủy thao tác.');
+        toast.warn('Chuỗi xác nhận không khớp. Đã hủy thao tác.');
       }
       return;
     }
 
-    if (window.confirm('Xác nhận lần cuối: XÓA TOÀN BỘ thời khóa biểu?')) {
-      try {
-        const response = await api.delete('/schedules/all');
-        const count = response.data.count || 0;
-        alert(`Đã xóa ${count} lịch học trên toàn hệ thống thành công.`);
-        fetchSchedules();
-        setSelectedClassId('');
-      } catch (error) {
-        console.error('Error deleting all schedules:', error);
-        alert(getApiErrorMessage(error, 'Lỗi khi xóa thời khóa biểu.'));
-      }
+    const confirmed = await confirmDialog({
+      title: 'Xóa toàn bộ thời khóa biểu',
+      message: 'Xác nhận lần cuối: XÓA TOÀN BỘ thời khóa biểu?',
+      confirmText: 'Xóa toàn bộ',
+    });
+    if (!confirmed) return;
+
+    try {
+      const response = await api.delete('/schedules/all');
+      const count = response.data.count || 0;
+      toast.success(`Đã xóa ${count} lịch học trên toàn hệ thống thành công.`);
+      fetchSchedules();
+      setSelectedClassId('');
+    } catch (error) {
+      console.error('Error deleting all schedules:', error);
+      toast.error(getApiErrorMessage(error, 'Lỗi khi xóa thời khóa biểu.'));
     }
   };
 
   const handleGenerate = async () => {
     try {
       if (!generateData.classId || generateData.subjectAssignments.length === 0) {
-        alert('Vui lòng chọn lớp và thêm ít nhất một môn học.');
+        toast.error('Vui lòng chọn lớp và thêm ít nhất một môn học.');
         return;
       }
 
@@ -569,7 +586,7 @@ const ScheduleListPage = () => {
           session: 'BOTH'
         });
         await fetchSchedules();
-        alert(
+        toast.success(
           `${data.message || 'Thành công.'}\n\n` +
             `Tiết yêu cầu (tổng/tuần): ${data.requestedPeriods ?? '-'} — Đã tạo: ${data.assignedPeriods ?? '-'}\n` +
             `Sức chứa tuần đầu: ${data.weeklyCapacity ?? '-'}\n\n` +
@@ -587,11 +604,11 @@ const ScheduleListPage = () => {
                 )
                 .join('\n')
             : '';
-        alert((data.message || 'Tạo TKB tự động không hoàn tất.') + unmetText);
+        toast.warn((data.message || 'Tạo TKB tự động không hoàn tất.') + unmetText);
       }
     } catch (error) {
       console.error('Error generating schedules:', error);
-      alert(getApiErrorMessage(error, 'Lỗi khi tạo thời khóa biểu mẫu tự động.'));
+      toast.error(getApiErrorMessage(error, 'Lỗi khi tạo thời khóa biểu mẫu tự động.'));
     }
   };
 
