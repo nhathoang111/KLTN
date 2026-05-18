@@ -4,6 +4,7 @@ import com.example.schoolmanagement.entity.ClassEntity;
 import com.example.schoolmanagement.entity.ExamScore;
 import com.example.schoolmanagement.entity.User;
 import com.example.schoolmanagement.exception.BadRequestException;
+import com.example.schoolmanagement.repository.ClassRepository;
 import com.example.schoolmanagement.repository.EnrollmentRepository;
 import com.example.schoolmanagement.repository.ExamScoreRepository;
 import com.example.schoolmanagement.repository.UserRepository;
@@ -21,6 +22,7 @@ public class ClassInfoQueryService {
     @Autowired private EnrollmentRepository enrollmentRepository;
     @Autowired private ExamScoreRepository examScoreRepository;
     @Autowired private UserRepository userRepository;
+    @Autowired private ClassRepository classRepository;
 
     public long classStudentCount(Integer classId) {
         if (classId == null) throw new BadRequestException("Thiếu classId");
@@ -67,6 +69,11 @@ public class ClassInfoQueryService {
         // ensure fullName loaded
         User u = userRepository.findById(t.getId()).orElse(null);
         return u != null ? u.getFullName() : t.getFullName();
+    }
+
+    public List<ClassEntity> homeroomClasses(Integer teacherId) {
+        if (teacherId == null) throw new BadRequestException("Thiếu teacherId");
+        return classRepository.findByHomeroomTeacherId(teacherId);
     }
 }
 
