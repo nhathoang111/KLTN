@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../../auth/context/AuthContext';
 import api from '../../../../shared/lib/api';
 import NotificationBellPopup from '../../../../shared/components/notifications/NotificationBellPopup';
-import InformationQueryCard from '../../../../shared/components/ai/InformationQueryCard';
+import InformationQueryCard from '../../../../shared/components/ai/InformationQueryCard.jsx';
 import './AdminDashboard.css';
 
 const AdminDashboard = () => {
