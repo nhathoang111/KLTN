@@ -171,6 +171,10 @@
   color: #111827;
 }
 
+.ad-ai-query-card {
+  margin-bottom: 20px;
+}
+
 /* Middle row */
 .ad-middle-row {
   display: grid;

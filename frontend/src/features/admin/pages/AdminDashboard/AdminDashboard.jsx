@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../../auth/context/AuthContext';
 import api from '../../../../shared/lib/api';
 import NotificationBellPopup from '../../../../shared/components/notifications/NotificationBellPopup';
+import InformationQueryCard from '../../../../shared/components/ai/InformationQueryCard';
 import './AdminDashboard.css';
 
 const AdminDashboard = () => {
@@ -271,6 +272,8 @@ const AdminDashboard = () => {
           <span className="ad-kpi-value">{stats.classes.toLocaleString('vi-VN')}</span>
         </div>
       </div>
+
+      <InformationQueryCard className="ad-ai-query-card" variant="admin" />
 
       {/* Khu vực giữa */}
       <div className="ad-middle-row">

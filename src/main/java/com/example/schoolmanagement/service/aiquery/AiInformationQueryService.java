@@ -58,7 +58,7 @@ public class AiInformationQueryService {
                 resp.setIntent(AiInformationIntent.UNKNOWN.name());
                 resp.setEntities(entitiesOut);
                 resp.setData(null);
-                resp.setAnswer("Tôi chưa hiểu rõ câu hỏi. Bạn có thể hỏi về học sinh, lớp học, môn học hoặc phân công giảng dạy.");
+                resp.setAnswer(unknownIntentAnswer(ctx.getRole()));
                 resp.setSource("RULE_BASED");
                 resp.setSuccess(true);
                 resp.setMessage("UNKNOWN_INTENT");
@@ -352,6 +352,57 @@ public class AiInformationQueryService {
         } catch (Exception ignore) {
             return AiInformationIntent.UNKNOWN;
         }
+    }
+
+    private static String unknownIntentAnswer(String role) {
+        if (isAdmin(role)) {
+            return """
+                    Tôi chưa hiểu rõ câu hỏi quản trị này.
+
+                    Admin có thể hỏi theo các dạng:
+                    - Toàn trường có bao nhiêu học sinh?
+                    - Lớp nào có nhiều học sinh cần chú ý nhất?
+                    - Danh sách học sinh lớp 10A1
+                    - GVCN lớp 10A1 là ai?
+                    - Lớp 10A1 có mấy học sinh yếu môn Toán?
+                    - Tình hình điểm danh lớp 10A1
+                    """.trim();
+        }
+        if ("TEACHER".equals(role)) {
+            return """
+                    Tôi chưa hiểu rõ câu hỏi giáo viên này.
+
+                    Giáo viên có thể hỏi theo các dạng:
+                    - Tôi đang dạy những lớp nào?
+                    - Hôm nay tôi có lịch dạy gì?
+                    - GVCN lớp 10A1 là ai?
+                    - Lớp 10A1 có mấy học sinh yếu môn Toán?
+                    - Danh sách học sinh lớp 10A1
+                    """.trim();
+        }
+        if (isParent(role)) {
+            return """
+                    Tôi chưa hiểu rõ câu hỏi phụ huynh này.
+
+                    Phụ huynh có thể hỏi theo các dạng:
+                    - Con tôi đang học lớp nào?
+                    - Điểm trung bình của con tôi là bao nhiêu?
+                    - Con tôi nghỉ học mấy buổi trong tháng này?
+                    - Thời khóa biểu của con tôi hôm nay
+                    """.trim();
+        }
+        if (isStudent(role)) {
+            return """
+                    Tôi chưa hiểu rõ câu hỏi học sinh này.
+
+                    Học sinh có thể hỏi theo các dạng:
+                    - Em đang học lớp nào?
+                    - Điểm môn Toán của em là bao nhiêu?
+                    - Em xếp hạng mấy trong lớp?
+                    - Thời khóa biểu hôm nay của em
+                    """.trim();
+        }
+        return "Tôi chưa hiểu rõ câu hỏi. Bạn có thể hỏi về học sinh, lớp học, điểm số, điểm danh hoặc thời khóa biểu.";
     }
 
     private Map<String, Object> buildEntitiesOut(IntentResult ir, EntityExtractionService.NormalizedEntities ne) {
