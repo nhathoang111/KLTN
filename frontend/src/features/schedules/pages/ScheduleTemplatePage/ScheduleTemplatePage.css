@@ -166,6 +166,14 @@
   line-height: 1.3;
 }
 
+.schedule-template-calendar-card .fc-event {
+  cursor: grab;
+}
+
+.schedule-template-calendar-card .fc-event:active {
+  cursor: grabbing;
+}
+
 .event-meta {
   font-size: 11px;
   font-weight: 500;

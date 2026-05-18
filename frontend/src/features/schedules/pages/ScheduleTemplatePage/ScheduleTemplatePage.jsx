@@ -134,6 +134,52 @@ const isValidTemplateSlot = (slot) => {
   return Number(slot.subjectId) > 0 && Number(slot.teacherId) > 0;
 };
 
+const getTemplatePositionFromDate = (dateInput) => {
+  if (!dateInput) return null;
+  const date = fmtDate(dateInput);
+  const dayOfWeek = toDayOfWeek(date);
+  if (!DAYS.includes(dayOfWeek)) return null;
+  const d = new Date(dateInput);
+  const minutes = d.getHours() * 60 + d.getMinutes();
+  const containing = PERIODS.find((period) => {
+    const range = periodTimeMap[period];
+    return range && minutes >= range.startMin && minutes < range.endMin;
+  });
+  if (containing) {
+    return { date, dayOfWeek, period: containing };
+  }
+  const nearest = PERIODS
+    .map((period) => ({
+      period,
+      distance: Math.abs((periodTimeMap[period]?.startMin ?? 0) - minutes),
+    }))
+    .sort((a, b) => a.distance - b.distance)[0];
+  return nearest ? { date, dayOfWeek, period: nearest.period } : null;
+};
+
+const getApiErrorMessage = (error, fallback) => {
+  const data = error?.response?.data;
+  if (typeof data === 'string' && data.trim()) return data.trim();
+  if (data && typeof data === 'object') {
+    const directMessage = [data.message, data.error, data.detail, data.title]
+      .find((value) => typeof value === 'string' && value.trim());
+    if (directMessage) return directMessage.trim();
+    if (Array.isArray(data.errors) && data.errors.length > 0) {
+      const fieldMessages = data.errors
+        .map((item) => {
+          if (typeof item === 'string') return item;
+          if (item && typeof item === 'object') {
+            return item.message || item.error || item.defaultMessage || '';
+          }
+          return '';
+        })
+        .filter(Boolean);
+      if (fieldMessages.length > 0) return fieldMessages.join('\n');
+    }
+  }
+  return error?.message || fallback;
+};
+
 const ScheduleTemplatePage = () => {
   const { user } = useAuth();
   const [classes, setClasses] = useState([]);
@@ -403,10 +449,14 @@ const ScheduleTemplatePage = () => {
         title: `Mẫu: ${title}`,
         start: toIso(t.date, pt.startMin),
         end: toIso(t.date, pt.endMin),
+        editable: !t.fixedActivityCode,
+        durationEditable: false,
         backgroundColor: palette.bg,
         borderColor: palette.accent,
         textColor: palette.title,
         extendedProps: {
+          sourceKey: `${t.dayOfWeek}-${t.period}`,
+          fixedActivityCode: t.fixedActivityCode || null,
           teacherName: t.teacherName ||
             (classSections.find(
               (cs) =>
@@ -447,7 +497,7 @@ const ScheduleTemplatePage = () => {
       toast.success('Đã lưu thời khóa biểu mẫu thành công.');
     } catch (e) {
       console.error(e);
-      toast.error('Lưu mẫu thất bại: ' + (e.response?.data?.error || e.message));
+      toast.error(getApiErrorMessage(e, 'Lưu thời khóa biểu mẫu thất bại.'));
     }
   };
 
@@ -466,7 +516,7 @@ const ScheduleTemplatePage = () => {
       toast.success(`Đã xóa thời khóa biểu mẫu (${count} tiết). Không ảnh hưởng thời khóa biểu chính.`);
     } catch (e) {
       console.error(e);
-      toast.error('Xóa mẫu thất bại: ' + (e.response?.data?.error || e.message));
+      toast.error(getApiErrorMessage(e, 'Xóa thời khóa biểu mẫu thất bại.'));
     }
   };
 
@@ -557,7 +607,7 @@ const ScheduleTemplatePage = () => {
       }
     } catch (error) {
       console.error('Error generating schedules:', error);
-      toast.error('Lỗi khi tạo thời khóa biểu: ' + (error.response?.data?.error || error.message));
+      toast.error(getApiErrorMessage(error, 'Lỗi khi tạo thời khóa biểu mẫu tự động.'));
     }
   };
 
@@ -691,6 +741,15 @@ const ScheduleTemplatePage = () => {
     setShowPopup(false);
   };
 
+  const removeTemplateByKey = (key) => {
+    if (!key || !templateMap[key]) return;
+    setTemplateMap((prev) => {
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+  };
+
   const removeTemplateAt = (eventStart) => {
     const date = fmtDate(eventStart);
     const day = toDayOfWeek(date);
@@ -700,12 +759,58 @@ const ScheduleTemplatePage = () => {
     const period = PERIODS.find((p) => periodTimeMap[p]?.startMin === minutes);
     if (!period) return;
     const key = `${day}-${period}`;
-    if (!templateMap[key]) return;
+    removeTemplateByKey(key);
+  };
+
+  const snapEventToTemplatePeriod = (event, target) => {
+    const range = periodTimeMap[target.period];
+    if (!event || !range) return;
+    event.setDates(toIso(target.date, range.startMin), toIso(target.date, range.endMin));
+  };
+
+  const moveTemplateSlot = (arg) => {
+    const sourceKey = arg.oldEvent.extendedProps?.sourceKey || String(arg.oldEvent.id || '').replace(/^tpl-/, '');
+    const moving = templateMap[sourceKey];
+    if (!moving) {
+      arg.revert();
+      return;
+    }
+    if (moving.fixedActivityCode) {
+      toast.warn('Không thể kéo thả tiết cố định Chào cờ hoặc Sinh hoạt lớp.');
+      arg.revert();
+      return;
+    }
+    const target = getTemplatePositionFromDate(arg.event.start);
+    if (!target) {
+      toast.warn('Vui lòng thả tiết trong khoảng từ thứ 2 đến thứ 7.');
+      arg.revert();
+      return;
+    }
+    const targetKey = `${target.dayOfWeek}-${target.period}`;
+    if (targetKey === sourceKey) {
+      snapEventToTemplatePeriod(arg.event, target);
+      return;
+    }
+    if (templateMap[targetKey]) {
+      toast.warn('Ô đích đã có tiết mẫu. Vui lòng chọn vị trí trống.');
+      arg.revert();
+      return;
+    }
+
     setTemplateMap((prev) => {
+      const current = prev[sourceKey];
+      if (!current || prev[targetKey]) return prev;
       const next = { ...prev };
-      delete next[key];
+      delete next[sourceKey];
+      next[targetKey] = {
+        ...current,
+        dayOfWeek: target.dayOfWeek,
+        period: target.period,
+        date: target.date,
+      };
       return next;
     });
+    snapEventToTemplatePeriod(arg.event, target);
   };
 
   if (loading) {
@@ -786,7 +891,7 @@ const ScheduleTemplatePage = () => {
         </div>
 
         <div className="schedule-template-hint">
-          Click vào ô lịch để mở popup thêm tiết. Click vào event mẫu để xóa 1 tiết mẫu.
+          Click vào ô lịch để mở popup thêm tiết. Kéo thả event mẫu để đổi vị trí. Click vào event mẫu để xóa 1 tiết mẫu.
         </div>
       </div>
 
@@ -805,6 +910,9 @@ const ScheduleTemplatePage = () => {
           height="auto"
           weekends
           selectable
+          editable
+          eventDurationEditable={false}
+          dragRevertDuration={160}
           headerToolbar={{ left: 'prev,next today', center: 'title', right: 'timeGridWeek,timeGridDay' }}
           buttonText={{ today: 'Hôm nay', week: 'Tuần', day: 'Ngày' }}
           datesSet={(arg) => {
@@ -816,9 +924,10 @@ const ScheduleTemplatePage = () => {
           }}
           events={events}
           dateClick={(arg) => openPopup(fmtDate(arg.date))}
+          eventDrop={moveTemplateSlot}
           eventClick={(arg) => {
             if (String(arg.event.id || '').startsWith('tpl-')) {
-              removeTemplateAt(arg.event.start);
+              removeTemplateByKey(arg.event.extendedProps?.sourceKey);
             }
           }}
           eventContent={(eventInfo) => {
@@ -1081,4 +1190,3 @@ const ScheduleTemplatePage = () => {
 };
 
 export default ScheduleTemplatePage;
-

@@ -43,7 +43,7 @@ public class ScheduleTemplateService {
 
     public List<ScheduleTemplate> getTemplateByClassAndWeekStart(Integer classId, LocalDate weekStart) {
         if (classId == null || weekStart == null) {
-            throw new BadRequestException("classId and weekStart are required");
+            throw new BadRequestException("Vui lòng chọn lớp và tuần mẫu.");
         }
         return scheduleTemplateRepository.findByClassIdAndWeekStartWithRelations(classId, normalizeToMonday(weekStart));
     }
@@ -51,18 +51,18 @@ public class ScheduleTemplateService {
     @Transactional
     public List<ScheduleTemplate> saveTemplate(ScheduleTemplateSaveRequest request) {
         if (request == null || request.getClassId() == null || request.getWeekStart() == null) {
-            throw new BadRequestException("classId and weekStart are required");
+            throw new BadRequestException("Vui lòng chọn lớp và tuần mẫu.");
         }
         if (request.getSlots() == null || request.getSlots().isEmpty()) {
-            throw new BadRequestException("slots is required");
+            throw new BadRequestException("Vui lòng thêm ít nhất một tiết mẫu.");
         }
 
         LocalDate weekStart = normalizeToMonday(request.getWeekStart());
         ClassEntity classEntity = classRepository.findById(request.getClassId())
-                .orElseThrow(() -> new ResourceNotFoundException("Class not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy lớp."));
         School school = classEntity.getSchool();
         if (school == null) {
-            throw new BadRequestException("Class has no school");
+            throw new BadRequestException("Lớp chưa được gán trường.");
         }
 
         List<ScheduleTemplate> toSave = new ArrayList<>();
@@ -75,46 +75,39 @@ public class ScheduleTemplateService {
             final int rowIndex = i;
             ScheduleTemplateSlotRequest slot = request.getSlots().get(i);
             if (slot == null) {
-                throw new BadRequestException("slots[" + rowIndex + "] is invalid");
+                throw new BadRequestException(slotLabel(rowIndex) + " không hợp lệ.");
             }
             if (slot.getPeriod() == null || slot.getPeriod() < MIN_PERIOD || slot.getPeriod() > MAX_PERIOD) {
-                throw new BadRequestException("slots[" + rowIndex + "]: period must be between 1 and 10");
+                throw new BadRequestException(slotLabel(rowIndex) + ": Tiết phải nằm trong khoảng 1-10.");
             }
 
             LocalDate date = resolveTemplateDate(slot, weekStart, rowIndex);
             Integer dayOfWeek = date.getDayOfWeek().getValue();
             if (dayOfWeek < 1 || dayOfWeek > 6) {
-                throw new BadRequestException("slots[" + rowIndex + "]: only Monday-Saturday are allowed");
+                throw new BadRequestException(slotLabel(rowIndex) + ": Chỉ được lập lịch từ thứ 2 đến thứ 7.");
             }
+            boolean isFixedPosition = (dayOfWeek == MONDAY && slot.getPeriod() == MORNING_FIRST_PERIOD)
+                    || (dayOfWeek == SATURDAY && slot.getPeriod() == SHL_PERIOD);
 
             String classKey = date + "-" + slot.getPeriod();
             if (!classSlotDedup.add(classKey)) {
-                throw new BadRequestException("Duplicate class slot in request at slots[" + rowIndex + "]");
+                throw new BadRequestException(slotLabel(rowIndex) + ": Lớp đã có tiết trùng ngày và tiết trong dữ liệu gửi lên.");
             }
 
             User teacher = null;
-            if (slot.getTeacherId() != null) {
+            if (!isFixedPosition && slot.getTeacherId() != null) {
                 teacher = userRepository.findById(slot.getTeacherId())
-                        .orElseThrow(() -> new BadRequestException("slots[" + rowIndex + "]: teacher not found"));
+                        .orElseThrow(() -> new BadRequestException(slotLabel(rowIndex) + ": Không tìm thấy giáo viên."));
                 String teacherKey = teacher.getId() + "-" + classKey;
                 if (!teacherSlotDedup.add(teacherKey)) {
-                    throw new BadRequestException("Duplicate teacher slot in request at slots[" + rowIndex + "]");
+                    throw new BadRequestException(slotLabel(rowIndex) + ": Giáo viên bị trùng lịch trong dữ liệu gửi lên.");
                 }
             }
 
             Subject subject = null;
-            if (slot.getSubjectId() != null) {
+            if (!isFixedPosition && slot.getSubjectId() != null) {
                 subject = subjectRepository.findById(slot.getSubjectId())
-                        .orElseThrow(() -> new BadRequestException("slots[" + rowIndex + "]: subject not found"));
-            }
-
-            ClassSection classSection = null;
-            if (slot.getClassSectionId() != null) {
-                classSection = classSectionRepository.findByIdFetchClassRoomAndSchool(slot.getClassSectionId())
-                        .orElseThrow(() -> new BadRequestException("slots[" + rowIndex + "]: classSection not found"));
-                if (!Objects.equals(classSection.getClassRoom().getId(), classEntity.getId())) {
-                    throw new BadRequestException("slots[" + rowIndex + "]: classSection does not belong to class");
-                }
+                        .orElseThrow(() -> new BadRequestException(slotLabel(rowIndex) + ": Không tìm thấy môn học."));
             }
 
             ScheduleTemplate row = new ScheduleTemplate();
@@ -126,7 +119,7 @@ public class ScheduleTemplateService {
             row.setPeriod(slot.getPeriod());
             row.setSubject(subject);
             row.setTeacher(teacher);
-            row.setClassSection(classSection);
+            row.setClassSection(null);
             row.setRoom(slot.getRoom() != null ? slot.getRoom() : classEntity.getRoom());
             row.setFixedActivityCode(normalizeFixedCode(slot.getFixedActivityCode()));
             enforceFixedActivityRules(row, classEntity);
@@ -147,6 +140,7 @@ public class ScheduleTemplateService {
         }
 
         scheduleTemplateRepository.deleteByClassEntityIdAndWeekStart(classEntity.getId(), weekStart);
+        scheduleTemplateRepository.flush();
         scheduleTemplateRepository.saveAll(toSave);
         return scheduleTemplateRepository.findByClassIdAndWeekStartWithRelations(classEntity.getId(), weekStart);
     }
@@ -154,7 +148,7 @@ public class ScheduleTemplateService {
     @Transactional
     public int deleteTemplate(Integer classId, LocalDate weekStart) {
         if (classId == null || weekStart == null) {
-            throw new BadRequestException("classId and weekStart are required");
+            throw new BadRequestException("Vui lòng chọn lớp và tuần mẫu.");
         }
         LocalDate normalized = normalizeToMonday(weekStart);
         List<ScheduleTemplate> rows = scheduleTemplateRepository.findByClassIdAndWeekStart(classId, normalized);
@@ -169,19 +163,19 @@ public class ScheduleTemplateService {
                 || request.getWeekStartTemplate() == null
                 || request.getSemesterStart() == null
                 || request.getSemesterEnd() == null) {
-            throw new BadRequestException("classId, weekStartTemplate, semesterStart, semesterEnd are required");
+            throw new BadRequestException("Vui lòng chọn lớp, tuần mẫu, ngày bắt đầu và ngày kết thúc học kỳ.");
         }
         if (request.getSemesterEnd().isBefore(request.getSemesterStart())) {
-            throw new BadRequestException("semesterEnd must be >= semesterStart");
+            throw new BadRequestException("Ngày kết thúc học kỳ phải lớn hơn hoặc bằng ngày bắt đầu.");
         }
 
         ClassEntity classEntity = classRepository.findById(request.getClassId())
-                .orElseThrow(() -> new ResourceNotFoundException("Class not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy lớp."));
         LocalDate templateMonday = normalizeToMonday(request.getWeekStartTemplate());
         List<ScheduleTemplate> templates = scheduleTemplateRepository
                 .findByClassIdAndWeekStartWithRelations(classEntity.getId(), templateMonday);
         if (templates.isEmpty()) {
-            throw new BadRequestException("No template found for class/weekStartTemplate");
+            throw new BadRequestException("Không tìm thấy thời khóa biểu mẫu cho lớp và tuần mẫu đã chọn.");
         }
         validateRequiredFixedRules(templates);
 
@@ -246,14 +240,14 @@ public class ScheduleTemplateService {
                 sch.setPeriod(t.getPeriod());
                 sch.setRoom(t.getRoom());
                 sch.setSubject(t.getSubject());
-                sch.setTeacher(t.getTeacher());
-                sch.setClassSection(t.getClassSection());
+                sch.setTeacher(FIXED_ACTIVITY_CHAOCO.equals(normalizeFixedCode(t.getFixedActivityCode())) ? null : t.getTeacher());
+                sch.setClassSection(resolveCurrentClassSection(classEntity, t.getSubject(), t.getTeacher()));
                 sch.setFixedActivityCode(t.getFixedActivityCode());
                 toCreate.add(sch);
             }
         }
 
-        ensureNoTeacherConflictForGeneratedSchedules(toCreate, toDelete);
+        ensureNoTeacherConflictForGeneratedSchedules(toCreate, toDelete, classEntity);
 
         if (!toCreate.isEmpty()) {
             scheduleRepository.saveAll(toCreate);
@@ -279,6 +273,22 @@ public class ScheduleTemplateService {
         return normalized;
     }
 
+    private static String slotLabel(int index) {
+        return "Dòng " + (index + 1) + " của thời khóa biểu mẫu";
+    }
+
+    private ClassSection resolveCurrentClassSection(ClassEntity classEntity, Subject subject, User teacher) {
+        if (classEntity == null || subject == null || teacher == null) {
+            return null;
+        }
+        return classSectionRepository.findByClassRoomId(classEntity.getId()).stream()
+                .filter(cs -> cs.getSubject() != null && cs.getTeacher() != null)
+                .filter(cs -> Objects.equals(cs.getSubject().getId(), subject.getId()))
+                .filter(cs -> Objects.equals(cs.getTeacher().getId(), teacher.getId()))
+                .findFirst()
+                .orElse(null);
+    }
+
     private static void enforceFixedActivityRules(ScheduleTemplate row, ClassEntity classEntity) {
         if (row == null || row.getDayOfWeek() == null || row.getPeriod() == null) {
             return;
@@ -291,7 +301,7 @@ public class ScheduleTemplateService {
             row.setFixedActivityCode(FIXED_ACTIVITY_CHAOCO);
             row.setSubject(null);
             row.setClassSection(null);
-            row.setTeacher(classEntity != null ? classEntity.getHomeroomTeacher() : row.getTeacher());
+            row.setTeacher(null);
             return;
         }
         if (isShlSlot) {
@@ -332,7 +342,7 @@ public class ScheduleTemplateService {
         }
     }
 
-    private void ensureNoTeacherConflictForGeneratedSchedules(List<Schedule> toCreate, List<Schedule> toDelete) {
+    private void ensureNoTeacherConflictForGeneratedSchedules(List<Schedule> toCreate, List<Schedule> toDelete, ClassEntity targetClass) {
         if (toCreate == null || toCreate.isEmpty()) {
             return;
         }
@@ -363,6 +373,9 @@ public class ScheduleTemplateService {
                 if (existing.getDate() == null || existing.getPeriod() == null || existing.getTeacher() == null || existing.getTeacher().getId() == null) {
                     continue;
                 }
+                if (!isSameSchoolYear(existing.getClassEntity(), targetClass)) {
+                    continue;
+                }
                 if (existing.getId() != null && deletedScheduleIds.contains(existing.getId())) {
                     continue;
                 }
@@ -376,23 +389,35 @@ public class ScheduleTemplateService {
             }
             String key = s.getTeacher().getId() + "-" + s.getDate() + "-" + s.getPeriod();
             if (occupiedTeacherSlots.contains(key)) {
-                throw new BadRequestException("Trùng lịch giáo viên khi sinh từ mẫu: giáo viên " + s.getTeacher().getId()
-                        + " đã có lịch vào " + s.getDate() + " tiết " + s.getPeriod() + ".");
+                String teacherName = s.getTeacher().getFullName() != null && !s.getTeacher().getFullName().trim().isEmpty()
+                        ? s.getTeacher().getFullName()
+                        : "#" + s.getTeacher().getId();
+                throw new BadRequestException("Trùng lịch giáo viên khi sinh từ mẫu: giáo viên " + teacherName
+                        + " đã có lịch vào ngày " + s.getDate() + ", tiết " + s.getPeriod() + ".");
             }
             occupiedTeacherSlots.add(key);
         }
+    }
+
+    private static boolean isSameSchoolYear(ClassEntity left, ClassEntity right) {
+        Integer leftId = left != null && left.getSchoolYear() != null ? left.getSchoolYear().getId() : null;
+        Integer rightId = right != null && right.getSchoolYear() != null ? right.getSchoolYear().getId() : null;
+        if (leftId == null || rightId == null) {
+            return true;
+        }
+        return Objects.equals(leftId, rightId);
     }
 
     private static LocalDate resolveTemplateDate(ScheduleTemplateSlotRequest slot, LocalDate weekStart, int index) {
         if (slot.getDate() != null) {
             LocalDate d = slot.getDate();
             if (d.isBefore(weekStart) || d.isAfter(weekStart.plusDays(5))) {
-                throw new BadRequestException("slots[" + index + "]: date must be inside weekStart Monday-Saturday");
+                throw new BadRequestException(slotLabel(index) + ": Ngày phải nằm trong tuần mẫu từ thứ 2 đến thứ 7.");
             }
             return d;
         }
         if (slot.getDayOfWeek() == null || slot.getDayOfWeek() < 1 || slot.getDayOfWeek() > 6) {
-            throw new BadRequestException("slots[" + index + "]: either date or dayOfWeek (1..6) is required");
+            throw new BadRequestException(slotLabel(index) + ": Vui lòng chọn ngày hoặc thứ trong tuần từ thứ 2 đến thứ 7.");
         }
         return weekStart.plusDays(slot.getDayOfWeek() - 1L);
     }

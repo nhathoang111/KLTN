@@ -82,7 +82,7 @@ public class ScheduleService {
             }
             String cKey = d + "-" + period;
             occupiedClassSlotsFirstWeek.add(cKey);
-            if (homeroomId != null) {
+            if (homeroomId != null && isShlSlot(dayOffset, period)) {
                 occupiedTeacherSlotsFirstWeek.add(homeroomId + "-" + d + "-" + period);
             }
         }
@@ -126,7 +126,7 @@ public class ScheduleService {
                 sch.setRoom(classRoom);
                 sch.setSubject(null);
                 sch.setFixedActivityCode(code);
-                sch.setTeacher(homeroomTeacher);
+                sch.setTeacher(FIXED_ACTIVITY_CHAOCO.equals(code) ? null : homeroomTeacher);
                 sch.setSchool(school);
                 sch.setClassEntity(classEntity);
                 sch.setClassSection(null);
@@ -159,7 +159,7 @@ public class ScheduleService {
 
     public Schedule getScheduleById(Integer id) {
         return scheduleRepository.findByIdWithRelations(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Schedule not found with id: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy tiết học với id: " + id));
     }
 
     public List<Schedule> getSchedulesBySchool(Integer schoolId) {
@@ -217,9 +217,34 @@ public class ScheduleService {
 
     public int deleteAllSchedulesByClass(Integer classId) {
         ClassEntity classEntity = classRepository.findById(classId)
-                .orElseThrow(() -> new BadRequestException("Class not found"));
+                .orElseThrow(() -> new BadRequestException("Không tìm thấy lớp."));
         ClassStatusPolicy.assertTeachActionAllowed(classEntity, "xóa thời khóa biểu");
         List<Schedule> schedules = scheduleRepository.findByClassEntityId(classId);
+        int count = schedules.size();
+        scheduleRepository.deleteAll(schedules);
+        return count;
+    }
+
+    public int deleteAllSchedulesByTeacher(Integer teacherId, Integer schoolYearId) {
+        if (teacherId == null) {
+            throw new BadRequestException("Vui lòng chọn giáo viên.");
+        }
+        userRepository.findById(teacherId)
+                .orElseThrow(() -> new BadRequestException("Không tìm thấy giáo viên."));
+        List<Schedule> schedules = scheduleRepository.findByTeacherId(teacherId);
+        if (schoolYearId != null) {
+            schedules = schedules.stream()
+                    .filter(schedule -> {
+                        ClassEntity classEntity = schedule.getClassEntity();
+                        return classEntity != null
+                                && classEntity.getSchoolYear() != null
+                                && schoolYearId.equals(classEntity.getSchoolYear().getId());
+                    })
+                    .collect(Collectors.toList());
+        }
+        for (Schedule schedule : schedules) {
+            ClassStatusPolicy.assertTeachActionAllowed(schedule.getClassEntity(), "xóa lịch dạy của giáo viên");
+        }
         int count = schedules.size();
         scheduleRepository.deleteAll(schedules);
         return count;
@@ -250,15 +275,15 @@ public class ScheduleService {
         out.setUnmetAssignments(new ArrayList<>());
 
         ClassEntity classEntity = classRepository.findById(classId)
-                .orElseThrow(() -> new ResourceNotFoundException("Class not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy lớp."));
         ClassStatusPolicy.assertTeachActionAllowed(classEntity, "tạo thời khóa biểu");
         School school = classEntity.getSchool();
         if (school == null) {
-            throw new ResourceNotFoundException("School not found for class");
+            throw new ResourceNotFoundException("Lớp chưa được gán trường.");
         }
         Integer schoolId = school.getId();
         if (schoolIdRequest != null && schoolId != null && !schoolIdRequest.equals(schoolId)) {
-            throw new BadRequestException("classId does not belong to the given schoolId");
+            throw new BadRequestException("Lớp không thuộc trường đang chọn.");
         }
 
         List<GenAssign> batch = new ArrayList<>();
@@ -270,21 +295,21 @@ public class ScheduleService {
             Integer teacherId = parseInt(row.get("teacherId"));
             Integer periodsPerWeek = parseInt(row.get("periodsPerWeek"));
             if (subjectId == null || teacherId == null || periodsPerWeek == null) {
-                throw new BadRequestException("subjectAssignments[" + rowIndex + "]: subjectId, teacherId, periodsPerWeek are required");
+                throw new BadRequestException("Dòng " + (rowIndex + 1) + ": Vui lòng chọn môn học, giáo viên và số tiết mỗi tuần.");
             }
             if (periodsPerWeek < 1) {
-                throw new BadRequestException("subjectAssignments[" + rowIndex + "]: periodsPerWeek must be >= 1");
+                throw new BadRequestException("Dòng " + (rowIndex + 1) + ": Số tiết mỗi tuần phải lớn hơn hoặc bằng 1.");
             }
             Subject subject = subjectRepository.findById(subjectId)
-                    .orElseThrow(() -> new BadRequestException("subjectAssignments[" + rowIndex + "]: subject not found id=" + subjectId));
+                    .orElseThrow(() -> new BadRequestException("Dòng " + (rowIndex + 1) + ": Không tìm thấy môn học."));
             User teacher = userRepository.findById(teacherId)
-                    .orElseThrow(() -> new BadRequestException("subjectAssignments[" + rowIndex + "]: teacher not found id=" + teacherId));
+                    .orElseThrow(() -> new BadRequestException("Dòng " + (rowIndex + 1) + ": Không tìm thấy giáo viên."));
             validateSubjectForGenerate(subject, schoolId);
             validateTeacherForGenerate(teacher, schoolId);
 
             String pairKey = subjectId + "_" + teacherId;
             if (!duplicatePairs.add(pairKey)) {
-                throw new BadRequestException("Duplicate subject–teacher pair at line " + rowIndex + " (subjectId=" + subjectId + ", teacherId=" + teacherId + ")");
+                throw new BadRequestException("Dòng " + (rowIndex + 1) + ": Môn học và giáo viên bị nhập trùng.");
             }
 
             GenAssign g = new GenAssign();
@@ -443,7 +468,7 @@ public class ScheduleService {
             out.setSuccess(false);
             out.setAssignedPeriods(0);
             out.setUnmetAssignments(unmetPattern);
-            out.setMessage("Không ghép đủ tiết trong tuần mẫu (pattern).");
+            out.setMessage("Không ghép đủ số tiết trong tuần mẫu. Vui lòng giảm số tiết hoặc kiểm tra lịch trống của lớp/giáo viên.");
             return out;
         }
 
@@ -581,8 +606,8 @@ public class ScheduleService {
             out.setAssignedPeriods(0);
             out.setUnmetAssignments(unmetExpand);
             out.setMessage(conflictSkip
-                    ? "Không thể tạo đủ tiết do trùng lịch lớp/giáo viên với dữ liệu có sẵn."
-                    : "Không đủ số tiết có thể xếp được trong các tuần đã chọn (xem unmetAssignments).");
+                    ? "Không thể tạo đủ tiết do trùng lịch lớp hoặc giáo viên với dữ liệu có sẵn."
+                    : "Không đủ số tiết có thể xếp trong các tuần đã chọn.");
             return out;
         }
 
@@ -601,7 +626,7 @@ public class ScheduleService {
                 out.setSuccess(false);
                 out.setAssignedPeriods(0);
                 out.setUnmetAssignments(new ArrayList<>());
-                out.setMessage("Ô tiết cố định (Chào cờ / Sinh hoạt lớp) trùng với tiết vừa xếp — kiểm tra logic block slot.");
+                out.setMessage("Tiết cố định Chào cờ hoặc Sinh hoạt lớp bị trùng với tiết vừa xếp.");
                 return out;
             }
             if (existingClassSlots.contains(classKey)) {
@@ -682,31 +707,31 @@ public class ScheduleService {
 
     private static void validateSubjectForGenerate(Subject s, Integer schoolId) {
         if (s.getDeletedAt() != null) {
-            throw new BadRequestException("Subject id " + s.getId() + " is deleted");
+            throw new BadRequestException("Môn học " + s.getName() + " đã bị xóa.");
         }
         if (s.getStatus() != null && !"ACTIVE".equalsIgnoreCase(s.getStatus().trim())) {
-            throw new BadRequestException("Subject id " + s.getId() + " is not ACTIVE");
+            throw new BadRequestException("Môn học " + s.getName() + " chưa ở trạng thái hoạt động.");
         }
         if (schoolId != null && s.getSchool() != null && s.getSchool().getId() != null
                 && !schoolId.equals(s.getSchool().getId())) {
-            throw new BadRequestException("Subject id " + s.getId() + " does not belong to this school");
+            throw new BadRequestException("Môn học " + s.getName() + " không thuộc trường của lớp đang chọn.");
         }
     }
 
     private static void validateTeacherForGenerate(User t, Integer schoolId) {
         if (t.getRole() == null || t.getRole().getName() == null) {
-            throw new BadRequestException("Teacher id " + t.getId() + " has no role");
+            throw new BadRequestException("Giáo viên " + t.getFullName() + " chưa được gán vai trò.");
         }
         String rn = t.getRole().getName().toUpperCase();
         boolean isTeacher = rn.startsWith("TEACHER") || rn.contains("TEACHER")
                 || rn.contains("GIÁO VIÊN") || rn.contains("GIAO VIEN") || rn.contains("GV");
         if (!isTeacher) {
-            throw new BadRequestException("User id " + t.getId() + " is not a teacher role");
+            throw new BadRequestException("Người dùng " + t.getFullName() + " không phải giáo viên.");
         }
         if (schoolId != null) {
             if (t.getSchool() == null || t.getSchool().getId() == null
                     || !schoolId.equals(t.getSchool().getId())) {
-                throw new BadRequestException("Teacher id " + t.getId() + " does not belong to this school");
+                throw new BadRequestException("Giáo viên " + t.getFullName() + " không thuộc trường của lớp đang chọn.");
             }
         }
     }
@@ -776,7 +801,8 @@ public class ScheduleService {
             ExistingTemplateSlot slot = new ExistingTemplateSlot();
             slot.dayOffset = dayOfWeek - 1;
             slot.period = period;
-            slot.teacherId = parseInt(row.get("teacherId"));
+            String fixedCode = row.get("fixedActivityCode") != null ? String.valueOf(row.get("fixedActivityCode")).trim().toUpperCase() : "";
+            slot.teacherId = FIXED_ACTIVITY_CHAOCO.equals(fixedCode) ? null : parseInt(row.get("teacherId"));
             out.add(slot);
         }
         return out;
@@ -868,14 +894,14 @@ public class ScheduleService {
         if (classEntity == null || subjectId == null || teacherId == null) return null;
         if (explicitClassSectionId != null) {
             ClassSection cs = classSectionRepository.findByIdFetchClassRoomAndSchool(explicitClassSectionId)
-                    .orElseThrow(() -> new BadRequestException("classSection not found"));
+                    .orElseThrow(() -> new BadRequestException("Không tìm thấy phân công lớp-môn-giáo viên."));
             if (!Objects.equals(cs.getClassRoom().getId(), classEntity.getId())) {
-                throw new BadRequestException("classSection does not belong to this class");
+                throw new BadRequestException("Phân công không thuộc lớp đang chọn.");
             }
             if (cs.getSubject() == null || cs.getTeacher() == null
                     || !subjectId.equals(cs.getSubject().getId())
                     || !teacherId.equals(cs.getTeacher().getId())) {
-                throw new BadRequestException("classSection does not match subject/teacher");
+                throw new BadRequestException("Phân công không khớp với môn học hoặc giáo viên.");
             }
             return cs;
         }
@@ -902,9 +928,9 @@ public class ScheduleService {
     public Schedule createSchedule(Map<String, Object> scheduleData) {
         Schedule schedule = new Schedule();
         Integer classId = parseInt(scheduleData.get("classId"));
-        if (classId == null) throw new BadRequestException("classId is required");
+        if (classId == null) throw new BadRequestException("Vui lòng chọn lớp.");
         ClassEntity classEntity = classRepository.findById(classId)
-                .orElseThrow(() -> new BadRequestException("Class not found"));
+                .orElseThrow(() -> new BadRequestException("Không tìm thấy lớp."));
         ClassStatusPolicy.assertTeachActionAllowed(classEntity, "tạo thời khóa biểu");
         schedule.setClassEntity(classEntity);
         schedule.setSchool(classEntity.getSchool());
@@ -912,18 +938,18 @@ public class ScheduleService {
         Integer subjectId = parseInt(scheduleData.get("subjectId"));
         if (subjectId != null) {
             schedule.setSubject(subjectRepository.findById(subjectId)
-                    .orElseThrow(() -> new BadRequestException("Subject not found")));
+                    .orElseThrow(() -> new BadRequestException("Không tìm thấy môn học.")));
         }
 
         Integer teacherId = parseInt(scheduleData.get("teacherId"));
         if (teacherId != null) {
             schedule.setTeacher(userRepository.findById(teacherId)
-                    .orElseThrow(() -> new BadRequestException("Teacher not found")));
+                    .orElseThrow(() -> new BadRequestException("Không tìm thấy giáo viên.")));
         }
 
         Integer period = parseInt(scheduleData.get("period"));
         if (period == null || period < MIN_PERIOD || period > MAX_PERIOD) {
-            throw new BadRequestException("Period must be between " + MIN_PERIOD + " and " + MAX_PERIOD);
+            throw new BadRequestException("Tiết học phải nằm trong khoảng " + MIN_PERIOD + "-" + MAX_PERIOD + ".");
         }
         schedule.setPeriod(period);
 
@@ -946,11 +972,11 @@ public class ScheduleService {
                 schedule.setDate(today.plusDays(daysToAdd));
             }
         } else {
-            throw new BadRequestException("Either date or dayOfWeek is required");
+            throw new BadRequestException("Vui lòng chọn ngày học hoặc thứ trong tuần.");
         }
 
         date = schedule.getDate();
-        if (date == null) throw new BadRequestException("Either date or dayOfWeek is required");
+        if (date == null) throw new BadRequestException("Vui lòng chọn ngày học hoặc thứ trong tuần.");
 
         String room = (String) scheduleData.get("room");
         if (room == null || room.trim().isEmpty()) {
@@ -966,7 +992,7 @@ public class ScheduleService {
         }
 
         List<Schedule> conflicts = findConflictsByDate(date, period, teacherId, classId);
-        if (!conflicts.isEmpty()) throw new BadRequestException("Schedule conflict detected");
+        if (!conflicts.isEmpty()) throw new BadRequestException("Lịch bị trùng với lớp hoặc giáo viên ở ngày và tiết đã chọn.");
 
         Schedule saved = scheduleRepository.save(schedule);
         return scheduleRepository.findByIdWithRelations(saved.getId()).orElse(saved);
@@ -979,7 +1005,7 @@ public class ScheduleService {
             try {
                 return LocalDate.parse(((String) dateObj).trim());
             } catch (Exception e) {
-                throw new BadRequestException("Invalid date format. Use YYYY-MM-DD. Received: " + dateObj);
+                throw new BadRequestException("Ngày không đúng định dạng YYYY-MM-DD: " + dateObj);
             }
         }
         return null;
@@ -994,7 +1020,7 @@ public class ScheduleService {
             Integer classId = parseInt(classIdObj);
             if (classId != null) {
                 ClassEntity classEntity = classRepository.findById(classId)
-                        .orElseThrow(() -> new BadRequestException("Class not found"));
+                        .orElseThrow(() -> new BadRequestException("Không tìm thấy lớp."));
                 ClassStatusPolicy.assertTeachActionAllowed(classEntity, "cập nhật thời khóa biểu");
                 schedule.setClassEntity(classEntity);
                 schedule.setSchool(classEntity.getSchool());
@@ -1008,7 +1034,7 @@ public class ScheduleService {
             subjectId = parseInt(subjectIdObj);
             if (subjectId != null) {
                 schedule.setSubject(subjectRepository.findById(subjectId)
-                        .orElseThrow(() -> new BadRequestException("Subject not found")));
+                        .orElseThrow(() -> new BadRequestException("Không tìm thấy môn học.")));
                 schedule.setFixedActivityCode(null);
             }
         }
@@ -1019,7 +1045,7 @@ public class ScheduleService {
             teacherId = parseInt(teacherIdObj);
             if (teacherId != null) {
                 schedule.setTeacher(userRepository.findById(teacherId)
-                        .orElseThrow(() -> new BadRequestException("Teacher not found")));
+                        .orElseThrow(() -> new BadRequestException("Không tìm thấy giáo viên.")));
             }
         }
 
@@ -1084,7 +1110,7 @@ public class ScheduleService {
             boolean hasConflict = conflicts.stream()
                     .anyMatch(conflict -> conflict.getId() == null || !conflict.getId().equals(schedule.getId()));
             if (hasConflict) {
-                throw new BadRequestException("Schedule conflict detected");
+                throw new BadRequestException("Lịch bị trùng với lớp hoặc giáo viên ở ngày và tiết đã chọn.");
             }
         }
 

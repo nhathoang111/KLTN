@@ -7,9 +7,7 @@ import java.time.LocalDate;
 @Table(name = "schedules",
         uniqueConstraints = {
                 @UniqueConstraint(name = "uk_schedule_class_date_period",
-                        columnNames = { "class_id", "date", "period" }),
-                @UniqueConstraint(name = "uk_schedule_teacher_date_period",
-                        columnNames = { "teacher_id", "date", "period" })
+                        columnNames = { "class_id", "date", "period" })
         })
 public class Schedule {
     @Id

@@ -14,6 +14,29 @@ import { scheduleSubjectDisplayName } from '../../../../shared/lib/scheduleLabel
 import { isTeachingActiveClass } from '../../../../shared/lib/classStatus';
 import { buildTeacherVisibleClasses } from '../../../../shared/lib/teacherScope';
 
+const getApiErrorMessage = (error, fallback) => {
+  const data = error?.response?.data;
+  if (typeof data === 'string' && data.trim()) return data.trim();
+  if (data && typeof data === 'object') {
+    const directMessage = [data.message, data.error, data.detail, data.title]
+      .find((value) => typeof value === 'string' && value.trim());
+    if (directMessage) return directMessage.trim();
+    if (Array.isArray(data.errors) && data.errors.length > 0) {
+      const fieldMessages = data.errors
+        .map((item) => {
+          if (typeof item === 'string') return item;
+          if (item && typeof item === 'object') {
+            return item.message || item.error || item.defaultMessage || '';
+          }
+          return '';
+        })
+        .filter(Boolean);
+      if (fieldMessages.length > 0) return fieldMessages.join('\n');
+    }
+  }
+  return error?.message || fallback;
+};
+
 const ScheduleListPage = () => {
   const { user } = useAuth();
   const [schedules, setSchedules] = useState([]);
@@ -420,8 +443,7 @@ const ScheduleListPage = () => {
       await fetchSchedules();
     } catch (error) {
       console.error('Error saving schedule:', error);
-      const errorMessage = error.response?.data?.error || error.message || 'Unknown error';
-      alert('Lỗi khi lưu lịch học: ' + errorMessage);
+      alert(getApiErrorMessage(error, 'Lỗi khi lưu lịch học.'));
     }
   };
 
@@ -463,7 +485,7 @@ const ScheduleListPage = () => {
         fetchSchedules();
       } catch (error) {
         console.error('Error deleting schedule:', error);
-        alert('Lỗi khi xóa lịch học');
+        alert(getApiErrorMessage(error, 'Lỗi khi xóa lịch học.'));
       }
     }
   };
@@ -485,7 +507,7 @@ const ScheduleListPage = () => {
         fetchSchedules();
       } catch (error) {
         console.error('Error deleting all schedules by class:', error);
-        alert('Lỗi khi xóa thời khóa biểu: ' + (error.response?.data?.error || error.message));
+        alert(getApiErrorMessage(error, 'Lỗi khi xóa thời khóa biểu.'));
       }
     }
   };
@@ -510,7 +532,7 @@ const ScheduleListPage = () => {
         setSelectedClassId('');
       } catch (error) {
         console.error('Error deleting all schedules:', error);
-        alert('Lỗi khi xóa thời khóa biểu: ' + (error.response?.data?.error || error.message));
+        alert(getApiErrorMessage(error, 'Lỗi khi xóa thời khóa biểu.'));
       }
     }
   };
@@ -569,7 +591,7 @@ const ScheduleListPage = () => {
       }
     } catch (error) {
       console.error('Error generating schedules:', error);
-      alert('Lỗi khi tạo thời khóa biểu: ' + (error.response?.data?.error || error.message));
+      alert(getApiErrorMessage(error, 'Lỗi khi tạo thời khóa biểu mẫu tự động.'));
     }
   };
 

@@ -48,6 +48,46 @@ const getClassOnlyDisplayName = (cls) => {
   return className.replace(suffixRegex, '').trim() || className;
 };
 
+const getScheduleSchoolYearId = (schedule) => {
+  const cls = schedule?.classEntity || schedule?.class_entity || {};
+  return cls?.schoolYear?.id ?? cls?.school_year_id ?? cls?.schoolYearId ?? null;
+};
+
+const getApiErrorMessage = (error, fallback) => {
+  const data = error?.response?.data;
+  if (typeof data === 'string' && data.trim()) return data.trim();
+  if (data && typeof data === 'object') {
+    const directMessage = [data.message, data.error, data.detail, data.title]
+      .find((value) => typeof value === 'string' && value.trim());
+    if (directMessage) return directMessage.trim();
+    if (Array.isArray(data.errors) && data.errors.length > 0) {
+      const fieldMessages = data.errors
+        .map((item) => {
+          if (typeof item === 'string') return item;
+          if (item && typeof item === 'object') {
+            return item.message || item.error || item.defaultMessage || '';
+          }
+          return '';
+        })
+        .filter(Boolean);
+      if (fieldMessages.length > 0) return fieldMessages.join('\n');
+    }
+  }
+  return error?.message || fallback;
+};
+
+const formatVietnameseDate = (dateValue) => {
+  if (!dateValue) return 'Chưa có ngày';
+  const date = new Date(dateValue);
+  if (Number.isNaN(date.getTime())) return String(dateValue).slice(0, 10);
+  return new Intl.DateTimeFormat('vi-VN', {
+    weekday: 'long',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  }).format(date);
+};
+
 const ScheduleFullCalendarPage = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -56,11 +96,14 @@ const ScheduleFullCalendarPage = () => {
   const [subjects, setSubjects] = useState([]);
   const [teachers, setTeachers] = useState([]);
   const [selectedClassId, setSelectedClassId] = useState('');
+  const [selectedTeacherId, setSelectedTeacherId] = useState('');
+  const [adminScheduleView, setAdminScheduleView] = useState('class');
   const [selectedSchoolYear, setSelectedSchoolYear] = useState('');
   const [schedules, setSchedules] = useState([]);
   const [currentView, setCurrentView] = useState('timeGridWeek');
   const [showAddModal, setShowAddModal] = useState(false);
   const [showGenerateFromTemplateModal, setShowGenerateFromTemplateModal] = useState(false);
+  const [selectedScheduleDetail, setSelectedScheduleDetail] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [generatingFromTemplate, setGeneratingFromTemplate] = useState(false);
   const [formData, setFormData] = useState({
@@ -145,14 +188,15 @@ const ScheduleFullCalendarPage = () => {
 
   useEffect(() => {
     if (loading) return;
-    const canFetchBySelectedClass = !!selectedClassId && !isStudent && !isParent;
-    if (canFetchBySelectedClass || isTeacher || isStudent || isParent) {
+    const canFetchBySelectedClass = adminScheduleView === 'class' && !!selectedClassId && !isStudent && !isParent;
+    const canFetchBySelectedTeacher = adminScheduleView === 'teacher' && !!selectedTeacherId && isAdmin;
+    if (canFetchBySelectedClass || canFetchBySelectedTeacher || isTeacher || isStudent || isParent) {
       fetchSchedules();
     } else {
       setSchedules([]);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedClassId, loading, user?.id, user?.role?.name]);
+  }, [adminScheduleView, selectedClassId, selectedTeacherId, selectedSchoolYear, loading, user?.id, user?.role?.name]);
 
   const fetchBootstrapData = async () => {
     try {
@@ -214,9 +258,11 @@ const ScheduleFullCalendarPage = () => {
             return rn === 'TEACHER' || rn.startsWith('TEACHER') || rn.includes('GIÁO VIÊN') || rn.includes('GIAO VIEN');
           });
           setTeachers(teacherUsers);
+          setSelectedTeacherId((prev) => prev || (teacherUsers[0]?.id ? String(teacherUsers[0].id) : ''));
         } catch (_) {
           setSubjects([]);
           setTeachers([]);
+          setSelectedTeacherId('');
         }
       }
     } finally {
@@ -249,6 +295,18 @@ const ScheduleFullCalendarPage = () => {
     }
   }, [visibleClasses, selectedClassId, isStudent, isTeacher, isParent]);
 
+  useEffect(() => {
+    if (!isAdmin || adminScheduleView !== 'teacher') return;
+    if (!teachers.length) {
+      setSelectedTeacherId('');
+      return;
+    }
+    const exists = teachers.some((teacher) => String(teacher.id) === String(selectedTeacherId));
+    if (!selectedTeacherId || !exists) {
+      setSelectedTeacherId(String(teachers[0].id));
+    }
+  }, [adminScheduleView, isAdmin, teachers, selectedTeacherId]);
+
   const fetchSchedules = async () => {
     try {
       const activeStudentId = localStorage.getItem('activeStudentId');
@@ -261,6 +319,14 @@ const ScheduleFullCalendarPage = () => {
       } else if (userRole === 'TEACHER' && user?.id) {
         const response = await api.get(`/schedules/teacher/${user.id}`);
         schedulesData = response.data.schedules || [];
+      } else if (isAdmin && adminScheduleView === 'teacher' && selectedTeacherId) {
+        const response = await api.get(`/schedules/teacher/${selectedTeacherId}`);
+        schedulesData = response.data.schedules || [];
+        if (selectedSchoolYear) {
+          schedulesData = schedulesData.filter(
+            (schedule) => String(getScheduleSchoolYearId(schedule) ?? '') === String(selectedSchoolYear)
+          );
+        }
       } else if (selectedClassId) {
         const response = await api.get(`/schedules/class/${selectedClassId}`);
         schedulesData = response.data.schedules || [];
@@ -272,7 +338,29 @@ const ScheduleFullCalendarPage = () => {
     }
   };
 
-  const handleDeleteAllByClass = async () => {
+  const handleDeleteVisibleSchedules = async () => {
+    if (adminScheduleView === 'teacher') {
+      if (!selectedTeacherId) {
+        toast.warn('Vui lòng chọn giáo viên trước khi xóa lịch dạy.');
+        return;
+      }
+      const selectedTeacher = teachers.find((teacher) => String(teacher.id) === String(selectedTeacherId));
+      const teacherName = selectedTeacher?.fullName || 'giáo viên đang chọn';
+      const confirmed = await openConfirmModal(`Bạn có chắc muốn xóa toàn bộ lịch dạy của ${teacherName}?`);
+      if (!confirmed) {
+        return;
+      }
+      try {
+        const schoolYearQuery = selectedSchoolYear ? `?schoolYearId=${selectedSchoolYear}` : '';
+        await api.delete(`/schedules/teacher/${selectedTeacherId}${schoolYearQuery}`);
+        toast.success('Đã xóa lịch dạy của giáo viên.');
+        fetchSchedules();
+      } catch (error) {
+        toast.error(getApiErrorMessage(error, 'Xóa lịch dạy của giáo viên thất bại.'));
+      }
+      return;
+    }
+
     if (!selectedClassId) {
       toast.warn('Vui lòng chọn lớp trước khi xóa toàn bộ thời khóa biểu.');
       return;
@@ -286,7 +374,7 @@ const ScheduleFullCalendarPage = () => {
       toast.success('Đã xóa toàn bộ thời khóa biểu của lớp.');
       fetchSchedules();
     } catch (error) {
-      toast.error(error?.response?.data?.error || 'Xóa thời khóa biểu thất bại.');
+      toast.error(getApiErrorMessage(error, 'Xóa thời khóa biểu thất bại.'));
     }
   };
 
@@ -306,6 +394,7 @@ const ScheduleFullCalendarPage = () => {
         const title = scheduleSubjectDisplayName(schedule, 'Tiết học');
         const palette = colorsForSubject(sid, title);
         const teacherName = schedule?.teacher?.fullName || 'Chưa có giáo viên';
+        const className = getClassOnlyDisplayName(schedule?.classEntity || schedule?.class_entity || {});
         const room = schedule?.room || 'Chưa có phòng';
 
         return {
@@ -315,9 +404,11 @@ const ScheduleFullCalendarPage = () => {
           end,
           extendedProps: {
             teacherName,
+            className,
             room,
             period,
             timeText: formatTimeRange(periodTime.startMin, periodTime.endMin),
+            schedule,
           },
           backgroundColor: palette.bg,
           borderColor: palette.accent,
@@ -363,7 +454,7 @@ const ScheduleFullCalendarPage = () => {
         fetchSchedules();
       }
     } catch (error) {
-      toast.error(error?.response?.data?.error || 'Thêm lịch học bù thất bại.');
+      toast.error(getApiErrorMessage(error, 'Thêm lịch học bù thất bại.'));
     } finally {
       setSubmitting(false);
     }
@@ -418,12 +509,12 @@ const ScheduleFullCalendarPage = () => {
       const data = res.data || {};
       toast.success(
         `${data.message || 'Đã sinh thời khóa biểu từ mẫu.'}\n` +
-        `Đã xóa: ${data.deletedCount ?? 0} | Đã tạo: ${data.createdCount ?? 0} | Bỏ qua (quá khứ): ${data.skippedPastDateCount ?? 0}`
+        `Đã xóa: ${data.deletedCount ?? 0} | Đã tạo: ${data.createdCount ?? 0} | Bỏ qua do ngày quá khứ: ${data.skippedPastDateCount ?? 0}`
       );
       setShowGenerateFromTemplateModal(false);
       fetchSchedules();
     } catch (error) {
-      toast.error(error?.response?.data?.error || 'Sinh thời khóa biểu từ mẫu thất bại.');
+      toast.error(getApiErrorMessage(error, 'Sinh thời khóa biểu từ mẫu thất bại.'));
     } finally {
       setGeneratingFromTemplate(false);
     }
@@ -473,10 +564,10 @@ const ScheduleFullCalendarPage = () => {
             <button
               type="button"
               className="inline-flex items-center gap-2 rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-              onClick={handleDeleteAllByClass}
-              disabled={!selectedClassId}
+              onClick={handleDeleteVisibleSchedules}
+              disabled={adminScheduleView === 'teacher' ? !selectedTeacherId : !selectedClassId}
             >
-              Xóa toàn bộ TKB lớp này
+              {adminScheduleView === 'teacher' ? 'Xóa lịch dạy của giáo viên' : 'Xóa toàn bộ TKB lớp này'}
             </button>
           </div>
         )}
@@ -484,43 +575,95 @@ const ScheduleFullCalendarPage = () => {
 
       {!isStudent && !isTeacher && !isParent && (
         <div className="schedule-fullcalendar-filters">
-          {!isTeacher && !isParent && (
-            <label htmlFor="school-year-select-fullcalendar">Niên khóa:</label>
+          {isAdmin && (
+            <div className="schedule-fullcalendar-filter-group">
+              <label htmlFor="schedule-view-select-fullcalendar">Xem theo:</label>
+              <select
+                id="schedule-view-select-fullcalendar"
+                value={adminScheduleView}
+                onChange={(e) => setAdminScheduleView(e.target.value)}
+              >
+                <option value="class">Lớp</option>
+                <option value="teacher">Giáo viên</option>
+              </select>
+            </div>
           )}
-          {!isTeacher && !isParent && (
-            <select
-              id="school-year-select-fullcalendar"
-              value={selectedSchoolYear}
-              onChange={(e) => setSelectedSchoolYear(e.target.value)}
-            >
-              <option value="">-- Tất cả niên khóa --</option>
-              {schoolYearOptions.map((sy) => (
-                <option key={sy.id} value={sy.id}>
-                  {sy.name}
-                </option>
-              ))}
-            </select>
+          {adminScheduleView === 'class' ? (
+            <>
+              <div className="schedule-fullcalendar-filter-group">
+                <label htmlFor="school-year-select-fullcalendar">Niên khóa:</label>
+                <select
+                  id="school-year-select-fullcalendar"
+                  value={selectedSchoolYear}
+                  onChange={(e) => setSelectedSchoolYear(e.target.value)}
+                >
+                  <option value="">-- Tất cả niên khóa --</option>
+                  {schoolYearOptions.map((sy) => (
+                    <option key={sy.id} value={sy.id}>
+                      {sy.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="schedule-fullcalendar-filter-group">
+                <label htmlFor="class-select-fullcalendar">Chọn lớp:</label>
+                <select
+                  id="class-select-fullcalendar"
+                  value={selectedClassId}
+                  onChange={(e) => setSelectedClassId(e.target.value)}
+                  disabled={isStudent}
+                >
+                  <option value="">-- Chọn lớp --</option>
+                  {visibleClasses.map((cls) => (
+                    <option key={cls.id} value={cls.id}>
+                      {getClassOnlyDisplayName(cls)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="schedule-fullcalendar-filter-group">
+                <label htmlFor="teacher-school-year-select-fullcalendar">Niên khóa:</label>
+                <select
+                  id="teacher-school-year-select-fullcalendar"
+                  value={selectedSchoolYear}
+                  onChange={(e) => setSelectedSchoolYear(e.target.value)}
+                >
+                  <option value="">-- Tất cả niên khóa --</option>
+                  {schoolYearOptions.map((sy) => (
+                    <option key={sy.id} value={sy.id}>
+                      {sy.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="schedule-fullcalendar-filter-group">
+                <label htmlFor="teacher-select-fullcalendar">Chọn giáo viên:</label>
+                <select
+                  id="teacher-select-fullcalendar"
+                  value={selectedTeacherId}
+                  onChange={(e) => setSelectedTeacherId(e.target.value)}
+                >
+                  <option value="">-- Chọn giáo viên --</option>
+                  {teachers.map((teacher) => (
+                    <option key={teacher.id} value={teacher.id}>
+                      {teacher.fullName}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </>
           )}
-          <label htmlFor="class-select-fullcalendar">Chọn lớp:</label>
-          <select
-            id="class-select-fullcalendar"
-            value={selectedClassId}
-            onChange={(e) => setSelectedClassId(e.target.value)}
-            disabled={isStudent}
-          >
-            <option value="">-- Chọn lớp --</option>
-            {visibleClasses.map((cls) => (
-              <option key={cls.id} value={cls.id}>
-                {getClassOnlyDisplayName(cls)}
-              </option>
-            ))}
-          </select>
         </div>
       )}
 
-      {!selectedClassId && !isTeacher && !isStudent && !isParent ? (
+      {((adminScheduleView === 'class' && !selectedClassId) || (adminScheduleView === 'teacher' && !selectedTeacherId)) && !isTeacher && !isStudent && !isParent ? (
         <div className="schedule-fullcalendar-empty">
-          Vui lòng chọn lớp để xem thời khóa biểu.
+          {adminScheduleView === 'teacher'
+            ? 'Vui lòng chọn giáo viên để xem thời khóa biểu.'
+            : 'Vui lòng chọn lớp để xem thời khóa biểu.'}
         </div>
       ) : (
         <div className="schedule-fullcalendar-card">
@@ -555,6 +698,9 @@ const ScheduleFullCalendarPage = () => {
             datesSet={(arg) => setCurrentView(arg.view.type)}
             moreLinkText={(n) => `+${n} tiết`}
             events={calendarEvents}
+            eventClick={(eventInfo) => {
+              setSelectedScheduleDetail(eventInfo.event.extendedProps.schedule || null);
+            }}
             eventContent={(eventInfo) => {
               const { teacherName, room, period, timeText } = eventInfo.event.extendedProps;
               const isMonthView = currentView === 'dayGridMonth';
@@ -594,6 +740,59 @@ const ScheduleFullCalendarPage = () => {
                 : 'Chưa có dữ liệu thời khóa biểu cho lớp hiện tại.'}
             </div>
           )}
+        </div>
+      )}
+      {selectedScheduleDetail && (
+        <div className="modal-overlay" onClick={() => setSelectedScheduleDetail(null)}>
+          <div className="modal-content schedule-detail-modal" onClick={(e) => e.stopPropagation()}>
+            <h2>Chi tiết tiết học</h2>
+            <div className="schedule-detail-summary">
+              <div>
+                <span>Môn học</span>
+                <strong>{scheduleSubjectDisplayName(selectedScheduleDetail, 'Tiết học')}</strong>
+              </div>
+              <div>
+                <span>Thời gian</span>
+                <strong>
+                  Tiết {selectedScheduleDetail.period || '-'} · {
+                    periodTimeMap[selectedScheduleDetail.period]
+                      ? formatTimeRange(
+                          periodTimeMap[selectedScheduleDetail.period].startMin,
+                          periodTimeMap[selectedScheduleDetail.period].endMin
+                        )
+                      : 'Chưa có giờ'
+                  }
+                </strong>
+              </div>
+            </div>
+            <div className="schedule-detail-grid">
+              <div className="schedule-detail-item">
+                <span>Ngày học</span>
+                <strong>{formatVietnameseDate(selectedScheduleDetail.date)}</strong>
+              </div>
+              <div className="schedule-detail-item">
+                <span>Phòng học</span>
+                <strong>{selectedScheduleDetail.room || 'Chưa có phòng'}</strong>
+              </div>
+              <div className="schedule-detail-item schedule-detail-item--wide">
+                <span>Lớp</span>
+                <strong>{getClassOnlyDisplayName(selectedScheduleDetail.classEntity || selectedScheduleDetail.class_entity || {})}</strong>
+              </div>
+              <div className="schedule-detail-item schedule-detail-item--wide">
+                <span>Giáo viên</span>
+                <strong>{selectedScheduleDetail.teacher?.fullName || 'Chưa có giáo viên'}</strong>
+              </div>
+            </div>
+            <div className="form-actions">
+              <button
+                type="button"
+                className="inline-flex items-center justify-center gap-2 rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                onClick={() => setSelectedScheduleDetail(null)}
+              >
+                Đóng
+              </button>
+            </div>
+          </div>
         </div>
       )}
       {showAddModal && (
@@ -670,10 +869,18 @@ const ScheduleFullCalendarPage = () => {
                 />
               </div>
               <div className="form-actions">
-                <button type="submit" className="btn btn-primary" disabled={submitting}>
+                <button
+                  type="submit"
+                  className="inline-flex items-center justify-center gap-2 rounded-full bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-md shadow-indigo-500/30 hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
+                  disabled={submitting}
+                >
                   {submitting ? 'Đang thêm...' : 'Thêm'}
                 </button>
-                <button type="button" className="btn btn-secondary" onClick={() => setShowAddModal(false)}>
+                <button
+                  type="button"
+                  className="inline-flex items-center justify-center gap-2 rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                  onClick={() => setShowAddModal(false)}
+                >
                   Hủy
                 </button>
               </div>

@@ -102,7 +102,7 @@ public class ScheduleController {
     @DeleteMapping("/{id}")
     public ResponseEntity<?> deleteSchedule(@PathVariable Integer id) {
         scheduleService.deleteSchedule(id);
-        return ResponseEntity.ok(Map.of("message", "Schedule deleted successfully"));
+        return ResponseEntity.ok(Map.of("message", "Đã xóa tiết học thành công."));
     }
 
     @PostMapping("/generate")
@@ -127,7 +127,7 @@ public class ScheduleController {
         }
 
         if (classId == null || subjectAssignments == null || subjectAssignments.isEmpty()) {
-            throw new BadRequestException("classId and subjectAssignments are required");
+            throw new BadRequestException("Vui lòng chọn lớp và thêm ít nhất một môn học để sinh thời khóa biểu mẫu.");
         }
 
         // Sinh TKB gốc đã tắt theo yêu cầu: chỉ sinh dữ liệu cho TKB mẫu.
@@ -141,7 +141,16 @@ public class ScheduleController {
     public ResponseEntity<?> deleteSchedulesByClass(@PathVariable Integer classId) {
         int deletedCount = scheduleService.deleteAllSchedulesByClass(classId);
         return ResponseEntity.ok(Map.of(
-                "message", "Schedules deleted successfully",
+                "message", "Đã xóa thời khóa biểu của lớp thành công.",
+                "count", deletedCount));
+    }
+
+    @DeleteMapping("/teacher/{teacherId}")
+    public ResponseEntity<?> deleteSchedulesByTeacher(@PathVariable Integer teacherId,
+                                                      @RequestParam(required = false) Integer schoolYearId) {
+        int deletedCount = scheduleService.deleteAllSchedulesByTeacher(teacherId, schoolYearId);
+        return ResponseEntity.ok(Map.of(
+                "message", "Đã xóa lịch dạy của giáo viên thành công.",
                 "count", deletedCount));
     }
 
@@ -149,7 +158,7 @@ public class ScheduleController {
     public ResponseEntity<?> deleteAllSchedules() {
         int deletedCount = scheduleService.deleteAllSchedules();
         return ResponseEntity.ok(Map.of(
-                "message", "All schedules deleted successfully",
+                "message", "Đã xóa toàn bộ thời khóa biểu thành công.",
                 "count", deletedCount));
     }
 
@@ -166,7 +175,7 @@ public class ScheduleController {
     public ResponseEntity<?> getScheduleTemplate(@PathVariable Integer classId,
                                                  @RequestParam String weekStart) {
         if (weekStart == null || weekStart.trim().isEmpty()) {
-            throw new BadRequestException("weekStart is required");
+            throw new BadRequestException("Vui lòng chọn tuần mẫu.");
         }
         List<ScheduleTemplate> templates = scheduleTemplateService.getTemplateByClassAndWeekStart(
                 classId, java.time.LocalDate.parse(weekStart.trim()));
@@ -179,7 +188,7 @@ public class ScheduleController {
     public ResponseEntity<?> deleteScheduleTemplate(@PathVariable Integer classId,
                                                     @RequestParam String weekStart) {
         if (weekStart == null || weekStart.trim().isEmpty()) {
-            throw new BadRequestException("weekStart is required");
+            throw new BadRequestException("Vui lòng chọn tuần mẫu.");
         }
         int deletedCount = scheduleTemplateService.deleteTemplate(classId, java.time.LocalDate.parse(weekStart.trim()));
         return ResponseEntity.ok(Map.of(
