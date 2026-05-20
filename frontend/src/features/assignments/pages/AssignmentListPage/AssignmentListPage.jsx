@@ -12,6 +12,24 @@ import {
 } from '../../../../shared/lib/teacherScope';
 import { confirmDialog } from '../../../../shared/lib/confirmDialog';
 
+function classSchoolYearLabel(classItem) {
+  if (!classItem) return '';
+  const sy = classItem.schoolYear ?? classItem.school_year;
+  if (sy && typeof sy === 'object') return String(sy.name || '').trim();
+  if (typeof sy === 'string') return sy.trim();
+  return String(classItem.schoolYearName || classItem.school_year_name || '').trim();
+}
+
+function latestSchoolYearLabel(classList) {
+  const years = new Set();
+  (classList || []).forEach((classItem) => {
+    const status = String(classItem?.status || '').trim().toUpperCase();
+    const year = classSchoolYearLabel(classItem);
+    if (year && status !== 'ARCHIVED') years.add(year);
+  });
+  return [...years].sort((a, b) => b.localeCompare(a, undefined, { numeric: true }))[0] || '';
+}
+
 const AssignmentListPage = () => {
   const { user } = useAuth();
   const [assignments, setAssignments] = useState([]);
@@ -52,6 +70,7 @@ const AssignmentListPage = () => {
   const [studentClassId, setStudentClassId] = useState(null); // Class ID của học sinh
   const [studentSubmissions, setStudentSubmissions] = useState({}); // Map assignmentId -> submission của học sinh
   const [editingSubmission, setEditingSubmission] = useState(null); // Submission đang được sửa
+  const [classFilterId, setClassFilterId] = useState('');
 
   // Fetch enrollment của học sinh để lấy classId trước
   useEffect(() => {
@@ -636,6 +655,40 @@ const AssignmentListPage = () => {
 
   const isStudent = user?.role?.name?.toUpperCase() === 'STUDENT';
   const teachingActionClasses = useMemo(() => classes.filter(isTeachingActiveClass), [classes]);
+  const baseClassFilterOptions = useMemo(() => {
+    const userRole = user?.role?.name?.toUpperCase();
+    return userRole === 'TEACHER' ? filteredClasses : teachingActionClasses;
+  }, [filteredClasses, teachingActionClasses, user]);
+  const currentSchoolYear = useMemo(
+    () => latestSchoolYearLabel(baseClassFilterOptions),
+    [baseClassFilterOptions]
+  );
+  const classFilterOptions = useMemo(() => {
+    if (!currentSchoolYear) return baseClassFilterOptions;
+    return baseClassFilterOptions.filter(
+      (classItem) => classSchoolYearLabel(classItem) === currentSchoolYear
+    );
+  }, [baseClassFilterOptions, currentSchoolYear]);
+  const currentClassIds = useMemo(
+    () => new Set(classFilterOptions.map((classItem) => String(classItem.id))),
+    [classFilterOptions]
+  );
+  const displayedAssignments = useMemo(() => {
+    return assignments.filter((assignment) => {
+      const assignmentClassId = assignment.classEntity?.id || assignment.class_id;
+      if (!isStudent && currentClassIds.size > 0 && !currentClassIds.has(String(assignmentClassId))) {
+        return false;
+      }
+      if (!classFilterId) return true;
+      return String(assignmentClassId) === String(classFilterId);
+    });
+  }, [assignments, classFilterId, currentClassIds, isStudent]);
+
+  useEffect(() => {
+    if (!classFilterId) return;
+    const exists = classFilterOptions.some((classItem) => String(classItem.id) === String(classFilterId));
+    if (!exists) setClassFilterId('');
+  }, [classFilterId, classFilterOptions]);
 
   const getClassName = (classId) => {
     const classItem = classes.find(c => c.id === classId);
@@ -713,6 +766,39 @@ const AssignmentListPage = () => {
         )}
       </div>
 
+      {!isStudent && (
+        <div className="rounded-2xl border border-slate-200 bg-white/95 px-4 py-3 shadow-lg shadow-slate-900/5 flex flex-wrap items-end gap-3">
+          <label className="flex min-w-[220px] flex-col gap-1 text-sm font-semibold text-slate-700">
+            <span>Lọc theo lớp</span>
+            <select
+              value={classFilterId}
+              onChange={(e) => setClassFilterId(e.target.value)}
+              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-normal text-slate-700 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+            >
+              <option value="">Tất cả các lớp</option>
+              {classFilterOptions.map((classItem) => (
+                <option key={classItem.id} value={classItem.id}>
+                  {classItem.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          {classFilterId && (
+            <button
+              type="button"
+              className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50"
+              onClick={() => setClassFilterId('')}
+            >
+              Xóa bộ lọc
+            </button>
+          )}
+          <span className="pb-2 text-xs text-slate-500">
+            {currentSchoolYear ? `Niên khóa hiện tại: ${currentSchoolYear}. ` : ''}
+            Đang hiển thị {displayedAssignments.length} / {assignments.length} bài tập
+          </span>
+        </div>
+      )}
+
       <div className="rounded-2xl border border-slate-200 bg-white/95 shadow-xl shadow-slate-900/5 overflow-hidden">
         <div className="overflow-x-auto">
         <table className="min-w-full border-collapse text-sm">
@@ -729,7 +815,13 @@ const AssignmentListPage = () => {
             </tr>
           </thead>
           <tbody className="text-sm text-slate-700">
-            {assignments.map((assignment) => (
+            {displayedAssignments.length === 0 ? (
+              <tr>
+                <td colSpan={isStudent ? 7 : 8} className="border-t border-slate-100 px-4 py-10 text-center text-slate-500">
+                  Không có bài tập nào phù hợp bộ lọc.
+                </td>
+              </tr>
+            ) : displayedAssignments.map((assignment) => (
               <tr key={assignment.id} className="border-t border-slate-100 hover:bg-slate-50/80 transition-colors">
                 <td className="px-4 py-3">{assignment.title}</td>
                 <td className="px-4 py-3">{getClassName(assignment.classEntity?.id)}</td>

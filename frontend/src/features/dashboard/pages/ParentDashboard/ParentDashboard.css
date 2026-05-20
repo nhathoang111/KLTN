@@ -297,9 +297,12 @@
   border: none;
   box-shadow: 0 2px 10px rgba(79,70,229,0.25);
 }
-.pd-cta-btn--primary:hover {
-  color: #fff;
-  opacity: 0.9;
+.pd-cta-btn.pd-cta-btn--primary:hover:not(:disabled),
+.pd-cta-btn.pd-cta-btn--primary:focus-visible {
+  background: linear-gradient(135deg, #4338ca, #2563eb);
+  color: #ffffff;
+  border-color: transparent;
+  opacity: 1;
   box-shadow: 0 6px 18px rgba(79,70,229,0.35);
 }
 

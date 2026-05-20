@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { BookOpen, CalendarDays, ClipboardList, Users } from 'lucide-react';
 import api from '../../../../shared/lib/api';
 import { formatTeacherManagementSummaryForDisplay } from '../../../../shared/lib/formatTeacherManagementSummaryForDisplay';
 import { scheduleSubjectDisplayName } from '../../../../shared/lib/scheduleLabels';
@@ -357,28 +358,36 @@ const TeacherDashboard = () => {
       {/* 4 thẻ thống kê */}
       <div className="td-stats-row">
         <div className="td-stat-card">
-          <div className="td-stat-icon td-stat-icon--class" />
+          <div className="td-stat-icon td-stat-icon--class">
+            <BookOpen size={24} strokeWidth={2} aria-hidden />
+          </div>
           <div className="td-stat-body">
             <span className="td-stat-label">Lớp đang dạy</span>
             <span className="td-stat-value">{classesTeachingCount} lớp</span>
           </div>
         </div>
         <div className="td-stat-card">
-          <div className="td-stat-icon td-stat-icon--students" />
+          <div className="td-stat-icon td-stat-icon--students">
+            <Users size={24} strokeWidth={2} aria-hidden />
+          </div>
           <div className="td-stat-body">
             <span className="td-stat-label">Học sinh phụ trách</span>
             <span className="td-stat-value">{totalStudents} học sinh</span>
           </div>
         </div>
         <div className="td-stat-card">
-          <div className="td-stat-icon td-stat-icon--assign" />
+          <div className="td-stat-icon td-stat-icon--assign">
+            <ClipboardList size={24} strokeWidth={2} aria-hidden />
+          </div>
           <div className="td-stat-body">
             <span className="td-stat-label">Bài tập đã tạo</span>
             <span className="td-stat-value">{assignmentsCount} bài tập</span>
           </div>
         </div>
         <div className="td-stat-card">
-          <div className="td-stat-icon td-stat-icon--lesson" />
+          <div className="td-stat-icon td-stat-icon--lesson">
+            <CalendarDays size={24} strokeWidth={2} aria-hidden />
+          </div>
           <div className="td-stat-body">
             <span className="td-stat-label">Tiết dạy hôm nay</span>
             <span className="td-stat-value">{lessonsTodayCount} tiết</span>

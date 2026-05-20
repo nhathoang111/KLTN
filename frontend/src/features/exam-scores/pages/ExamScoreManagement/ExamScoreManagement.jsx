@@ -40,6 +40,25 @@ function adminUniqueSubjectsFromSchedules(schedules) {
   return Array.from(map.values()).sort((a, b) => (a.name || '').localeCompare(b.name || '', 'vi'));
 }
 
+function classSchoolYearLabel(cls) {
+  if (!cls) return '';
+  const sy = cls.schoolYear ?? cls.school_year;
+  if (sy && typeof sy === 'object') return String(sy.name || '').trim();
+  if (typeof sy === 'string') return sy.trim();
+  return String(cls.schoolYearName || cls.school_year_name || '').trim();
+}
+
+function latestSchoolYearLabel(classList) {
+  const years = new Set();
+  (classList || []).forEach((cls) => {
+    const status = String(cls?.status || '').trim().toUpperCase();
+    const year = classSchoolYearLabel(cls);
+    if (year && status !== 'ARCHIVED') years.add(year);
+  });
+  const sorted = [...years].sort((a, b) => b.localeCompare(a, undefined, { numeric: true }));
+  return sorted[0] || '';
+}
+
 /** Khối "Xem điểm" admin: điểm + TBM từ GET /api/exam-scores/tbm-summary */
 function AdminXemDiemSection({ classes, subjects, user }) {
   const [selectedClassId, setSelectedClassId] = useState('');
@@ -429,6 +448,29 @@ const ExamScoreManagement = () => {
   const [aiStudentError, setAiStudentError] = useState('');
   const [aiStudentResult, setAiStudentResult] = useState(null); // response from /api/ai/insights/student
 
+  const userRole = user?.role?.name?.toUpperCase();
+  const isStudent = userRole === 'STUDENT';
+  const isParent = userRole === 'PARENT';
+  const isAdmin = userRole === 'ADMIN' || (userRole && userRole.startsWith('ADMIN'));
+  const isViewOnly = isStudent || isParent;
+  const viewClasses = classes || [];
+  const teacherCurrentSchoolYear = useMemo(
+    () => (userRole === 'TEACHER' ? latestSchoolYearLabel(viewClasses) : ''),
+    [userRole, viewClasses]
+  );
+  const teacherCurrentClasses = useMemo(() => {
+    if (userRole !== 'TEACHER' || !teacherCurrentSchoolYear) return viewClasses;
+    return viewClasses.filter((cls) => classSchoolYearLabel(cls) === teacherCurrentSchoolYear);
+  }, [userRole, viewClasses, teacherCurrentSchoolYear]);
+  const teacherCurrentClassIds = useMemo(
+    () => new Set((teacherCurrentClasses || []).map((cls) => String(cls.id))),
+    [teacherCurrentClasses]
+  );
+  const actionClasses = useMemo(
+    () => viewClasses.filter(isTeachingActiveClass),
+    [viewClasses]
+  );
+
   useEffect(() => {
     fetchExamScores();
     fetchStudents();
@@ -436,6 +478,14 @@ const ExamScoreManagement = () => {
     fetchClasses();
     fetchScoreLockStatus();
   }, [user]);
+
+  useEffect(() => {
+    if (userRole !== 'TEACHER' || !displayFilterClassId || !teacherCurrentClassIds.size) return;
+    if (!teacherCurrentClassIds.has(String(displayFilterClassId))) {
+      setDisplayFilterClassId('');
+      setDisplayFilterSubjectId('');
+    }
+  }, [userRole, displayFilterClassId, teacherCurrentClassIds]);
 
   const runAiStudentInsight = async (student) => {
     const sid = student?.id ?? student?.studentId;
@@ -1414,12 +1464,13 @@ const ExamScoreManagement = () => {
   const outerSubjectsForFilter = useMemo(() => {
     if (user?.role?.name?.toUpperCase() !== 'TEACHER') return [];
 
-    const sourceScores = displayFilterClassId
-      ? examScores.filter((score) => {
-          const scoreClassId = score.classEntity?.id || score.class_id;
-          return scoreClassId && String(scoreClassId) === String(displayFilterClassId);
-        })
-      : examScores;
+    const sourceScores = examScores.filter((score) => {
+      const scoreClassId = score.classEntity?.id || score.class_id;
+      if (teacherCurrentClassIds.size > 0 && !teacherCurrentClassIds.has(String(scoreClassId))) {
+        return false;
+      }
+      return !displayFilterClassId || (scoreClassId && String(scoreClassId) === String(displayFilterClassId));
+    });
 
     const map = new Map();
     sourceScores.forEach((score) => {
@@ -1430,7 +1481,7 @@ const ExamScoreManagement = () => {
     });
 
     return Array.from(map.values()).sort((a, b) => (a.name || '').localeCompare(b.name || '', 'vi'));
-  }, [examScores, displayFilterClassId, user]);
+  }, [examScores, displayFilterClassId, teacherCurrentClassIds, user]);
 
   // Nhóm điểm theo học sinh và môn học
   const groupScoresByStudentAndSubject = () => {
@@ -1443,6 +1494,10 @@ const ExamScoreManagement = () => {
       filteredScores = examScores.filter((score) => {
         const scoreClassId = score.classEntity?.id || score.class_id;
         const scoreSubjectId = score.subject?.id || score.subject_id;
+
+        if (teacherCurrentClassIds.size > 0 && !teacherCurrentClassIds.has(String(scoreClassId))) {
+          return false;
+        }
 
         const matchClass = !displayFilterClassId || (scoreClassId && String(scoreClassId) === String(displayFilterClassId));
         const matchSubject = !displayFilterSubjectId || (scoreSubjectId && String(scoreSubjectId) === String(displayFilterSubjectId));
@@ -1491,7 +1546,10 @@ const ExamScoreManagement = () => {
     return Object.values(grouped);
   };
 
-  const scoreGroups = useMemo(() => groupScoresByStudentAndSubject(), [examScores, displayFilterClassId, displayFilterSubjectId, user]);
+  const scoreGroups = useMemo(
+    () => groupScoresByStudentAndSubject(),
+    [examScores, displayFilterClassId, displayFilterSubjectId, user, teacherCurrentClassIds]
+  );
 
   useEffect(() => {
     const role = user?.role?.name?.toUpperCase();
@@ -1549,17 +1607,6 @@ const ExamScoreManagement = () => {
     const n = Number(val);
     return <span className={`es-score-pill ${scoreCellClass(n)}`}>{n.toFixed(1)}</span>;
   };
-
-  const userRole = user?.role?.name?.toUpperCase();
-  const isStudent = userRole === 'STUDENT';
-  const isParent = userRole === 'PARENT';
-  const isAdmin = userRole === 'ADMIN' || (userRole && userRole.startsWith('ADMIN'));
-  const isViewOnly = isStudent || isParent;
-  const viewClasses = classes || [];
-  const actionClasses = useMemo(
-    () => viewClasses.filter(isTeachingActiveClass),
-    [viewClasses]
-  );
 
   if (loading) {
     return (
@@ -1702,13 +1749,18 @@ const ExamScoreManagement = () => {
                 }}
               >
                 <option value="">-- Tất cả các lớp --</option>
-                {viewClasses.map(cls => (
+                {teacherCurrentClasses.map(cls => (
                   <option key={cls.id} value={cls.id}>
                     {cls.name}
                   </option>
                 ))}
               </select>
             </label>
+            {teacherCurrentSchoolYear && (
+              <span style={{ fontSize: '13px', color: '#64748b' }}>
+                Niên khóa hiện tại: {teacherCurrentSchoolYear}
+              </span>
+            )}
 
             <label style={{ fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '10px' }}>
               <span>Lọc theo môn:</span>

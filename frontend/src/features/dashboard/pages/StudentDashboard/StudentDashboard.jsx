@@ -251,18 +251,17 @@ const StudentDashboard = () => {
         return null;
       };
       /**
-       * TKB hôm nay: khớp ngày cụ thể HOẶC thứ trong tuần.
-       * BE thường set cả `date` (ngày mẫu khi tạo) lẫn `dayOfWeek` (1=Thứ Hai … 7=Chủ nhật, giống ISO);
-       * Nếu chỉ so `date` sẽ mất tiết khi hôm nay trùng thứ nhưng khác ngày đã lưu.
+       * Lịch có `date` là lịch theo ngày cụ thể, không được fallback theo `dayOfWeek`
+       * vì sẽ kéo cả các tuần khác cùng thứ vào dashboard hôm nay.
        */
-      const isToday = (s) => {
-        const dateStr = getDateStr(s);
-        if (dateStr && dateStr === todayStr) return true;
-        const dow = scheduleDayOfWeekFromRow(s);
-        if (dow != null) return dow === todayDayOfWeek;
-        return false;
-      };
-      const todayList = schedules.filter(isToday).sort((a, b) => (a.period || 0) - (b.period || 0));
+      let todayList = schedules.filter((s) => getDateStr(s) === todayStr);
+      if (todayList.length === 0) {
+        todayList = schedules.filter((s) => {
+          if (getDateStr(s) != null) return false;
+          return scheduleDayOfWeekFromRow(s) === todayDayOfWeek;
+        });
+      }
+      todayList.sort((a, b) => (a.period || 0) - (b.period || 0));
 
       setTodaySchedules(todayList);
       setExamScores(scoresRes.data?.examScores || []);
@@ -674,100 +673,10 @@ const StudentDashboard = () => {
               </table>
             </div>
           </section>
-
-          <section className="sd2-card">
-            <div className="sd2-card-head">
-              <h2 className="sd2-card-title">Điểm số gần đây</h2>
-              <button type="button" className="sd2-link-btn" onClick={() => navigate('/exam-scores')}>
-                Xem chi tiết
-              </button>
-            </div>
-            {recentScores.length === 0 ? (
-              <p className="sd2-empty sd2-empty--block">Chưa có điểm.</p>
-            ) : (
-              <ul className="sd2-grade-list">
-                {recentScores.slice(0, 8).map((r) => {
-                  const val = Math.min(10, Math.max(0, Number(r.score)));
-                  const pct = (val / 10) * 100;
-                  return (
-                    <li key={r.subject} className="sd2-grade-row">
-                      <span className="sd2-grade-name">{r.subject}</span>
-                      <div className="sd2-grade-bar-wrap">
-                        <div className="sd2-grade-bar" style={{ width: `${pct}%` }} />
-                      </div>
-                      <span className="sd2-grade-num">{r.score}</span>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-
-            <div className="sd2-ai-block">
-              <button
-                type="button"
-                className="sd2-icon-btn sd2-icon-btn--sm"
-                aria-label="Tuần trước — mở thời khóa biểu"
-                onClick={() => navigate('/schedules')}
-              >
-                <ChevronLeft size={18} />
-              </button>
-              <button
-                type="button"
-                className="sd2-icon-btn sd2-icon-btn--sm"
-                aria-label="Tuần sau — mở thời khóa biểu"
-                onClick={() => navigate('/schedules')}
-              >
-                <ChevronRight size={18} />
-              </button>
-            </div>
-            <div className="sd2-chart-box">
-              {chartHasData ? (
-                <ResponsiveContainer width="100%" height={220}>
-                  <AreaChart data={progressChartData} margin={{ top: 8, right: 8, left: -8, bottom: 0 }}>
-                    <defs>
-                      <linearGradient id="sd2grad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#3b82f6" stopOpacity={0.35} />
-                        <stop offset="100%" stopColor="#3b82f6" stopOpacity={0.02} />
-                      </linearGradient>
-                    </defs>
-                    <XAxis dataKey="label" tick={{ fontSize: 11 }} stroke="#94a3b8" />
-                    <YAxis domain={[0, 10]} tick={{ fontSize: 11 }} stroke="#94a3b8" width={28} />
-                    <Tooltip
-                      formatter={(v) => [`${v}`, 'Điểm TB']}
-                      contentStyle={{ borderRadius: 8, border: '1px solid #e2e8f0' }}
-                    />
-                    <Area
-                      type="monotone"
-                      dataKey="score"
-                      stroke="#2563eb"
-                      strokeWidth={2}
-                      fill="url(#sd2grad)"
-                      dot={{ r: 4, fill: '#2563eb' }}
-                      activeDot={{ r: 6 }}
-                    />
-                  </AreaChart>
-                </ResponsiveContainer>
-              ) : (
-                <p className="sd2-empty sd2-empty--block">Chưa đủ dữ liệu điểm theo tháng để hiển thị biểu đồ.</p>
-              )}
-            </div>
-            <div className="sd2-chart-foot">
-              <span className="sd2-chart-metric">
-                <span className="sd2-stat-up">↑</span> Chuyên cần: {attendancePct != null ? `${attendancePct}%` : '—'}
-              </span>
-              <span className="sd2-chart-metric">
-                <Trophy size={16} strokeWidth={2} aria-hidden />
-                Hạnh kiểm: {conductLabel}
-              </span>
-            </div>
-            <p className="sd2-chart-current">
-              Điểm hiện tại (tháng cuối biểu đồ): <strong>{currentGpaDisplay}</strong>
-            </p>
-          </section>
         </div>
 
-        {/* Cột phải */}
-        <div className="sd2-col sd2-col--side">
+        {/* Cột giữa */}
+        <div className="sd2-col sd2-col--mid">
           <section className="sd2-card">
             <div className="sd2-card-head">
               <h2 className="sd2-card-title">Bài tập cần nộp</h2>
@@ -869,6 +778,100 @@ const StudentDashboard = () => {
             <button type="button" className="sd2-link-btn sd2-link-btn--block" disabled title="Chưa có trang danh sách thành tích">
               Xem tất cả
             </button>
+          </section>
+
+        </div>
+
+        {/* Cột phải */}
+        <div className="sd2-col sd2-col--side">
+          <section className="sd2-card">
+            <div className="sd2-card-head">
+              <h2 className="sd2-card-title">Điểm số gần đây</h2>
+              <button type="button" className="sd2-link-btn" onClick={() => navigate('/exam-scores')}>
+                Xem chi tiết
+              </button>
+            </div>
+            {recentScores.length === 0 ? (
+              <p className="sd2-empty sd2-empty--block">Chưa có điểm.</p>
+            ) : (
+              <ul className="sd2-grade-list">
+                {recentScores.slice(0, 8).map((r) => {
+                  const val = Math.min(10, Math.max(0, Number(r.score)));
+                  const pct = (val / 10) * 100;
+                  return (
+                    <li key={r.subject} className="sd2-grade-row">
+                      <span className="sd2-grade-name">{r.subject}</span>
+                      <div className="sd2-grade-bar-wrap">
+                        <div className="sd2-grade-bar" style={{ width: `${pct}%` }} />
+                      </div>
+                      <span className="sd2-grade-num">{r.score}</span>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+
+            <div className="sd2-ai-block">
+              <button
+                type="button"
+                className="sd2-icon-btn sd2-icon-btn--sm"
+                aria-label="Tuần trước — mở thời khóa biểu"
+                onClick={() => navigate('/schedules')}
+              >
+                <ChevronLeft size={18} />
+              </button>
+              <button
+                type="button"
+                className="sd2-icon-btn sd2-icon-btn--sm"
+                aria-label="Tuần sau — mở thời khóa biểu"
+                onClick={() => navigate('/schedules')}
+              >
+                <ChevronRight size={18} />
+              </button>
+            </div>
+            <div className="sd2-chart-box">
+              {chartHasData ? (
+                <ResponsiveContainer width="100%" height={220}>
+                  <AreaChart data={progressChartData} margin={{ top: 8, right: 8, left: -8, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="sd2grad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#3b82f6" stopOpacity={0.35} />
+                        <stop offset="100%" stopColor="#3b82f6" stopOpacity={0.02} />
+                      </linearGradient>
+                    </defs>
+                    <XAxis dataKey="label" tick={{ fontSize: 11 }} stroke="#94a3b8" />
+                    <YAxis domain={[0, 10]} tick={{ fontSize: 11 }} stroke="#94a3b8" width={28} />
+                    <Tooltip
+                      formatter={(v) => [`${v}`, 'Điểm TB']}
+                      contentStyle={{ borderRadius: 8, border: '1px solid #e2e8f0' }}
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="score"
+                      stroke="#2563eb"
+                      strokeWidth={2}
+                      fill="url(#sd2grad)"
+                      dot={{ r: 4, fill: '#2563eb' }}
+                      activeDot={{ r: 6 }}
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              ) : (
+                <p className="sd2-empty sd2-empty--block">Chưa đủ dữ liệu điểm theo tháng để hiển thị biểu đồ.</p>
+              )}
+            </div>
+            <div className="sd2-chart-foot">
+              <span className="sd2-chart-metric">
+                <span className="sd2-stat-up">↑</span> Chuyên cần: {attendancePct != null ? `${attendancePct}%` : '—'}
+              </span>
+              <span className="sd2-chart-metric">
+                <Trophy size={16} strokeWidth={2} aria-hidden />
+                Hạnh kiểm: {conductLabel}
+              </span>
+            </div>
+            <p className="sd2-chart-current">
+              Điểm hiện tại (tháng cuối biểu đồ): <strong>{currentGpaDisplay}</strong>
+            </p>
           </section>
         </div>
       </div>

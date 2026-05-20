@@ -175,14 +175,14 @@ const StudentProfilePage = () => {
           return null;
         };
 
-        const isToday = (s) => {
-          const dateStr = getDateStr(s);
-          if (dateStr && dateStr === todayStr) return true;
-          const dow = scheduleDayOfWeekFromRow(s);
-          if (dow != null) return dow === todayDayOfWeek;
-          return false;
-        };
-        const todayList = schedules.filter(isToday).sort((a, b) => (a.period || 0) - (b.period || 0));
+        let todayList = schedules.filter((s) => getDateStr(s) === todayStr);
+        if (todayList.length === 0) {
+          todayList = schedules.filter((s) => {
+            if (getDateStr(s) != null) return false;
+            return scheduleDayOfWeekFromRow(s) === todayDayOfWeek;
+          });
+        }
+        todayList.sort((a, b) => (a.period || 0) - (b.period || 0));
 
         setTodaySchedules(todayList);
         setExamScores(scoresRes.data?.examScores || []);
