@@ -3,7 +3,7 @@ import { toast } from 'react-toastify';
 import api from '../../../../shared/lib/api';
 import './ExamScoreManagement.css';
 import { useAuth } from '../../../auth/context/AuthContext';
-import { Pencil, Trash2, Search, Download } from 'lucide-react';
+import { ClipboardList, Download, Pencil, Search, Trash2 } from 'lucide-react';
 import { scoreCellClass } from '../../utils/scoreGridHelpers';
 import { normalizeSemesterCode } from '../../utils/semesterNormalize';
 import {
@@ -1869,7 +1869,7 @@ const ExamScoreManagement = () => {
           {/* Ẩn nút Nhập điểm đối với Phụ huynh và Học sinh */}
           {!isViewOnly && !isAdmin && (
             <button
-              className="btn btn-primary"
+              className="teacher-score-entry-btn"
               onClick={() => {
                 if (isScoreLocked) {
                   toast.error('Điểm số đã bị khóa. Không thể thêm điểm mới.');
@@ -1886,7 +1886,8 @@ const ExamScoreManagement = () => {
               }}
               disabled={isScoreLocked}
             >
-              📋 Nhập điểm
+              <ClipboardList size={18} />
+              <span>Nhập điểm</span>
             </button>
           )}
         </div>
@@ -2032,16 +2033,10 @@ const ExamScoreManagement = () => {
               <a
                 href="/MauFileNhapdiem.xlsx"
                 download
-                style={{
-                  padding: '8px 12px',
-                  borderRadius: '6px',
-                  backgroundColor: '#28a745',
-                  color: 'white',
-                  textDecoration: 'none',
-                  display: 'inline-block'
-                }}
+                className="exam-import-template-btn"
               >
-                ⬇ Tải file mẫu
+                <Download size={16} />
+                <span>Tải file mẫu</span>
               </a>
             </div>
           </div>

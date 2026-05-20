@@ -20,7 +20,7 @@ const SuperAdminHeader = ({
           <button
             type="button"
             onClick={onOpenCreate}
-            className="inline-flex items-center gap-2 rounded-full bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-md shadow-indigo-500/30 hover:bg-indigo-500"
+            className="inline-flex cursor-pointer items-center gap-2 rounded-full bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-md shadow-indigo-500/30 transition-all hover:-translate-y-0.5 hover:bg-indigo-500 hover:shadow-lg hover:shadow-indigo-500/30 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-500"
           >
             <span className="text-lg leading-none">＋</span>
             <span>Thêm quản trị mới</span>
@@ -70,4 +70,3 @@ const SuperAdminHeader = ({
 };
 
 export default SuperAdminHeader;
-
