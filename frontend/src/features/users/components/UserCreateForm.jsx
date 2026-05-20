@@ -130,9 +130,11 @@ const UserCreateForm = ({
           allRoles = allRoles.filter((role) => {
             const roleName = role.name?.toUpperCase();
             return (
+              roleName === 'ADMIN' ||
               roleName === 'STUDENT' ||
               roleName === 'TEACHER' ||
               roleName === 'PARENT' ||
+              roleName?.startsWith('ADMIN') ||
               roleName?.startsWith('STUDENT') ||
               roleName?.startsWith('TEACHER') ||
               roleName?.startsWith('PARENT')
@@ -187,9 +189,11 @@ const UserCreateForm = ({
           allRoles = (allRoles || []).filter((role) => {
             const roleName = role?.name?.toUpperCase();
             return (
+              roleName === 'ADMIN' ||
               roleName === 'STUDENT' ||
               roleName === 'TEACHER' ||
               roleName === 'PARENT' ||
+              roleName?.startsWith('ADMIN') ||
               roleName?.startsWith('STUDENT') ||
               roleName?.startsWith('TEACHER') ||
               roleName?.startsWith('PARENT')
@@ -1081,4 +1085,3 @@ const UserCreateForm = ({
 };
 
 export default UserCreateForm;
-

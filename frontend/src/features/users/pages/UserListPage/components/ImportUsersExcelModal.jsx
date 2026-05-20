@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import api from '../../../../../shared/lib/api';
 
 const ImportUsersExcelModal = ({ open, onClose, user, onImported }) => {
@@ -24,10 +24,28 @@ const ImportUsersExcelModal = ({ open, onClose, user, onImported }) => {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [open, onClose, importLoading]);
 
-  const templateUrl = useMemo(() => {
-    const base = api.defaults.baseURL || `${window.location.origin}/api`;
-    return `${base}/users/import-template`;
-  }, []);
+  const handleDownloadTemplate = async () => {
+    try {
+      setImportError(null);
+      const response = await api.get('/users/import-template', {
+        responseType: 'blob'
+      });
+      const blob = new Blob([response.data], {
+        type: response.headers?.['content-type'] || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', 'mau_nhap_nguoi_dung.xlsx');
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Error downloading user import template:', err);
+      setImportError(err.response?.data?.message || err.response?.data?.error || 'Không thể tải file mẫu Excel.');
+    }
+  };
 
   if (!open) return null;
 
@@ -44,15 +62,14 @@ const ImportUsersExcelModal = ({ open, onClose, user, onImported }) => {
           <p style={{ marginBottom: '1rem', fontSize: '0.9rem', color: '#555' }}>
             Tải file mẫu, điền thông tin (Email, Họ tên, Mật khẩu, Vai trò, Mã trường, Mã lớp), sau đó chọn file và nhấn Tải lên.
           </p>
-          <a
-            href={templateUrl}
-            target="_blank"
-            rel="noopener noreferrer"
+          <button
+            type="button"
+            onClick={handleDownloadTemplate}
             className="btn btn-secondary"
             style={{ marginBottom: '1rem', display: 'inline-block' }}
           >
             ⬇ Tải file mẫu Excel
-          </a>
+          </button>
 
           <form
             onSubmit={async (e) => {
@@ -209,4 +226,3 @@ const ImportUsersExcelModal = ({ open, onClose, user, onImported }) => {
 };
 
 export default ImportUsersExcelModal;
-

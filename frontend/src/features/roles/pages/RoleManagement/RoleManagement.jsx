@@ -11,7 +11,7 @@ const RoleManagement = () => {
   const { user } = useAuth();
   const currentUserRole = user?.role?.name?.toUpperCase();
   const isSchoolAdmin = currentUserRole === 'ADMIN';
-  const ADMIN_ALLOWED_ROLE_NAMES = ['PARENT', 'STUDENT', 'TEACHER'];
+  const ADMIN_ALLOWED_ROLE_NAMES = ['ADMIN', 'PARENT', 'STUDENT', 'TEACHER'];
   const [roles, setRoles] = useState([]);
   const [schools, setSchools] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -76,7 +76,7 @@ const RoleManagement = () => {
     if (isSchoolAdmin) {
       const inputNameUpper = (formData.name || '').toUpperCase().trim();
       if (!ADMIN_ALLOWED_ROLE_NAMES.includes(inputNameUpper)) {
-        toast.error('Admin chỉ được tạo phân quyền: PHỤ HUYNH (PARENT), HỌC SINH (STUDENT), GIÁO VIÊN (TEACHER).');
+        toast.error('Admin chỉ được tạo phân quyền: ADMIN, PHỤ HUYNH (PARENT), HỌC SINH (STUDENT), GIÁO VIÊN (TEACHER).');
         return;
       }
     }
@@ -279,6 +279,7 @@ const RoleManagement = () => {
                     className="block h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 disabled:cursor-not-allowed disabled:bg-slate-100"
                   >
                     <option value="">Chọn phân quyền</option>
+                    <option value="ADMIN">QUẢN TRỊ TRƯỜNG (ADMIN)</option>
                     <option value="PARENT">PHỤ HUYNH (PARENT)</option>
                     <option value="STUDENT">HỌC SINH (STUDENT)</option>
                     <option value="TEACHER">GIÁO VIÊN (TEACHER)</option>
