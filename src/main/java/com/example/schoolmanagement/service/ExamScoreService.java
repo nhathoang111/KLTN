@@ -316,24 +316,25 @@ public class ExamScoreService {
 
         List<Enrollment> enrollments = enrollmentRepository.findByClassEntityIdWithStudents(classId);
         enrollments = enrollments.stream()
-                .filter(e -> e.getStatus() != null && "ACTIVE".equalsIgnoreCase(e.getStatus()))
+                .filter(e -> e.getStatus() == null || "ACTIVE".equalsIgnoreCase(e.getStatus()))
                 .collect(Collectors.toList());
-        List<User> students = enrollments.stream()
+        Map<Integer, User> studentMap = enrollments.stream()
                 .map(Enrollment::getStudent)
                 .filter(Objects::nonNull)
                 .filter(u -> u.getRole() != null && studentRole(u.getRole().getName()))
-                .collect(Collectors.toMap(User::getId, u -> u, (a, b) -> a, LinkedHashMap::new))
-                .values()
+                .collect(Collectors.toMap(User::getId, u -> u, (a, b) -> a, LinkedHashMap::new));
+
+        List<ExamScore> scoresForSubject = examScoreRepository.findByClassEntityId(classId).stream()
+                .filter(e -> e.getSubject() != null && e.getSubject().getId().equals(subjectId))
+                .collect(Collectors.toList());
+
+        List<User> students = studentMap.values()
                 .stream()
                 .sorted((a, b) -> {
                     String na = a.getFullName() != null ? a.getFullName() : "";
                     String nb = b.getFullName() != null ? b.getFullName() : "";
                     return na.compareToIgnoreCase(nb);
                 })
-                .collect(Collectors.toList());
-
-        List<ExamScore> scoresForSubject = examScoreRepository.findByClassEntityId(classId).stream()
-                .filter(e -> e.getSubject() != null && e.getSubject().getId().equals(subjectId))
                 .collect(Collectors.toList());
 
         List<Map<String, Object>> rows = new ArrayList<>();

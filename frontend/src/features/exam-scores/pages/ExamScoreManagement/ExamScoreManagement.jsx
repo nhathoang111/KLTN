@@ -20,22 +20,64 @@ const ADMIN_VIEW_SEMESTERS = [
 ];
 
 function adminScheduleMatchesClassSemester(schedule, semesterUi, classSchoolYearName) {
-  const cs = schedule.classSection;
+  const cs = schedule.classSection || schedule.class_section;
   if (!cs) return false;
   const code = normalizeSemesterCode(cs.semester);
   if (code == null || code !== semesterUi) return false;
-  const syClass = classSchoolYearName ? String(classSchoolYearName).trim() : '';
-  const syCs = cs.schoolYear != null ? String(cs.schoolYear).trim() : '';
+  const syClass = normalizeSchoolYearLabel(classSchoolYearName);
+  const syCs = sectionSchoolYearLabel(cs);
   if (syClass && syCs && syClass !== syCs) return false;
   return true;
+}
+
+function adminSectionMatchesSemester(section, semesterUi, classSchoolYearName) {
+  const code = normalizeSemesterCode(section?.semester);
+  if (code == null || code !== semesterUi) return false;
+  const syClass = normalizeSchoolYearLabel(classSchoolYearName);
+  const syCs = sectionSchoolYearLabel(section);
+  if (syClass && syCs && syClass !== syCs) return false;
+  const status = String(section?.status || '').trim().toUpperCase();
+  return !status || status === 'ACTIVE';
 }
 
 function adminUniqueSubjectsFromSchedules(schedules) {
   const map = new Map();
   schedules.forEach((sch) => {
-    const sub = sch.subject;
-    if (!sub?.id) return;
-    if (!map.has(sub.id)) map.set(sub.id, { id: sub.id, name: sub.name || `Môn #${sub.id}` });
+    const sub = sch.subject || sch.classSection?.subject || sch.class_section?.subject;
+    const subjectId = toFiniteNumber(sub?.id ?? sch.subject_id);
+    if (subjectId == null) return;
+    if (!map.has(subjectId)) {
+      map.set(subjectId, { id: subjectId, name: sub?.name || `Môn #${subjectId}` });
+    }
+  });
+  return Array.from(map.values()).sort((a, b) => (a.name || '').localeCompare(b.name || '', 'vi'));
+}
+
+function adminUniqueSubjectsFromSections(sections, fallbackSubjects = []) {
+  const schoolSubjectById = new Map(
+    (fallbackSubjects || [])
+      .map((subject) => [toFiniteNumber(subject?.id), subject])
+      .filter(([id]) => id != null)
+  );
+  const map = new Map();
+  sections.forEach((section) => {
+    const subject = section.subject;
+    const subjectId = toFiniteNumber(subject?.id ?? section.subject_id);
+    if (subjectId == null || map.has(subjectId)) return;
+    map.set(subjectId, schoolSubjectById.get(subjectId) || {
+      id: subjectId,
+      name: subject?.name || `Môn #${subjectId}`,
+    });
+  });
+  return Array.from(map.values()).sort((a, b) => (a.name || '').localeCompare(b.name || '', 'vi'));
+}
+
+function mergeSubjects(...subjectLists) {
+  const map = new Map();
+  subjectLists.flat().forEach((subject) => {
+    const id = toFiniteNumber(subject?.id);
+    if (id == null || map.has(id)) return;
+    map.set(id, { ...subject, id });
   });
   return Array.from(map.values()).sort((a, b) => (a.name || '').localeCompare(b.name || '', 'vi'));
 }
@@ -46,6 +88,18 @@ function classSchoolYearLabel(cls) {
   if (sy && typeof sy === 'object') return String(sy.name || '').trim();
   if (typeof sy === 'string') return sy.trim();
   return String(cls.schoolYearName || cls.school_year_name || '').trim();
+}
+
+function normalizeSchoolYearLabel(value) {
+  return String(value || '').replace(/[–—]/g, '-').trim();
+}
+
+function sectionSchoolYearLabel(section) {
+  if (!section) return '';
+  const sy = section.schoolYear ?? section.school_year;
+  if (sy && typeof sy === 'object') return normalizeSchoolYearLabel(sy.name);
+  if (typeof sy === 'string') return normalizeSchoolYearLabel(sy);
+  return normalizeSchoolYearLabel(section.schoolYearName || section.school_year_name);
 }
 
 function latestSchoolYearLabel(classList) {
@@ -59,6 +113,23 @@ function latestSchoolYearLabel(classList) {
   return sorted[0] || '';
 }
 
+function toFiniteNumber(value) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+function scoreClassId(score) {
+  return toFiniteNumber(score?.classEntity?.id ?? score?.class_entity?.id ?? score?.class_id);
+}
+
+function scoreSubjectId(score) {
+  return toFiniteNumber(score?.subject?.id ?? score?.subject_id);
+}
+
+function scoreStudentId(score) {
+  return toFiniteNumber(score?.student?.id ?? score?.student_id);
+}
+
 /** Khối "Xem điểm" admin: điểm + TBM từ GET /api/exam-scores/tbm-summary */
 function AdminXemDiemSection({ classes, subjects, user }) {
   const [selectedClassId, setSelectedClassId] = useState('');
@@ -68,6 +139,7 @@ function AdminXemDiemSection({ classes, subjects, user }) {
   const [tbmRows, setTbmRows] = useState([]);
   const [loadingTbm, setLoadingTbm] = useState(false);
   const [schedulesForClass, setSchedulesForClass] = useState([]);
+  const [classSectionsForClass, setClassSectionsForClass] = useState([]);
   const [loadingSchedules, setLoadingSchedules] = useState(false);
   const [teacherLabel, setTeacherLabel] = useState('');
 
@@ -88,7 +160,7 @@ function AdminXemDiemSection({ classes, subjects, user }) {
     () => (selectedClassId ? classes.find((c) => String(c.id) === String(selectedClassId)) : null),
     [classes, selectedClassId]
   );
-  const classSchoolYearName = selectedClass?.schoolYear?.name || selectedClass?.school_year?.name || '';
+  const classSchoolYearName = classSchoolYearLabel(selectedClass);
 
   const schedulesForSemester = useMemo(() => {
     return schedulesForClass.filter((sch) =>
@@ -96,9 +168,18 @@ function AdminXemDiemSection({ classes, subjects, user }) {
     );
   }, [schedulesForClass, semester, classSchoolYearName]);
 
+  const sectionsForSemester = useMemo(() => {
+    return classSectionsForClass.filter((section) =>
+      adminSectionMatchesSemester(section, semester, classSchoolYearName)
+    );
+  }, [classSectionsForClass, semester, classSchoolYearName]);
+
   const subjectsForSemester = useMemo(
-    () => adminUniqueSubjectsFromSchedules(schedulesForSemester),
-    [schedulesForSemester]
+    () => mergeSubjects(
+      adminUniqueSubjectsFromSections(sectionsForSemester, schoolSubjects),
+      adminUniqueSubjectsFromSchedules(schedulesForSemester)
+    ),
+    [sectionsForSemester, schedulesForSemester, schoolSubjects]
   );
 
   useEffect(() => {
@@ -128,16 +209,30 @@ function AdminXemDiemSection({ classes, subjects, user }) {
   useEffect(() => {
     if (!classIdNum) {
       setSchedulesForClass([]);
+      setClassSectionsForClass([]);
       setTeacherLabel('');
       return;
     }
     const loadTk = async () => {
       setLoadingSchedules(true);
       try {
-        const res = await api.get(`/schedules/class/${classIdNum}`);
-        setSchedulesForClass(res.data.schedules || []);
+        const [scheduleResult, sectionResult] = await Promise.allSettled([
+          api.get(`/schedules/class/${classIdNum}`),
+          api.get(`/class-sections/class/${classIdNum}`),
+        ]);
+        setSchedulesForClass(
+          scheduleResult.status === 'fulfilled'
+            ? scheduleResult.value.data.schedules || []
+            : []
+        );
+        setClassSectionsForClass(
+          sectionResult.status === 'fulfilled'
+            ? sectionResult.value.data.classSections || []
+            : []
+        );
       } catch {
         setSchedulesForClass([]);
+        setClassSectionsForClass([]);
       } finally {
         setLoadingSchedules(false);
       }
@@ -147,20 +242,32 @@ function AdminXemDiemSection({ classes, subjects, user }) {
 
   useEffect(() => {
     if (!selectedSubjectId) return;
-    const ok = subjectsForSemester.some((s) => String(s.id) === String(selectedSubjectId));
+    const selectedId = toFiniteNumber(selectedSubjectId);
+    const ok = subjectsForSemester.some((s) => toFiniteNumber(s.id) === selectedId);
     if (!ok) setSelectedSubjectId('');
   }, [subjectsForSemester, selectedSubjectId]);
 
   useEffect(() => {
-    if (!subjectIdNum || !schedulesForSemester.length) {
+    if (!subjectIdNum) {
       setTeacherLabel('');
       return;
     }
-    const match = schedulesForSemester.find(
-      (sch) => (sch.subject?.id || sch.subject_id) === subjectIdNum
-    );
+    const sectionMatch = sectionsForSemester.find((section) => {
+      const sectionSubjectId = toFiniteNumber(section.subject?.id ?? section.subject_id);
+      return sectionSubjectId === subjectIdNum;
+    });
+    if (sectionMatch) {
+      setTeacherLabel(sectionMatch?.teacher?.fullName || '—');
+      return;
+    }
+    const match = schedulesForSemester.find((sch) => {
+      const scheduleSubjectId = toFiniteNumber(
+        sch.subject?.id ?? sch.classSection?.subject?.id ?? sch.class_section?.subject?.id ?? sch.subject_id
+      );
+      return scheduleSubjectId === subjectIdNum;
+    });
     setTeacherLabel(match?.teacher?.fullName || '—');
-  }, [subjectIdNum, schedulesForSemester]);
+  }, [subjectIdNum, sectionsForSemester, schedulesForSemester]);
 
   const filteredRows = useMemo(() => {
     const q = studentSearch.trim().toLowerCase();
@@ -179,8 +286,8 @@ function AdminXemDiemSection({ classes, subjects, user }) {
     }
     const cls = classes.find((c) => c.id === classIdNum);
     const sub =
-      subjectsForSemester.find((s) => s.id === subjectIdNum) ||
-      schoolSubjects.find((s) => s.id === subjectIdNum);
+      subjectsForSemester.find((s) => toFiniteNumber(s.id) === subjectIdNum) ||
+      schoolSubjects.find((s) => toFiniteNumber(s.id) === subjectIdNum);
     const headers = ['STT', 'Họ tên'];
     if (showOral) headers.push('Miệng 1');
     if (show15) headers.push('15P-1');
@@ -419,6 +526,7 @@ const ExamScoreManagement = () => {
   const [students, setStudents] = useState([]);
   const [subjects, setSubjects] = useState([]);
   const [classes, setClasses] = useState([]);
+  const [teacherClassSections, setTeacherClassSections] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showClassModal, setShowClassModal] = useState(false);
   const [isScoreLocked, setIsScoreLocked] = useState(false);
@@ -429,6 +537,8 @@ const ExamScoreManagement = () => {
   const [filteredSubjectsForClass, setFilteredSubjectsForClass] = useState([]); // Môn theo TKB + học kỳ (GV)
   const [displayFilterClassId, setDisplayFilterClassId] = useState(''); // Lớp đã chọn để filter hiển thị (cho Teacher)
   const [displayFilterSubjectId, setDisplayFilterSubjectId] = useState(''); // Môn đã chọn để filter hiển thị (cho Teacher)
+  const [displayFilterStudents, setDisplayFilterStudents] = useState([]);
+  const [displayFilterStudentsLoaded, setDisplayFilterStudentsLoaded] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false); // Phân biệt giữa nhập điểm mới và sửa điểm
   /** Học kỳ trong modal nhập điểm (lọc môn theo TKB, khớp admin) */
   const [teacherModalSemester, setTeacherModalSemester] = useState('1');
@@ -466,6 +576,10 @@ const ExamScoreManagement = () => {
     () => new Set((teacherCurrentClasses || []).map((cls) => String(cls.id))),
     [teacherCurrentClasses]
   );
+  const displayFilterStudentIds = useMemo(
+    () => new Set((displayFilterStudents || []).map((student) => toFiniteNumber(student?.id)).filter((id) => id != null)),
+    [displayFilterStudents]
+  );
   const actionClasses = useMemo(
     () => viewClasses.filter(isTeachingActiveClass),
     [viewClasses]
@@ -484,8 +598,42 @@ const ExamScoreManagement = () => {
     if (!teacherCurrentClassIds.has(String(displayFilterClassId))) {
       setDisplayFilterClassId('');
       setDisplayFilterSubjectId('');
+      setDisplayFilterStudents([]);
+      setDisplayFilterStudentsLoaded(false);
     }
   }, [userRole, displayFilterClassId, teacherCurrentClassIds]);
+
+  useEffect(() => {
+    if (userRole !== 'TEACHER' || !displayFilterClassId) {
+      setDisplayFilterStudents([]);
+      setDisplayFilterStudentsLoaded(false);
+      return;
+    }
+
+    let cancelled = false;
+    setDisplayFilterStudents([]);
+    setDisplayFilterStudentsLoaded(false);
+
+    (async () => {
+      try {
+        const response = await api.get(`/classes/${displayFilterClassId}/students`);
+        if (!cancelled) {
+          setDisplayFilterStudents(response.data.students || []);
+          setDisplayFilterStudentsLoaded(true);
+        }
+      } catch (error) {
+        console.error('Error fetching students for selected class filter:', error);
+        if (!cancelled) {
+          setDisplayFilterStudents([]);
+          setDisplayFilterStudentsLoaded(true);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [userRole, displayFilterClassId]);
 
   const runAiStudentInsight = async (student) => {
     const sid = student?.id ?? student?.studentId;
@@ -636,17 +784,19 @@ const ExamScoreManagement = () => {
         try {
           const sectionRes = await api.get(`/class-sections/teacher/${user.id}`);
           const sections = sectionRes.data.classSections || [];
+          setTeacherClassSections(sections);
           const assignedSubjectIds = teacherSubjectIdsFromSections(sections);
           const assignedClassIds = teacherClassIdsFromSections(sections);
           allScores = allScores.filter(score => {
-            const scoreSubjectId = Number(score.subject?.id || score.subject_id);
-            const scoreClassId = Number(score.classEntity?.id || score.class_id);
-            const subjectAllowed = Number.isFinite(scoreSubjectId) && assignedSubjectIds.has(scoreSubjectId);
-            const classAllowed = Number.isFinite(scoreClassId) && assignedClassIds.has(scoreClassId);
-            return subjectAllowed && classAllowed;
-          });
+          const scoreSubjectIdValue = scoreSubjectId(score);
+          const scoreClassIdValue = scoreClassId(score);
+          const subjectAllowed = scoreSubjectIdValue != null && assignedSubjectIds.has(scoreSubjectIdValue);
+          const classAllowed = scoreClassIdValue != null && assignedClassIds.has(scoreClassIdValue);
+          return subjectAllowed && classAllowed;
+        });
         } catch (sectionError) {
           console.error('Error fetching teacher class-sections:', sectionError);
+          setTeacherClassSections([]);
           // If error, show no scores for teacher
           allScores = [];
         }
@@ -722,9 +872,9 @@ const ExamScoreManagement = () => {
           const sections = sectionRes.data.classSections || [];
           const assignedSubjectIds = teacherSubjectIdsFromSections(sections);
           allSubjects = allSubjects.filter(subject => {
-            const subjectId = subject.id;
+            const subjectId = toFiniteNumber(subject.id);
             const isAssigned = assignedSubjectIds.has(subjectId);
-            const isSameSchool = subject.school?.id === user.school?.id;
+            const isSameSchool = String(subject.school?.id) === String(user.school?.id);
             return isAssigned && isSameSchool;
           });
         } catch (sectionError) {
@@ -757,6 +907,7 @@ const ExamScoreManagement = () => {
         try {
           const sectionRes = await api.get(`/class-sections/teacher/${user.id}`);
           const sections = sectionRes.data.classSections || [];
+          setTeacherClassSections(sections);
           allClasses = buildTeacherVisibleClasses({
             allClasses,
             classSections: sections,
@@ -766,6 +917,7 @@ const ExamScoreManagement = () => {
           });
         } catch (sectionError) {
           console.error('Error fetching teacher class-sections:', sectionError);
+          setTeacherClassSections([]);
           // If error, show no classes for teacher
           allClasses = [];
         }
@@ -946,7 +1098,7 @@ const ExamScoreManagement = () => {
     }
     try {
       const selectedCls = classes.find((c) => String(c.id) === String(classId));
-      const classSchoolYearName = selectedCls?.schoolYear?.name || selectedCls?.school_year?.name || '';
+      const classSchoolYearName = classSchoolYearLabel(selectedCls);
       const sectionsResponse = await api.get(`/class-sections/class/${classId}`);
       const classSections = sectionsResponse.data.classSections || [];
       const sectionsForTeacher = classSections.filter((cs) => {
@@ -954,33 +1106,30 @@ const ExamScoreManagement = () => {
         if (String(tid) !== String(user?.id)) return false;
         const sem = normalizeSemesterCode(cs.semester);
         if (sem == null || sem !== semesterUi) return false;
-        const syClass = classSchoolYearName ? String(classSchoolYearName).trim() : '';
-        const syCs = cs.schoolYear != null ? String(cs.schoolYear).trim() : '';
+        const syClass = normalizeSchoolYearLabel(classSchoolYearName);
+        const syCs = sectionSchoolYearLabel(cs);
         if (syClass && syCs && syClass !== syCs) return false;
         const status = String(cs.status || '').trim().toUpperCase();
         return !status || status === 'ACTIVE';
       });
 
-      const assignedSubjectIds = new Set();
+      const schoolSubjectById = new Map(
+        (subjects || [])
+          .map((subject) => [toFiniteNumber(subject?.id), subject])
+          .filter(([id]) => id != null)
+      );
+      const subjectById = new Map();
       sectionsForTeacher.forEach((cs) => {
-        const sid = cs.subject?.id || cs.subject_id;
-        if (sid) assignedSubjectIds.add(sid);
+        const sid = toFiniteNumber(cs.subject?.id ?? cs.subject_id);
+        if (sid == null || subjectById.has(sid)) return;
+        const subjectFromSection = cs.subject
+          ? { id: sid, name: cs.subject.name || `Môn #${sid}` }
+          : { id: sid, name: `Môn #${sid}` };
+        subjectById.set(sid, schoolSubjectById.get(sid) || subjectFromSection);
       });
 
-      const userRole = user?.role?.name?.toUpperCase();
-      const filteredSubjects = subjects.filter((subject) => {
-        const subjectId = subject.id;
-        const isAssignedToClass = assignedSubjectIds.has(subjectId);
-        if (userRole === 'TEACHER' && user?.id) {
-          const isTaughtByTeacher = sectionsForTeacher.some((cs) => {
-            const scheduleSubjectId = cs.subject?.id || cs.subject_id;
-            return scheduleSubjectId === subjectId;
-          });
-          return isAssignedToClass && isTaughtByTeacher;
-        }
-        return isAssignedToClass;
-      });
-
+      const filteredSubjects = Array.from(subjectById.values())
+        .sort((a, b) => (a.name || '').localeCompare(b.name || '', 'vi'));
       setFilteredSubjectsForClass(filteredSubjects);
     } catch (error) {
       console.error('Error fetching schedules for class:', error);
@@ -1014,11 +1163,12 @@ const ExamScoreManagement = () => {
   useEffect(() => {
     if (!showClassModal || !selectedClassForScore) return;
     loadSubjectsForTeacherClass(selectedClassForScore, teacherModalSemester);
-  }, [teacherModalSemester, showClassModal, selectedClassForScore]);
+  }, [teacherModalSemester, showClassModal, selectedClassForScore, subjects]);
 
   useEffect(() => {
     if (!selectedSubjectForScore || !filteredSubjectsForClass.length) return;
-    const ok = filteredSubjectsForClass.some((s) => String(s.id) === String(selectedSubjectForScore));
+    const selectedId = toFiniteNumber(selectedSubjectForScore);
+    const ok = filteredSubjectsForClass.some((s) => toFiniteNumber(s.id) === selectedId);
     if (!ok) setSelectedSubjectForScore('');
   }, [filteredSubjectsForClass, selectedSubjectForScore]);
 
@@ -1464,16 +1614,29 @@ const ExamScoreManagement = () => {
   const outerSubjectsForFilter = useMemo(() => {
     if (user?.role?.name?.toUpperCase() !== 'TEACHER') return [];
 
-    const sourceScores = examScores.filter((score) => {
-      const scoreClassId = score.classEntity?.id || score.class_id;
-      if (teacherCurrentClassIds.size > 0 && !teacherCurrentClassIds.has(String(scoreClassId))) {
-        return false;
-      }
-      return !displayFilterClassId || (scoreClassId && String(scoreClassId) === String(displayFilterClassId));
+    const sectionSubjectMap = new Map();
+    (teacherClassSections || []).forEach((section) => {
+      const classId = section.classRoom?.id ?? section.class_room?.id;
+      if (teacherCurrentClassIds.size > 0 && !teacherCurrentClassIds.has(String(classId))) return;
+      if (displayFilterClassId && String(classId) !== String(displayFilterClassId)) return;
+      const subjectId = toFiniteNumber(section.subject?.id ?? section.subject_id);
+      if (subjectId == null || sectionSubjectMap.has(subjectId)) return;
+      sectionSubjectMap.set(subjectId, {
+        id: subjectId,
+        name: section.subject?.name || `Môn #${subjectId}`,
+      });
     });
 
+    if (sectionSubjectMap.size > 0) {
+      return Array.from(sectionSubjectMap.values())
+        .sort((a, b) => (a.name || '').localeCompare(b.name || '', 'vi'));
+    }
+
     const map = new Map();
-    sourceScores.forEach((score) => {
+    examScores.forEach((score) => {
+      const scoreClassIdValue = scoreClassId(score);
+      if (teacherCurrentClassIds.size > 0 && !teacherCurrentClassIds.has(String(scoreClassIdValue))) return;
+      if (displayFilterClassId && String(scoreClassIdValue) !== String(displayFilterClassId)) return;
       const subject = score.subject;
       if (subject?.id && !map.has(subject.id)) {
         map.set(subject.id, { id: subject.id, name: subject.name || `Môn #${subject.id}` });
@@ -1481,7 +1644,7 @@ const ExamScoreManagement = () => {
     });
 
     return Array.from(map.values()).sort((a, b) => (a.name || '').localeCompare(b.name || '', 'vi'));
-  }, [examScores, displayFilterClassId, teacherCurrentClassIds, user]);
+  }, [examScores, displayFilterClassId, teacherCurrentClassIds, teacherClassSections, user]);
 
   // Nhóm điểm theo học sinh và môn học
   const groupScoresByStudentAndSubject = () => {
@@ -1491,31 +1654,37 @@ const ExamScoreManagement = () => {
     // Filter scores theo lớp/môn đã chọn nếu là Teacher
     let filteredScores = examScores;
     if (userRole === 'TEACHER') {
+      if (!displayFilterClassId) return [];
+      if (!displayFilterStudentsLoaded) return [];
       filteredScores = examScores.filter((score) => {
-        const scoreClassId = score.classEntity?.id || score.class_id;
-        const scoreSubjectId = score.subject?.id || score.subject_id;
+        const scoreClassIdValue = scoreClassId(score);
+        const scoreSubjectIdValue = scoreSubjectId(score);
+        const scoreStudentIdValue = scoreStudentId(score);
 
-        if (teacherCurrentClassIds.size > 0 && !teacherCurrentClassIds.has(String(scoreClassId))) {
+        if (teacherCurrentClassIds.size > 0 && !teacherCurrentClassIds.has(String(scoreClassIdValue))) {
           return false;
         }
 
-        const matchClass = !displayFilterClassId || (scoreClassId && String(scoreClassId) === String(displayFilterClassId));
-        const matchSubject = !displayFilterSubjectId || (scoreSubjectId && String(scoreSubjectId) === String(displayFilterSubjectId));
+        const matchClass = scoreClassIdValue != null && String(scoreClassIdValue) === String(displayFilterClassId);
+        const matchSubject = !displayFilterSubjectId || (scoreSubjectIdValue != null && String(scoreSubjectIdValue) === String(displayFilterSubjectId));
+        const matchStudentInClass = scoreStudentIdValue != null && displayFilterStudentIds.has(scoreStudentIdValue);
 
-        return matchClass && matchSubject;
+        return matchClass && matchSubject && matchStudentInClass;
       });
     }
 
     filteredScores.forEach(score => {
       const studentId = score.student?.id;
-      const subjectId = score.subject?.id;
-      const key = `${studentId}-${subjectId}`;
+      const subjectId = scoreSubjectId(score);
+      const classId = scoreClassId(score);
+      const key = `${classId}-${studentId}-${subjectId}`;
 
       if (!grouped[key]) {
         grouped[key] = {
           student: score.student,
           subject: score.subject,
           classEntity: score.classEntity,
+          class_id: classId,
           scoreMieng: null,
           score15P: null,
           score1Tiet: null,
@@ -1548,7 +1717,15 @@ const ExamScoreManagement = () => {
 
   const scoreGroups = useMemo(
     () => groupScoresByStudentAndSubject(),
-    [examScores, displayFilterClassId, displayFilterSubjectId, user, teacherCurrentClassIds]
+    [
+      examScores,
+      displayFilterClassId,
+      displayFilterSubjectId,
+      displayFilterStudentsLoaded,
+      displayFilterStudentIds,
+      user,
+      teacherCurrentClassIds,
+    ]
   );
 
   useEffect(() => {
@@ -1733,12 +1910,14 @@ const ExamScoreManagement = () => {
             flexWrap: 'wrap'
           }}>
             <label style={{ fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <span>Lọc theo lớp:</span>
+              <span>Chọn lớp:</span>
               <select
                 value={displayFilterClassId}
                 onChange={(e) => {
                   setDisplayFilterClassId(e.target.value);
                   setDisplayFilterSubjectId('');
+                  setDisplayFilterStudents([]);
+                  setDisplayFilterStudentsLoaded(false);
                 }}
                 style={{
                   padding: '8px 12px',
@@ -1748,7 +1927,7 @@ const ExamScoreManagement = () => {
                   minWidth: '200px'
                 }}
               >
-                <option value="">-- Tất cả các lớp --</option>
+                <option value="">-- Chọn lớp --</option>
                 {teacherCurrentClasses.map(cls => (
                   <option key={cls.id} value={cls.id}>
                     {cls.name}
@@ -1774,7 +1953,7 @@ const ExamScoreManagement = () => {
                   fontSize: '14px',
                   minWidth: '200px'
                 }}
-                disabled={!outerSubjectsForFilter || outerSubjectsForFilter.length === 0}
+                disabled={!displayFilterClassId || !outerSubjectsForFilter || outerSubjectsForFilter.length === 0}
               >
                 <option value="">-- Tất cả các môn --</option>
                 {(outerSubjectsForFilter || []).map(s => (
@@ -1790,6 +1969,8 @@ const ExamScoreManagement = () => {
                 onClick={() => {
                   setDisplayFilterClassId('');
                   setDisplayFilterSubjectId('');
+                  setDisplayFilterStudents([]);
+                  setDisplayFilterStudentsLoaded(false);
                 }}
                 style={{
                   padding: '6px 12px',
@@ -1870,7 +2051,7 @@ const ExamScoreManagement = () => {
       {/* Bảng điểm — GV/HS: cùng kiểu bảng admin (header 2 cấp, es-score-pill, TBM từ API) */}
       {isAdmin ? null : (
       <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-        {scoreGroups.length === 0 ? (
+        {scoreGroups.length === 0 && userRole !== 'TEACHER' ? (
           <div className="px-4 py-16 text-center text-slate-500">
             <p className="text-lg">Chưa có điểm số nào</p>
           </div>
@@ -1980,7 +2161,34 @@ const ExamScoreManagement = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {scoreGroups.map((group, index) => {
+                  {userRole === 'TEACHER' && !displayFilterClassId ? (
+                    <tr>
+                      <td
+                        colSpan={9}
+                        className="border border-slate-200 px-4 py-10 text-center text-slate-500"
+                      >
+                        Chọn lớp để xem và nhập điểm.
+                      </td>
+                    </tr>
+                  ) : userRole === 'TEACHER' && displayFilterClassId && !displayFilterStudentsLoaded ? (
+                    <tr>
+                      <td
+                        colSpan={9}
+                        className="border border-slate-200 px-4 py-10 text-center text-slate-500"
+                      >
+                        Đang tải danh sách học sinh của lớp đã chọn...
+                      </td>
+                    </tr>
+                  ) : scoreGroups.length === 0 ? (
+                    <tr>
+                      <td
+                        colSpan={9}
+                        className="border border-slate-200 px-4 py-10 text-center text-slate-500"
+                      >
+                        Không có dữ liệu điểm cho lớp đã chọn.
+                      </td>
+                    </tr>
+                  ) : scoreGroups.map((group, index) => {
                     const scoreMieng = group.scoreMieng?.score;
                     const score15P = group.score15P?.score;
                     const score1Tiet = group.score1Tiet?.score;

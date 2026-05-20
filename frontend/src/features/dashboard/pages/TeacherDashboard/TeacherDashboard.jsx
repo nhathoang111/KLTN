@@ -65,16 +65,82 @@ const filterClassesByStartYear = (classes, startYear) => {
   return (classes || []).filter((c) => parseSchoolYearStart(getSchoolYearLabel(c)) === startYear);
 };
 
+const emptyScoreStats = { gioi: 0, kha: 0, trungBinh: 0, yeu: 0 };
+
+const toFiniteNumber = (value) => {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+};
+
+const buildHomeroomStudentScoreStats = (homeroomClasses, allScores) => {
+  return buildHomeroomStudentScoreStatsForStudents(homeroomClasses, allScores, null);
+};
+
+const getCurrentHomeroomClasses = (homeroomClasses) => {
+  const activeClasses = (homeroomClasses || []).filter((classEntity) => {
+    const status = String(classEntity?.status || 'ACTIVE').toUpperCase();
+    return status !== 'ARCHIVED' && status !== 'INACTIVE';
+  });
+  const classes = activeClasses.length > 0 ? activeClasses : (homeroomClasses || []);
+  const currentYearStart = latestSchoolYearStart(classes);
+  return filterClassesByStartYear(classes, currentYearStart);
+};
+
+const buildHomeroomStudentScoreStatsForStudents = (homeroomClasses, allScores, allowedStudentIds) => {
+  const currentHomeroomClasses = getCurrentHomeroomClasses(homeroomClasses);
+  const homeroomClassIds = new Set(
+    currentHomeroomClasses
+      .map((c) => toFiniteNumber(c?.id))
+      .filter((id) => id != null)
+  );
+
+  if (homeroomClassIds.size === 0) return { ...emptyScoreStats };
+
+  const scoresByStudent = new Map();
+  (allScores || []).forEach((score) => {
+    const status = String(score?.status || 'ACTIVE').toUpperCase();
+    if (status !== 'ACTIVE') return;
+
+    const classId = toFiniteNumber(score?.classEntity?.id ?? score?.classId ?? score?.class_id);
+    if (classId == null || !homeroomClassIds.has(classId)) return;
+
+    const studentId = toFiniteNumber(score?.student?.id ?? score?.studentId ?? score?.student_id);
+    const scoreValue = toFiniteNumber(score?.score);
+    if (studentId == null || scoreValue == null) return;
+    if (allowedStudentIds && !allowedStudentIds.has(studentId)) return;
+
+    if (!scoresByStudent.has(studentId)) {
+      scoresByStudent.set(studentId, { total: 0, count: 0 });
+    }
+    const row = scoresByStudent.get(studentId);
+    row.total += scoreValue;
+    row.count += 1;
+  });
+
+  const stats = { ...emptyScoreStats };
+  scoresByStudent.forEach(({ total, count }) => {
+    if (count <= 0) return;
+    const avg = total / count;
+    if (avg >= 8) stats.gioi += 1;
+    else if (avg >= 6.5 && avg < 8) stats.kha += 1;
+    else if (avg >= 5 && avg < 6.5) stats.trungBinh += 1;
+    else stats.yeu += 1;
+  });
+
+  return stats;
+};
+
 const TeacherDashboard = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [teacherClasses, setTeacherClasses] = useState([]);
+  const [schoolClasses, setSchoolClasses] = useState([]);
   const [allSchedules, setAllSchedules] = useState([]);
   const [todaySchedules, setTodaySchedules] = useState([]);
   const [assignments, setAssignments] = useState([]);
   const [studentCountByClassId, setStudentCountByClassId] = useState({});
-  const [scoreStats, setScoreStats] = useState({ gioi: 0, kha: 0, trungBinh: 0, yeu: 0 });
+  const [scoreStats, setScoreStats] = useState(emptyScoreStats);
   const [classSections, setClassSections] = useState([]);
 
   const [aiLoading, setAiLoading] = useState(false);
@@ -125,14 +191,20 @@ const TeacherDashboard = () => {
       // Backend: dayOfWeek 1=Thứ 2, 2=Thứ 3, ..., 6=Thứ 7 (theo Schedule entity)
       const todayDayOfWeek = now.getDay() === 0 ? 7 : now.getDay(); // JS: 0=CN, 1=T2,...,6=T7
 
-      const [classesRes, schedulesRes, assignmentsRes, countsRes] = await Promise.all([
+      const schoolClassesRequest = user?.school?.id
+        ? api.get(`/classes/school/${user.school.id}`).catch(() => ({ data: { classes: [] } }))
+        : Promise.resolve({ data: { classes: [] } });
+
+      const [classesRes, schedulesRes, assignmentsRes, countsRes, schoolClassesRes] = await Promise.all([
         api.get(`/classes/teacher/${teacherId}`),
         api.get(`/schedules/teacher/${teacherId}`),
         api.get(`/assignments/teacher/${teacherId}`),
         api.get('/classes/counts/students'),
+        schoolClassesRequest,
       ]);
       const classes = classesRes.data?.classes || [];
       setTeacherClasses(classes);
+      setSchoolClasses(schoolClassesRes.data?.classes || []);
       const schedules = schedulesRes.data?.schedules || [];
       setAllSchedules(schedules);
 
@@ -151,51 +223,31 @@ const TeacherDashboard = () => {
         const classSectionsRes = await api.get(`/class-sections/teacher/${teacherId}`);
         const sectionList = classSectionsRes.data?.classSections || [];
         setClassSections(sectionList);
-        const classIdsFromSections = new Set(
-          sectionList
-            .map((cs) => cs.classRoom?.id ?? cs.class_room?.id)
-            .filter(Boolean)
-        );
-        // Thống kê điểm: ưu tiên phân công lớp học phần, cộng thêm lớp chủ nhiệm/lớp có TKB để không thiếu dữ liệu cũ.
-        const classIdsFromSchedules = new Set(
-          schedules.map((s) => s.classEntity?.id ?? s.class_id).filter(Boolean)
-        );
-        const classIds = new Set([...classes.map((c) => c.id), ...classIdsFromSchedules, ...classIdsFromSections]);
-        if (classIds.size > 0 && user?.school?.id) {
-          const scoresRes = await api.get(`/exam-scores?schoolId=${user.school.id}`);
-          const allScores = scoresRes.data?.examScores || [];
-          const teacherClassScores = allScores.filter((s) => s.classEntity?.id && classIds.has(s.classEntity.id));
-          let gioi = 0, kha = 0, trungBinh = 0, yeu = 0;
-          teacherClassScores.forEach((s) => {
-            const sc = Number(s.score);
-            if (sc >= 8) gioi++;
-            else if (sc >= 6.5) kha++;
-            else if (sc >= 5) trungBinh++;
-            else yeu++;
-          });
-          setScoreStats({ gioi, kha, trungBinh, yeu });
-        }
       } catch (e) {
         setClassSections([]);
         // fallback khi chưa có class-sections endpoint/data
-        const classIdsFromSchedules = new Set(
-          schedules.map((s) => s.classEntity?.id ?? s.class_id).filter(Boolean)
+      }
+
+      if (user?.school?.id) {
+        const scoresRes = await api.get(`/exam-scores?schoolId=${user.school.id}`);
+        const allScores = scoresRes.data?.examScores || [];
+        const homeroomOnlyClasses = classes.filter((classEntity) => isHomeroomClassOfTeacher(classEntity, teacherId));
+        const currentHomeroomClasses = getCurrentHomeroomClasses(homeroomOnlyClasses);
+        const studentResults = await Promise.all(
+          currentHomeroomClasses.map((classEntity) => (
+            api.get(`/classes/${classEntity.id}/students`)
+              .then((res) => res.data?.students || [])
+              .catch(() => [])
+          ))
         );
-        const classIds = new Set([...classes.map((c) => c.id), ...classIdsFromSchedules]);
-        if (classIds.size > 0 && user?.school?.id) {
-          const scoresRes = await api.get(`/exam-scores?schoolId=${user.school.id}`);
-          const allScores = scoresRes.data?.examScores || [];
-          const teacherClassScores = allScores.filter((s) => s.classEntity?.id && classIds.has(s.classEntity.id));
-          let gioi = 0, kha = 0, trungBinh = 0, yeu = 0;
-          teacherClassScores.forEach((s) => {
-            const sc = Number(s.score);
-            if (sc >= 8) gioi++;
-            else if (sc >= 6.5) kha++;
-            else if (sc >= 5) trungBinh++;
-            else yeu++;
-          });
-          setScoreStats({ gioi, kha, trungBinh, yeu });
-        }
+        const homeroomStudentIds = new Set();
+        studentResults.flat().forEach((student) => {
+          const studentId = toFiniteNumber(student?.id ?? student?.studentId ?? student?.student_id);
+          if (studentId != null) homeroomStudentIds.add(studentId);
+        });
+        setScoreStats(buildHomeroomStudentScoreStatsForStudents(homeroomOnlyClasses, allScores, homeroomStudentIds));
+      } else {
+        setScoreStats({ ...emptyScoreStats });
       }
     } catch (e) {
       console.error('Error fetching teacher dashboard:', e);
@@ -220,13 +272,33 @@ const TeacherDashboard = () => {
   }, [allSchedules, classSections, teacherClasses]);
 
   // "Danh sách lớp phụ trách" chỉ hiển thị lớp mà giáo viên có lớp học phần.
-  const classesFromClassSections = React.useMemo(() => {
+  const teachingClasses = React.useMemo(() => {
     const map = new Map();
+    const fullClassById = new Map();
+
+    (schoolClasses || []).forEach((classEntity) => {
+      if (classEntity?.id != null) fullClassById.set(Number(classEntity.id), classEntity);
+    });
+
+    const addClass = (classEntity) => {
+      const id = classEntity?.id;
+      if (id == null) return;
+      const numericId = Number(id);
+      if (!map.has(numericId)) {
+        map.set(numericId, fullClassById.get(numericId) || classEntity);
+      }
+    };
 
     (classSections || []).forEach((cs) => {
-      const c = cs?.classRoom || cs?.class_room;
-      const id = c?.id;
-      if (id != null && !map.has(id)) map.set(id, c);
+      addClass(cs?.classRoom || cs?.class_room);
+    });
+
+    (allSchedules || []).forEach((schedule) => {
+      addClass(schedule?.classEntity || schedule?.class_entity);
+    });
+
+    (teacherClasses || []).forEach((classEntity) => {
+      addClass(classEntity);
     });
 
     return Array.from(map.values()).sort((a, b) => {
@@ -234,7 +306,7 @@ const TeacherDashboard = () => {
       const nb = b?.name ?? '';
       return na.localeCompare(nb, 'vi');
     });
-  }, [classSections]);
+  }, [allSchedules, classSections, schoolClasses, teacherClasses]);
 
   const homeroomClasses = React.useMemo(() => {
     return (teacherClasses || []).filter((c) => isHomeroomClassOfTeacher(c, teacherId));
@@ -242,8 +314,8 @@ const TeacherDashboard = () => {
 
   const responsibilityClasses = React.useMemo(() => {
     const homeroomIds = new Set((homeroomClasses || []).map((c) => c?.id).filter(Boolean));
-    return (classesFromClassSections || []).filter((c) => !homeroomIds.has(c?.id));
-  }, [homeroomClasses, classesFromClassSections]);
+    return (teachingClasses || []).filter((c) => !homeroomIds.has(c?.id));
+  }, [homeroomClasses, teachingClasses]);
 
   const dashboardSchoolYearStart = React.useMemo(() => {
     return latestSchoolYearStart([...homeroomClasses, ...responsibilityClasses]);
@@ -614,7 +686,7 @@ const TeacherDashboard = () => {
           </div>
 
           <div className="td-card">
-            <h3 className="td-card-title">Thống kê điểm lớp</h3>
+            <h3 className="td-card-title">Thống kê điểm lớp chủ nhiệm</h3>
             <div className="td-chart-wrap">
               <div className="td-chart-bars">
                 {[

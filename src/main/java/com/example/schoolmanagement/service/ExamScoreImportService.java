@@ -1,10 +1,12 @@
 package com.example.schoolmanagement.service;
 
 import com.example.schoolmanagement.entity.ClassEntity;
+import com.example.schoolmanagement.entity.Enrollment;
 import com.example.schoolmanagement.entity.ExamScore;
 import com.example.schoolmanagement.entity.Subject;
 import com.example.schoolmanagement.entity.User;
 import com.example.schoolmanagement.repository.ClassRepository;
+import com.example.schoolmanagement.repository.EnrollmentRepository;
 import com.example.schoolmanagement.repository.ExamScoreRepository;
 import com.example.schoolmanagement.repository.SubjectRepository;
 import com.example.schoolmanagement.repository.UserRepository;
@@ -40,6 +42,8 @@ public class ExamScoreImportService {
     private ExamScoreRepository examRepo;
     @Autowired
     private ClassSectionRepository classSectionRepo;
+    @Autowired
+    private EnrollmentRepository enrollmentRepo;
 
     private static final DataFormatter F = new DataFormatter();
 
@@ -137,6 +141,7 @@ public class ExamScoreImportService {
                     ClassEntity clazz = findClassByName(classes, className)
                             .orElseThrow(() -> new RuntimeException("Class not found: " + rawClassName));
                     ClassStatusPolicy.assertTeachActionAllowed(clazz, "import điểm");
+                    assertStudentInClass(student, clazz);
 
                     Subject subject = findSubjectByName(subjects, subjectName)
                             .orElseThrow(() -> new RuntimeException("Subject not found: " + rawSubjectName));
@@ -184,7 +189,27 @@ public class ExamScoreImportService {
         }
 
         result.errors = errors;
-        return result;
+            return result;
+    }
+
+    private void assertStudentInClass(User student, ClassEntity clazz) {
+        if (student == null || student.getId() == null || clazz == null || clazz.getId() == null) {
+            throw new RuntimeException("Thiếu thông tin học sinh hoặc lớp");
+        }
+
+        List<Enrollment> enrollments = enrollmentRepo.findByStudentId(student.getId());
+        boolean activeInClass = enrollments.stream().anyMatch(e -> {
+            if (e == null || e.getClassEntity() == null || e.getClassEntity().getId() == null) return false;
+            if (!Objects.equals(e.getClassEntity().getId(), clazz.getId())) return false;
+            String status = e.getStatus() == null ? "ACTIVE" : e.getStatus().trim().toUpperCase();
+            return "ACTIVE".equals(status);
+        });
+
+        if (!activeInClass) {
+            String studentEmail = student.getEmail() != null ? student.getEmail() : String.valueOf(student.getId());
+            String className = clazz.getName() != null ? clazz.getName() : String.valueOf(clazz.getId());
+            throw new RuntimeException("Học sinh " + studentEmail + " không thuộc lớp " + className);
+        }
     }
 
     private boolean processScore(

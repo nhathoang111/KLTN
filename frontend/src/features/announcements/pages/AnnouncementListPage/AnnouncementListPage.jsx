@@ -87,16 +87,20 @@ const AnnouncementListPage = () => {
       const userRole = user?.role?.name?.toUpperCase();
       const schoolId = user?.school?.id;
 
-      // Xây dựng URL cho announcements API với filter theo school
-      let announcementsUrl = '/announcements';
+      const effectiveSchoolId =
+        userRole === 'SUPER_ADMIN'
+          ? selectedSchoolId
+          : schoolId;
 
-      // Đối với học sinh, lấy tất cả thông báo của trường, sau đó filter theo lớp ở frontend
-      // Vì học sinh cần thấy: thông báo của lớp họ + thông báo chung (classId = null)
-      if (userRole === 'STUDENT' && selectedSchoolId) {
-        announcementsUrl += `?schoolId=${selectedSchoolId}`;
-      } else if (selectedSchoolId) {
-        announcementsUrl += `?schoolId=${selectedSchoolId}`;
+      // Xây dựng URL cho announcements API với filter theo school ngay từ request.
+      // Không phụ thuộc selectedSchoolId khởi tạo cho ADMIN/TEACHER/STUDENT để tránh fetch toàn bộ rồi mới lọc.
+      const announcementParams = new URLSearchParams();
+      if (effectiveSchoolId) {
+        announcementParams.set('schoolId', String(effectiveSchoolId));
       }
+      const announcementsUrl = announcementParams.toString()
+        ? `/announcements?${announcementParams.toString()}`
+        : '/announcements';
 
       // Xây dựng URL cho users API dựa trên role
       let usersUrl = '/users';
