@@ -23,6 +23,15 @@ const FIXED_ACTIVITY_LABELS = {
   CHAOCO: 'Chào cờ',
   SHL: 'Sinh hoạt lớp',
 };
+const FIXED_SUBJECT_OPTIONS = [
+  { value: '__fixed_chao_co__', code: 'CHAOCO', label: 'Chào cờ', dayOfWeek: 1, periods: [1] },
+  { value: '__fixed_shl__', code: 'SHL', label: 'Sinh hoạt lớp', dayOfWeek: 6, periods: [4] },
+];
+const fixedOptionByValue = FIXED_SUBJECT_OPTIONS.reduce((acc, item) => {
+  acc[item.value] = item;
+  return acc;
+}, {});
+const getFixedOption = (value) => fixedOptionByValue[value] || null;
 
 const fmtDate = (d) => {
   const x = new Date(d);
@@ -315,6 +324,10 @@ const ScheduleTemplatePage = () => {
 
   useEffect(() => {
     const classId = selectedClassId ? Number(selectedClassId) : null;
+    if (getFixedOption(popup.subjectId)) {
+      setTeachersForPopupSubject([]);
+      return;
+    }
     const subjectId = popup.subjectId ? Number(popup.subjectId) : null;
     if (!classId || !subjectId) {
       setTeachersForPopupSubject([]);
@@ -358,6 +371,7 @@ const ScheduleTemplatePage = () => {
   }, [selectedClassId, popup.subjectId]);
 
   useEffect(() => {
+    if (getFixedOption(popup.subjectId)) return;
     if (!popup.teacherId) return;
     const exists = teachersForPopupSubject.some((t) => String(t.id) === String(popup.teacherId));
     if (!exists) {
@@ -692,7 +706,8 @@ const ScheduleTemplatePage = () => {
       toast.warn('Vui lòng chọn môn.');
       return;
     }
-    if (!popup.teacherId) {
+    const fixedOption = getFixedOption(popup.subjectId);
+    if (!fixedOption && !popup.teacherId) {
       toast.warn('Vui lòng chọn giáo viên.');
       return;
     }
@@ -705,20 +720,22 @@ const ScheduleTemplatePage = () => {
       return;
     }
 
-    const subjectId = Number(popup.subjectId);
+    const subjectId = fixedOption ? null : Number(popup.subjectId);
     const dayOfWeek = Number(popup.dayOfWeek);
-    const existingSameSubjectCount = Object.values(templateMap).filter(
-      (x) => Number(x.dayOfWeek) === dayOfWeek && Number(x.subjectId) === subjectId
-    ).length;
-    const incomingNewCount = popup.periods.filter((p) => {
-      const k = `${dayOfWeek}-${p}`;
-      const old = templateMap[k];
-      if (!old) return true;
-      return Number(old.subjectId) !== subjectId;
-    }).length;
-    if (existingSameSubjectCount + incomingNewCount > 5) {
-      toast.warn('Không quá 5 tiết cho cùng 1 môn trong 1 ngày.');
-      return;
+    if (!fixedOption) {
+      const existingSameSubjectCount = Object.values(templateMap).filter(
+        (x) => Number(x.dayOfWeek) === dayOfWeek && Number(x.subjectId) === subjectId
+      ).length;
+      const incomingNewCount = popup.periods.filter((p) => {
+        const k = `${dayOfWeek}-${p}`;
+        const old = templateMap[k];
+        if (!old) return true;
+        return Number(old.subjectId) !== subjectId;
+      }).length;
+      if (existingSameSubjectCount + incomingNewCount > 5) {
+        toast.warn('Không quá 5 tiết cho cùng 1 môn trong 1 ngày.');
+        return;
+      }
     }
 
     const date = fmtDate(new Date(new Date(weekStart).setDate(new Date(weekStart).getDate() + dayOfWeek - 1)));
@@ -730,10 +747,10 @@ const ScheduleTemplatePage = () => {
           period,
           date,
           subjectId,
-          teacherId: Number(popup.teacherId),
-          teacherName: teachersForPopupSubject.find((x) => String(x.id) === String(popup.teacherId))?.fullName || '',
+          teacherId: fixedOption ? null : Number(popup.teacherId),
+          teacherName: fixedOption ? '' : teachersForPopupSubject.find((x) => String(x.id) === String(popup.teacherId))?.fullName || '',
           room: popup.room || '',
-          fixedActivityCode: null,
+          fixedActivityCode: fixedOption?.code || null,
         };
       });
       return next;
@@ -816,6 +833,8 @@ const ScheduleTemplatePage = () => {
   if (loading) {
     return <div className="schedule-template-page"><div className="loading">Đang tải...</div></div>;
   }
+
+  const popupFixedOption = getFixedOption(popup.subjectId);
 
   return (
     <div className="schedule-template-page">
@@ -964,6 +983,7 @@ const ScheduleTemplatePage = () => {
                 <select
                   value={popup.dayOfWeek}
                   onChange={(e) => setPopup((p) => ({ ...p, dayOfWeek: Number(e.target.value), periods: [] }))}
+                  disabled={Boolean(popupFixedOption)}
                 >
                   {DAYS.map((d) => <option key={d} value={d}>Thứ {d + 1}</option>)}
                 </select>
@@ -972,10 +992,26 @@ const ScheduleTemplatePage = () => {
                 Môn
                 <select
                   value={popup.subjectId}
-                  onChange={(e) => setPopup((p) => ({ ...p, subjectId: e.target.value, teacherId: '' }))}
+                  onChange={(e) => {
+                    const fixed = getFixedOption(e.target.value);
+                    setPopup((p) => ({
+                      ...p,
+                      subjectId: e.target.value,
+                      teacherId: '',
+                      dayOfWeek: fixed ? fixed.dayOfWeek : p.dayOfWeek,
+                      periods: fixed ? fixed.periods : [],
+                    }));
+                  }}
                 >
                   <option value="">-- Chọn môn --</option>
+                  <optgroup label="Hoạt động cố định">
+                    {FIXED_SUBJECT_OPTIONS.map((item) => (
+                      <option key={item.value} value={item.value}>{item.label}</option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="Môn học">
                   {subjects.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                  </optgroup>
                 </select>
               </label>
               <label>
@@ -983,11 +1019,13 @@ const ScheduleTemplatePage = () => {
                 <select
                   value={popup.teacherId}
                   onChange={(e) => setPopup((p) => ({ ...p, teacherId: e.target.value }))}
-                  disabled={!popup.subjectId}
+                  disabled={!popup.subjectId || Boolean(popupFixedOption)}
                 >
                   <option value="">
                     {!popup.subjectId
                       ? '-- Chọn môn trước --'
+                      : popupFixedOption
+                        ? '-- Không cần chọn giáo viên --'
                       : loadingTeachersForPopup
                         ? '-- Đang tải giáo viên --'
                         : teachersForPopupSubject.length === 0
@@ -1013,10 +1051,18 @@ const ScheduleTemplatePage = () => {
                   const range = periodTimeMap[period];
                   const label = range ? formatTimeRange(range.startMin, range.endMin) : '';
                   return (
-                    <label key={period} className="period-item">
+                    <label
+                      key={period}
+                      className={[
+                        'period-item',
+                        checked ? 'period-item--checked' : '',
+                        popupFixedOption && !checked ? 'period-item--disabled' : '',
+                      ].filter(Boolean).join(' ')}
+                    >
                       <input
                         type="checkbox"
                         checked={checked}
+                        disabled={Boolean(popupFixedOption)}
                         onChange={(e) => {
                           setPopup((prev) => {
                             const nextSet = new Set(prev.periods);

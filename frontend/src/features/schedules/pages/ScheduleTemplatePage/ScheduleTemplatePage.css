@@ -183,20 +183,32 @@
 .template-popup-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(15, 23, 42, 0.45);
+  background: rgba(15, 23, 42, 0.56);
+  backdrop-filter: blur(4px);
   display: flex;
   justify-content: center;
   align-items: center;
   z-index: 1200;
+  padding: 18px;
 }
 
 .template-popup {
   width: min(760px, calc(100vw - 24px));
   max-height: calc(100vh - 40px);
   overflow: auto;
-  background: #fff;
-  border-radius: 12px;
-  padding: 16px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  padding: 20px;
+  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.22);
+}
+
+.template-popup h3 {
+  margin: 0 0 16px;
+  color: #0f172a;
+  font-size: 1.25rem;
+  font-weight: 800;
+  letter-spacing: 0;
 }
 
 .template-popup--generate {
@@ -205,46 +217,115 @@
 
 .popup-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(170px, 1fr));
+  grid-template-columns: repeat(2, minmax(220px, 1fr));
   gap: 12px;
-  margin-bottom: 12px;
+  margin-bottom: 16px;
 }
 
 .popup-grid label {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.popup-grid select,
+.popup-grid input {
+  width: 100%;
+  min-height: 42px;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  background: #ffffff;
+  color: #0f172a;
+  padding: 9px 11px;
+  font-size: 14px;
+}
+
+.popup-grid select:disabled,
+.popup-grid input:disabled {
+  color: #64748b;
+  background: #f8fafc;
+  cursor: not-allowed;
+}
+
+.popup-grid select:focus,
+.popup-grid input:focus {
+  outline: none;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.14);
 }
 
 .period-box {
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  padding: 10px;
+  border: 1px solid #dbe3ef;
+  border-radius: 12px;
+  background: #f8fafc;
+  padding: 14px;
 }
 
 .period-title {
-  font-weight: 600;
-  margin-bottom: 8px;
+  color: #1e293b;
+  font-size: 14px;
+  font-weight: 800;
+  margin-bottom: 10px;
 }
 
 .period-list {
   display: grid;
-  grid-template-columns: repeat(2, minmax(200px, 1fr));
-  gap: 8px 12px;
+  grid-template-columns: repeat(2, minmax(220px, 1fr));
+  gap: 10px;
 }
 
 .period-item {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
+  min-height: 42px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #ffffff;
+  color: #334155;
+  padding: 9px 11px;
   font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.period-item:hover {
+  border-color: #93c5fd;
+  background: #eff6ff;
+}
+
+.period-item--checked {
+  border-color: #2563eb;
+  background: #dbeafe;
+  color: #1e3a8a;
+}
+
+.period-item input {
+  width: 16px;
+  height: 16px;
+  accent-color: #2563eb;
+}
+
+.period-item--disabled {
+  color: #94a3b8;
+  background: #f8fafc;
+  cursor: not-allowed;
+}
+
+.period-item--disabled:hover {
+  border-color: #e2e8f0;
+  background: #f8fafc;
 }
 
 .popup-actions {
-  margin-top: 12px;
+  margin-top: 16px;
   display: flex;
-  gap: 8px;
+  gap: 10px;
   justify-content: flex-end;
+  flex-wrap: wrap;
 }
 
 .template-generate-form-group {
@@ -325,6 +406,11 @@
   .schedule-template-toolbar input {
     min-width: 0;
     width: 100%;
+  }
+
+  .popup-grid,
+  .period-list {
+    grid-template-columns: 1fr;
   }
 
   .template-generate-assignment-row {
