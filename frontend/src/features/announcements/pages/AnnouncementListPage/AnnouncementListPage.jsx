@@ -28,6 +28,21 @@ const AnnouncementListPage = () => {
     createdById: ''
   });
 
+  const getAnnouncementClassId = (announcement) => {
+    const rawClassId =
+      announcement?.classEntity?.id ??
+      announcement?.classId ??
+      announcement?.class_id ??
+      null;
+
+    if (rawClassId === null || rawClassId === undefined || rawClassId === '') {
+      return null;
+    }
+
+    const classId = Number(rawClassId);
+    return Number.isNaN(classId) ? null : classId;
+  };
+
   // Fetch enrollment của học sinh để lấy classId
   const fetchStudentEnrollment = async () => {
     if (!user?.id) return null;
@@ -135,15 +150,15 @@ const AnnouncementListPage = () => {
       // - Hoặc thông báo chung (classId = null) của cùng trường
       if (userRole === 'STUDENT' && studentClassId) {
         allAnnouncements = allAnnouncements.filter(announcement => {
-          const announcementClassId = announcement.classEntity?.id || announcement.class_id;
+          const announcementClassId = getAnnouncementClassId(announcement);
           // Hiển thị thông báo của lớp học sinh hoặc thông báo chung (null)
-          return announcementClassId === studentClassId || announcementClassId === null;
+          return announcementClassId === null || announcementClassId === Number(studentClassId);
         });
         console.log('Filtered announcements for student class:', studentClassId, 'Count:', allAnnouncements.length);
       } else if (userRole === 'STUDENT' && !studentClassId) {
         // Nếu học sinh chưa có lớp, chỉ hiển thị thông báo chung
         allAnnouncements = allAnnouncements.filter(announcement => {
-          const announcementClassId = announcement.classEntity?.id || announcement.class_id;
+          const announcementClassId = getAnnouncementClassId(announcement);
           return announcementClassId === null;
         });
         console.log('Student has no class, showing only general announcements');
@@ -402,6 +417,9 @@ const AnnouncementListPage = () => {
   };
 
   const getClassName = (classId) => {
+    if (classId === null || classId === undefined || classId === '') {
+      return 'Toàn trường';
+    }
     const classItem = classes.find(c => c.id === classId);
     return classItem ? classItem.name : 'N/A';
   };

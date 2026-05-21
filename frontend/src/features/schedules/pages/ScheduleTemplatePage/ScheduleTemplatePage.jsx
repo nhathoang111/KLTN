@@ -557,6 +557,15 @@ const ScheduleTemplatePage = () => {
         return;
       }
 
+      const invalidPeriodsIndex = normalizedAssignments.findIndex((a) => {
+        const periods = Number(a.periodsPerWeek);
+        return !Number.isInteger(periods) || periods < 1 || periods > 10;
+      });
+      if (invalidPeriodsIndex >= 0) {
+        toast.warn(`Dòng ${invalidPeriodsIndex + 1}: Số tiết/tuần phải từ 1 đến 10.`);
+        return;
+      }
+
       const schoolId = user?.school?.id;
       const payload = {
         classId: parseInt(generateData.classId, 10),

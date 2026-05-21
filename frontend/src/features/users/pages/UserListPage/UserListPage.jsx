@@ -931,7 +931,7 @@ const UserListPage = () => {
                       type="button"
                       onClick={() => setCurrentPage((p) => Math.max(0, p - 1))}
                       disabled={pageIndex === 0}
-                      className="flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 bg-white text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+                      className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-md border border-slate-200 bg-white text-sm text-slate-600 transition-colors hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-600 disabled:cursor-not-allowed disabled:hover:border-slate-200 disabled:hover:bg-white disabled:hover:text-slate-600 disabled:opacity-50"
                     >
                       ‹
                     </button>
@@ -949,10 +949,10 @@ const UserListPage = () => {
                           key={item}
                           type="button"
                           onClick={() => setCurrentPage(item)}
-                          className={`flex h-8 w-8 items-center justify-center rounded-md text-sm ${
+                          className={`flex h-8 w-8 cursor-pointer items-center justify-center rounded-md text-sm transition-colors ${
                             item === pageIndex
-                              ? 'bg-indigo-500 text-white'
-                              : 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                              ? 'bg-indigo-500 text-white hover:bg-indigo-600'
+                              : 'border border-slate-200 bg-white text-slate-700 hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-600'
                           }`}
                         >
                           {item + 1}
@@ -963,7 +963,7 @@ const UserListPage = () => {
                       type="button"
                       onClick={() => setCurrentPage((p) => Math.min(totalPages - 1, p + 1))}
                       disabled={pageIndex >= totalPages - 1}
-                      className="flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 bg-white text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+                      className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-md border border-slate-200 bg-white text-sm text-slate-600 transition-colors hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-600 disabled:cursor-not-allowed disabled:hover:border-slate-200 disabled:hover:bg-white disabled:hover:text-slate-600 disabled:opacity-50"
                     >
                       ›
                     </button>
