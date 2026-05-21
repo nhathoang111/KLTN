@@ -262,6 +262,35 @@ const UserListPage = () => {
   const totalPages = Math.max(1, Math.ceil(totalFiltered / pageSize));
   const pageIndex = Math.min(currentPage, totalPages - 1);
   const paginatedUsers = displayedUsers.slice(pageIndex * pageSize, (pageIndex + 1) * pageSize);
+  const paginationItems = (() => {
+    if (totalPages <= 7) {
+      return Array.from({ length: totalPages }, (_, i) => i);
+    }
+
+    const pages = new Set([0, totalPages - 1, pageIndex - 1, pageIndex, pageIndex + 1]);
+    if (pageIndex <= 2) {
+      pages.add(1);
+      pages.add(2);
+      pages.add(3);
+    }
+    if (pageIndex >= totalPages - 3) {
+      pages.add(totalPages - 4);
+      pages.add(totalPages - 3);
+      pages.add(totalPages - 2);
+    }
+
+    const orderedPages = [...pages]
+      .filter((p) => p >= 0 && p < totalPages)
+      .sort((a, b) => a - b);
+
+    return orderedPages.reduce((items, p, index) => {
+      if (index > 0 && p - orderedPages[index - 1] > 1) {
+        items.push(`ellipsis-${orderedPages[index - 1]}-${p}`);
+      }
+      items.push(p);
+      return items;
+    }, []);
+  })();
 
   const isSuperAdmin = user?.role?.name?.toUpperCase() === 'SUPER_ADMIN';
   const totalAdmins = isSuperAdmin ? users.length : 0;
@@ -873,8 +902,8 @@ const UserListPage = () => {
               </div>
 
               {totalFiltered > 0 && (
-                <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 px-4 py-3 text-xs text-slate-600">
-                  <div className="flex items-center gap-2">
+                <div className="admin-users-pagination-bar flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 px-4 py-3 text-xs text-slate-600">
+                  <div className="admin-users-pagination-meta flex items-center gap-2">
                     <span>
                       Hiển thị {pageIndex * pageSize + 1}–
                       {Math.min((pageIndex + 1) * pageSize, totalFiltered)} / {totalFiltered}{' '}
@@ -897,7 +926,7 @@ const UserListPage = () => {
                       </select>
                     </label>
                   </div>
-                  <div className="flex items-center gap-1">
+                  <div className="admin-users-page-buttons flex items-center gap-1">
                     <button
                       type="button"
                       onClick={() => setCurrentPage((p) => Math.max(0, p - 1))}
@@ -906,20 +935,30 @@ const UserListPage = () => {
                     >
                       ‹
                     </button>
-                    {Array.from({ length: totalPages }, (_, i) => i).map((p) => (
-                      <button
-                        key={p}
-                        type="button"
-                        onClick={() => setCurrentPage(p)}
-                        className={`flex h-8 w-8 items-center justify-center rounded-md text-sm ${
-                          p === pageIndex
-                            ? 'bg-indigo-500 text-white'
-                            : 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
-                        }`}
-                      >
-                        {p + 1}
-                      </button>
-                    ))}
+                    {paginationItems.map((item) =>
+                      typeof item === 'string' ? (
+                        <span
+                          key={item}
+                          className="flex h-8 w-8 items-center justify-center text-sm text-slate-400"
+                          aria-hidden="true"
+                        >
+                          ...
+                        </span>
+                      ) : (
+                        <button
+                          key={item}
+                          type="button"
+                          onClick={() => setCurrentPage(item)}
+                          className={`flex h-8 w-8 items-center justify-center rounded-md text-sm ${
+                            item === pageIndex
+                              ? 'bg-indigo-500 text-white'
+                              : 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                          }`}
+                        >
+                          {item + 1}
+                        </button>
+                      )
+                    )}
                     <button
                       type="button"
                       onClick={() => setCurrentPage((p) => Math.min(totalPages - 1, p + 1))}
@@ -1082,4 +1121,3 @@ const UserListPage = () => {
 };
 
 export default UserListPage;
-

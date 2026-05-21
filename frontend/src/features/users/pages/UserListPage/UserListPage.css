@@ -272,6 +272,26 @@
   color: #6b7280;
 }
 
+.admin-users-pagination-bar {
+  max-width: 100%;
+}
+
+.admin-users-pagination-meta {
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.admin-users-page-buttons {
+  max-width: 100%;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
+.admin-users-page-buttons > button,
+.admin-users-page-buttons > span {
+  flex: 0 0 auto;
+}
+
 /* ---- Table row ---- */
 .user-item {
   transition: background 0.2s ease;
@@ -651,5 +671,13 @@
     flex-direction: column;
     align-items: stretch;
   }
-}
 
+  .admin-users-pagination-bar {
+    align-items: stretch;
+  }
+
+  .admin-users-pagination-meta,
+  .admin-users-page-buttons {
+    width: 100%;
+  }
+}
