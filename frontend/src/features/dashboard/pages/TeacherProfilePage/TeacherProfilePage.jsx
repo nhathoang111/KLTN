@@ -96,23 +96,6 @@ const TeacherProfilePage = () => {
               <div className="text-sm text-slate-600">Trạng thái: {statusLabel(profile?.status)}</div>
             </div>
           </div>
-
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-medium transition"
-              onClick={() => {}}
-            >
-              Sửa Thông Tin
-            </button>
-            <button
-              type="button"
-              className="px-5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium border border-slate-200 transition"
-              onClick={() => {}}
-            >
-              Đổi Mật Khẩu
-            </button>
-          </div>
         </div>
       </div>
 
